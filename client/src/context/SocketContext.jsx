@@ -71,12 +71,21 @@ export function SocketProvider({ children }) {
       }));
     };
 
+    // The server telling us something went wrong (e.g. "that order is not
+    // assigned to you"). Previously this reused handleStatusUpdated, which
+    // silently swallowed the message because there is no `status` in it.
+    const handleServerError = (payload = {}) => {
+      setConnectionError(
+        payload.message || 'The live server reported a problem.',
+      );
+    };
+
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('connect_error', handleConnectError);
     socket.on(SOCKET_EVENTS.RIDER_LOCATION_UPDATED, handleRiderLocation);
     socket.on(SOCKET_EVENTS.ORDER_STATUS_UPDATED, handleStatusUpdated);
-    socket.on(SOCKET_EVENTS.SERVER_ERROR, handleStatusUpdated);
+    socket.on(SOCKET_EVENTS.SERVER_ERROR, handleServerError);
 
     return () => {
       socket.off('connect', handleConnect);
@@ -84,7 +93,7 @@ export function SocketProvider({ children }) {
       socket.off('connect_error', handleConnectError);
       socket.off(SOCKET_EVENTS.RIDER_LOCATION_UPDATED, handleRiderLocation);
       socket.off(SOCKET_EVENTS.ORDER_STATUS_UPDATED, handleStatusUpdated);
-      socket.off(SOCKET_EVENTS.SERVER_ERROR, handleStatusUpdated);
+      socket.off(SOCKET_EVENTS.SERVER_ERROR, handleServerError);
     };
   }, [isAuthenticated, token]);
 

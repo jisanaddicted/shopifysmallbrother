@@ -1,0 +1,22 @@
+{
+  "name": "delivery-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo: React storefront (client) + Express/MongoDB API (backend)",
+  "scripts": {
+    "install:all": "npm install && npm --prefix client install && npm --prefix backend install",
+    "dev": "concurrently -n api,web -c blue,green \"npm:dev:backend\" \"npm:dev:client\"",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:client": "npm --prefix client run dev",
+    "seed": "npm --prefix backend run seed",
+    "test:smoke": "npm --prefix backend run test:smoke",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix backend start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

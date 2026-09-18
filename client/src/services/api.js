@@ -30,6 +30,26 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error.response?.status;
+
+    // No `response` at all means the request never reached a server: the API
+    // is down / not started, the URL or port is wrong, or the browser blocked
+    // it (CORS). Axios calls this "Network Error", which tells the user nothing,
+    // so say where we tried to connect instead.
+    if (!error.response) {
+      const timedOut =
+        error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
+
+      const unreachable = new Error(
+        timedOut
+          ? 'The server took too long to respond. Please try again.'
+          : `Cannot reach the API server at ${API_BASE_URL}. Is the backend running?`,
+      );
+      unreachable.code = error.code;
+      unreachable.original = error;
+
+      return Promise.reject(unreachable);
+    }
+
     const message =
       error.response?.data?.message ||
       error.response?.data?.error ||
