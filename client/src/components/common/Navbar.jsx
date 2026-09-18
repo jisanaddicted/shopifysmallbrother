@@ -5,7 +5,7 @@ import { HOME_ROUTE_BY_ROLE, ROUTES } from '../../utils/constants';
 import { initials } from '../../utils/formatters';
 
 export default function Navbar() {
-  const { user, isAuthenticated, isCustomer, isRider, isAdmin, logout } =
+  const { user, isAuthenticated, isCustomer, isRider, isStore, isAdmin, logout } =
     useAuth();
   const { itemCount, toggleCart } = useCart();
   const navigate = useNavigate();
@@ -35,10 +35,12 @@ export default function Navbar() {
             </>
           )}
           {isRider && <NavLink to={ROUTES.RIDER_CONSOLE}>My deliveries</NavLink>}
+          {isStore && <NavLink to={ROUTES.MERCHANT_DASHBOARD}>My store</NavLink>}
           {isAdmin && (
             <>
               <NavLink to={ROUTES.ADMIN_DASHBOARD}>Dispatch</NavLink>
               <NavLink to={ROUTES.ADMIN_PRODUCTS}>Products</NavLink>
+              <NavLink to={ROUTES.ADMIN_STORES}>Stores</NavLink>
             </>
           )}
         </nav>

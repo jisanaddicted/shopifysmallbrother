@@ -6,6 +6,7 @@
 export const ROLES = {
   CUSTOMER: 'customer',
   RIDER: 'rider',
+  STORE: 'store',
   ADMIN: 'admin',
 };
 
@@ -13,7 +14,25 @@ export const ROLE_VALUES = Object.values(ROLES);
 
 // Roles somebody can pick on the public register form. Admins are only ever
 // created by a seeder or an existing admin.
-export const SELF_SIGNUP_ROLES = [ROLES.CUSTOMER, ROLES.RIDER];
+export const SELF_SIGNUP_ROLES = [ROLES.CUSTOMER, ROLES.RIDER, ROLES.STORE];
+
+// Roles that must have a unique username (it is how stores/admins find them).
+export const ROLES_REQUIRING_USERNAME = [ROLES.RIDER, ROLES.STORE];
+
+// ---------------------------------------------------------------------------
+// Store <-> rider binding.
+//
+// A store (or an admin) invites a rider by username; the rider then accepts or
+// declines. Only "active" bindings may see that store's orders.
+// ---------------------------------------------------------------------------
+export const STORE_RIDER_STATUS = {
+  PENDING: 'pending',
+  ACTIVE: 'active',
+  DECLINED: 'declined',
+  REVOKED: 'revoked',
+};
+
+export const STORE_RIDER_STATUS_VALUES = Object.values(STORE_RIDER_STATUS);
 
 export const ORDER_STATUS = {
   PENDING: 'pending',

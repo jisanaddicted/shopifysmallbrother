@@ -86,6 +86,18 @@ export async function updateProfile(payload) {
   return user;
 }
 
+/**
+ * GET /auth/username-available - used by the signup form to tell the user
+ * whether their handle is free before they submit.
+ */
+export async function checkUsername(username) {
+  const { data } = await api.get('/auth/username-available', {
+    params: { username },
+  });
+
+  return data;
+}
+
 /** Clears the local session. Call the API first if you use refresh tokens. */
 export function logout() {
   clearSession();
@@ -96,6 +108,7 @@ export default {
   register,
   getProfile,
   updateProfile,
+  checkUsername,
   logout,
   getToken,
   getStoredUser,

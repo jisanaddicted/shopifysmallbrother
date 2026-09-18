@@ -3,6 +3,7 @@ import DeliveryMap from '../../components/maps/DeliveryMap';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useSocket } from '../../context/SocketContext';
 import orderService from '../../services/orderService';
+import storeService from '../../services/storeService';
 import {
   ORDER_STATUS,
   ORDER_STATUS_FLOW,
@@ -21,6 +22,12 @@ export default function RiderConsole() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Store features: invitations, the unclaimed pool, my stores.
+  const [requests, setRequests] = useState([]);
+  const [pool, setPool] = useState([]);
+  const [myStores, setMyStores] = useState([]);
+  const [poolBusy, setPoolBusy] = useState(false);
 
   const [broadcasting, setBroadcasting] = useState(false);
   const [myPosition, setMyPosition] = useState(null);
@@ -54,6 +61,68 @@ export default function RiderConsole() {
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
+
+  // --- Load the store-related lists (invitations, pool, stores) -------------
+  const loadExtras = useCallback(async () => {
+    const [invitations, available, stores] = await Promise.all([
+      storeService.listMyRequests().catch(() => []),
+      storeService.getOrderPool().catch(() => []),
+      storeService.listMyStores().catch(() => []),
+    ]);
+
+    setRequests(invitations);
+    setPool(available);
+    setMyStores(stores);
+  }, []);
+
+  useEffect(() => {
+    loadExtras();
+  }, [loadExtras]);
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([loadOrders(), loadExtras()]);
+  }, [loadOrders, loadExtras]);
+
+  // --- Answer a store invitation -------------------------------------------
+  const respond = async (requestId, action) => {
+    setPoolBusy(true);
+    setError('');
+
+    try {
+      await storeService.respondToRequest(requestId, action);
+      const [invitations, stores] = await Promise.all([
+        storeService.listMyRequests().catch(() => []),
+        storeService.listMyStores().catch(() => []),
+      ]);
+      setRequests(invitations);
+      setMyStores(stores);
+    } catch (err) {
+      setError(err.message || 'Could not answer that invitation.');
+    } finally {
+      setPoolBusy(false);
+    }
+  };
+
+  // --- Take a delivery from the pool ----------------------------------------
+  const claim = async (orderId) => {
+    setPoolBusy(true);
+    setError('');
+
+    try {
+      const claimed = await storeService.claimOrder(orderId);
+      const newId = claimed?._id || claimed?.id || orderId;
+
+      // Reload both lists, then jump straight to the claimed order.
+      await loadOrders();
+      setPool((prev) => prev.filter((o) => (o._id || o.id) !== orderId));
+      setActiveId(newId);
+    } catch (err) {
+      setError(err.message || 'Could not take that delivery.');
+      loadExtras();
+    } finally {
+      setPoolBusy(false);
+    }
+  };
 
   // --- Join the socket room for the selected order --------------------------
   useEffect(() => {
@@ -179,8 +248,8 @@ export default function RiderConsole() {
         <div>
           <h1>Rider console</h1>
           <p className="muted">
-            {orders.length} assigned {orders.length === 1 ? 'order' : 'orders'}{' '}
-            ·{' '}
+            {orders.length} assigned {orders.length === 1 ? 'order' : 'orders'} ·{' '}
+            {pool.length} available ·{' '}
             <span className={`live-dot ${connected ? 'live-dot--on' : ''}`}>
               {connected ? 'Live' : 'Offline'}
             </span>
@@ -190,7 +259,7 @@ export default function RiderConsole() {
         <button
           type="button"
           className="btn btn-outline btn-sm"
-          onClick={loadOrders}
+          onClick={refreshAll}
         >
           Refresh
         </button>
@@ -198,9 +267,108 @@ export default function RiderConsole() {
 
       {error ? <p className="alert alert--danger">{error}</p> : null}
 
+      {/* --- Invitations from stores/admins ----------------------------------- */}
+      {requests.length > 0 ? (
+        <section className="panel">
+          <div className="panel__header">
+            <h2 className="panel__title">
+              Store invitations ({requests.length})
+            </h2>
+          </div>
+
+          <ul className="rider-list">
+            {requests.map((request) => (
+              <li key={request._id || request.id}>
+                <div className="rider-list__item">
+                  <span className="rider-list__id">
+                    {request.store?.name || 'A store'}
+                  </span>
+                  <span className="muted small">
+                    wants you to deliver for them
+                  </span>
+                  <span className="button-row">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={poolBusy}
+                      onClick={() =>
+                        respond(request._id || request.id, 'accept')
+                      }
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={poolBusy}
+                      onClick={() =>
+                        respond(request._id || request.id, 'decline')
+                      }
+                    >
+                      Decline
+                    </button>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {/* --- Stores I deliver for ---------------------------------------------- */}
+      {myStores.length > 0 ? (
+        <p className="muted small">
+          Delivering for:{' '}
+          {myStores.map((s) => s.name).join(', ')}
+        </p>
+      ) : null}
+
+      {/* --- Unclaimed deliveries ---------------------------------------------- */}
+      {pool.length > 0 ? (
+        <section className="panel">
+          <div className="panel__header">
+            <h2 className="panel__title">Available deliveries</h2>
+            <span className="muted small">
+              Unclaimed orders from your stores — take one to start.
+            </span>
+          </div>
+
+          <ul className="rider-list">
+            {pool.map((order) => {
+              const id = order._id || order.id;
+              return (
+                <li key={id}>
+                  <div className="rider-list__item">
+                    <span className="rider-list__id">
+                      #{String(id).slice(-6).toUpperCase()}
+                    </span>
+                    <span className="muted small">
+                      {order.store?.name || 'General catalogue'} ·{' '}
+                      {order.address?.line1 || 'No address'} ·{' '}
+                      {order.items?.length || 0} item(s)
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={poolBusy}
+                      onClick={() => claim(id)}
+                    >
+                      Take delivery
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
       {orders.length === 0 ? (
         <p className="empty">
-          Nothing assigned to you right now. Dispatch will push new orders here.
+          Nothing assigned to you right now.{' '}
+          {pool.length > 0
+            ? 'Take an available delivery above to get started.'
+            : 'New orders will appear here.'}
         </p>
       ) : (
         <div className="rider-grid">

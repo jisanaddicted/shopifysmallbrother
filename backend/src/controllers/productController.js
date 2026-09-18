@@ -1,8 +1,40 @@
+import mongoose from 'mongoose';
 import Product from '../models/Product.js';
+import Store from '../models/Store.js';
 import { HttpError } from '../middleware/errorHandler.js';
+import { ROLES } from '../utils/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { slugify } from '../utils/slug.js';
 
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The store owned by this merchant, or null if they have none yet. */
+async function ownedStoreId(user) {
+  const store = await Store.findOne({ owner: user._id }).select('_id');
+  return store?._id || null;
+}
+
+/**
+ * Only a merchant's own products (or any product, for an admin) may be edited.
+ * Returns the loaded product.
+ */
+async function loadEditableProduct(productId, user) {
+  if (!mongoose.isValidObjectId(productId)) {
+    throw new HttpError(400, 'That product id is not valid.');
+  }
+
+  const product = await Product.findById(productId);
+  if (!product) throw new HttpError(404, 'That product does not exist.');
+
+  if (user.role === ROLES.STORE) {
+    const storeId = await ownedStoreId(user);
+    if (!storeId || String(product.store) !== String(storeId)) {
+      throw new HttpError(403, 'That product does not belong to your store.');
+    }
+  }
+
+  return product;
+}
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -26,11 +58,21 @@ function readProductPayload(body = {}) {
  * Responds { products, page, pages, total }.
  */
 export const listProducts = asyncHandler(async (req, res) => {
-  const { search, category } = req.query;
+  const { search, category, store: storeParam } = req.query;
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
   const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 100));
 
   const filter = {};
+
+  // `store` may be an id or a public slug, so the store page can pass either.
+  if (storeParam) {
+    const store = mongoose.isValidObjectId(storeParam)
+      ? await Store.findById(storeParam)
+      : await Store.findOne({ slug: slugify(storeParam, '') });
+
+    if (!store) throw new HttpError(404, 'That store does not exist.');
+    filter.store = store._id;
+  }
 
   if (category && category !== 'all') {
     filter.category = category;
@@ -66,36 +108,58 @@ export const getProduct = asyncHandler(async (req, res) => {
   res.json({ product });
 });
 
-/** POST /api/products (admin) -> { product } */
+/** POST /api/products (admin, or a merchant for their own store) -> { product } */
 export const createProduct = asyncHandler(async (req, res) => {
   const payload = readProductPayload(req.body);
 
   if (!payload.name) throw new HttpError(400, 'A product needs a name.');
 
+  // A merchant's products always belong to their store; an admin may pick one.
+  if (req.user.role === ROLES.STORE) {
+    const storeId = await ownedStoreId(req.user);
+    if (!storeId) {
+      throw new HttpError(400, 'Create your store before adding products.');
+    }
+    payload.store = storeId;
+  } else if (req.body?.storeId) {
+    if (!mongoose.isValidObjectId(req.body.storeId)) {
+      throw new HttpError(400, 'That store id is not valid.');
+    }
+    const store = await Store.exists({ _id: req.body.storeId });
+    if (!store) throw new HttpError(404, 'That store does not exist.');
+
+    payload.store = req.body.storeId;
+  }
+
   const product = await Product.create(payload);
   res.status(201).json({ product });
 });
 
-/** PUT /api/products/:id (admin) -> { product } */
+/** PUT /api/products/:id (admin, or the owning merchant) -> { product } */
 export const updateProduct = asyncHandler(async (req, res) => {
+  const product = await loadEditableProduct(req.params.id, req.user);
   const payload = readProductPayload(req.body);
 
   if (!payload.name) throw new HttpError(400, 'A product needs a name.');
 
-  const product = await Product.findByIdAndUpdate(req.params.id, payload, {
-    new: true,
-    runValidators: true,
-  });
+  // Only an admin may move a product to a different store.
+  if (req.user.role === ROLES.ADMIN && req.body?.storeId !== undefined) {
+    if (req.body.storeId && !mongoose.isValidObjectId(req.body.storeId)) {
+      throw new HttpError(400, 'That store id is not valid.');
+    }
+    product.store = req.body.storeId || null;
+  }
 
-  if (!product) throw new HttpError(404, 'That product does not exist.');
+  Object.assign(product, payload);
+  await product.save();
 
   res.json({ product });
 });
 
-/** DELETE /api/products/:id (admin) -> { deleted: true, id } */
+/** DELETE /api/products/:id (admin, or the owning merchant) -> { deleted } */
 export const deleteProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findByIdAndDelete(req.params.id);
-  if (!product) throw new HttpError(404, 'That product does not exist.');
+  const product = await loadEditableProduct(req.params.id, req.user);
+  await product.deleteOne();
 
   res.json({ deleted: true, id: String(product._id) });
 });

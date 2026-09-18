@@ -8,6 +8,7 @@ import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES } from '../../utils/constants';
 const DEMO_ACCOUNTS = [
   { role: ROLES.CUSTOMER, email: 'customer@example.com', password: 'password123' },
   { role: ROLES.RIDER, email: 'rider@example.com', password: 'password123' },
+  { role: ROLES.STORE, email: 'store@example.com', password: 'password123' },
   { role: ROLES.ADMIN, email: 'admin@example.com', password: 'password123' },
 ];
 
@@ -64,14 +65,14 @@ export default function Login() {
         {error ? <p className="alert alert--danger">{error}</p> : null}
 
         <label className="field">
-          <span>Email</span>
+          <span>Email or username</span>
           <input
-            type="email"
+            type="text"
             name="email"
             value={form.email}
             onChange={handleChange}
-            placeholder="you@example.com"
-            autoComplete="email"
+            placeholder="you@example.com or sam.rider"
+            autoComplete="username"
             required
           />
         </label>

@@ -4,6 +4,8 @@ import adminRoutes from './adminRoutes.js';
 import authRoutes from './authRoutes.js';
 import orderRoutes from './orderRoutes.js';
 import productRoutes from './productRoutes.js';
+import riderRoutes from './riderRoutes.js';
+import storeRoutes from './storeRoutes.js';
 
 const router = Router();
 
@@ -21,6 +23,8 @@ router.get('/health', (req, res) => {
 router.use('/auth', authRoutes);
 router.use('/products', productRoutes);
 router.use('/orders', orderRoutes);
+router.use('/stores', storeRoutes);
+router.use('/riders', riderRoutes);
 router.use('/admin', adminRoutes);
 
 export default router;

@@ -76,6 +76,15 @@ const orderSchema = new mongoose.Schema(
       index: true,
     },
 
+    // The merchant this order was placed with, derived from its products.
+    // Riders bound to this store see the order and may claim it.
+    store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Store',
+      default: null,
+      index: true,
+    },
+
     items: {
       type: [orderItemSchema],
       validate: {

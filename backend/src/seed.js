@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Product from './models/Product.js';
+import Store from './models/Store.js';
 import User from './models/User.js';
 import { ROLES } from './utils/constants.js';
 
@@ -20,14 +21,47 @@ export const DEMO_USERS = [
   {
     name: 'Sam Rider',
     email: 'rider@example.com',
+    // Riders are found by this handle when a store invites them.
+    username: 'sam.rider',
     phone: '+1 555 010 0200',
     role: ROLES.RIDER,
   },
   {
     name: 'Ada Admin',
     email: 'admin@example.com',
+    username: 'ada.admin',
     phone: '+1 555 010 0300',
     role: ROLES.ADMIN,
+  },
+  {
+    name: 'Joe Merchant',
+    email: 'store@example.com',
+    username: 'joe.merchant',
+    phone: '+1 555 010 0400',
+    role: ROLES.STORE,
+  },
+];
+
+/**
+ * Demo merchants. Each one gets a public URL: /s/<slug>
+ * `ownerEmail` is resolved after the users above exist.
+ */
+export const DEMO_STORES = [
+  {
+    name: "Joe's Pizza",
+    slug: 'joes-pizza',
+    ownerEmail: 'store@example.com',
+    description: 'Wood-fired pizza and cold drinks, delivered hot.',
+    phone: '+1 555 010 0400',
+    address: { line1: '12 Market Street', city: 'Kathmandu' },
+  },
+  {
+    name: 'Green Grocer',
+    slug: 'green-grocer',
+    ownerEmail: 'admin@example.com',
+    description: 'Fresh bread, pastries and a weekly veg box.',
+    phone: '+1 555 010 0300',
+    address: { line1: '5 Riverside Road', city: 'Kathmandu' },
   },
 ];
 
@@ -37,6 +71,7 @@ export const DEMO_PRODUCTS = [
     name: 'Margherita Pizza',
     price: 12.5,
     category: 'Food',
+    storeSlug: 'joes-pizza',
     stock: 40,
     image: 'https://picsum.photos/seed/margherita/400/300',
     description: 'Wood-fired base, tomato, mozzarella and basil.',
@@ -45,6 +80,7 @@ export const DEMO_PRODUCTS = [
     name: 'Chicken Biryani',
     price: 14.0,
     category: 'Food',
+    storeSlug: 'joes-pizza',
     stock: 35,
     image: 'https://picsum.photos/seed/biryani/400/300',
     description: 'Fragrant basmati rice layered with spiced chicken.',
@@ -53,6 +89,7 @@ export const DEMO_PRODUCTS = [
     name: 'Veggie Burger',
     price: 9.25,
     category: 'Food',
+    storeSlug: 'joes-pizza',
     stock: 30,
     image: 'https://picsum.photos/seed/burger/400/300',
     description: 'Grilled patty, lettuce, tomato and smoky sauce.',
@@ -61,6 +98,7 @@ export const DEMO_PRODUCTS = [
     name: 'Cold Brew Coffee',
     price: 4.5,
     category: 'Drinks',
+    storeSlug: 'joes-pizza',
     stock: 60,
     image: 'https://picsum.photos/seed/coldbrew/400/300',
     description: 'Slow-steeped for 18 hours, served over ice.',
@@ -69,6 +107,7 @@ export const DEMO_PRODUCTS = [
     name: 'Mango Smoothie',
     price: 5.75,
     category: 'Drinks',
+    storeSlug: 'green-grocer',
     stock: 45,
     image: 'https://picsum.photos/seed/smoothie/400/300',
     description: 'Ripe mangoes blended with yoghurt and honey.',
@@ -77,6 +116,7 @@ export const DEMO_PRODUCTS = [
     name: 'Sourdough Loaf',
     price: 6.0,
     category: 'Bakery',
+    storeSlug: 'green-grocer',
     stock: 25,
     image: 'https://picsum.photos/seed/sourdough/400/300',
     description: 'Naturally leavened, baked fresh every morning.',
@@ -85,6 +125,7 @@ export const DEMO_PRODUCTS = [
     name: 'Chocolate Croissant',
     price: 3.75,
     category: 'Bakery',
+    storeSlug: 'green-grocer',
     stock: 50,
     image: 'https://picsum.photos/seed/croissant/400/300',
     description: 'Buttery layers with a dark chocolate centre.',
@@ -93,6 +134,7 @@ export const DEMO_PRODUCTS = [
     name: 'Weekly Veg Box',
     price: 24.0,
     category: 'Groceries',
+    storeSlug: 'green-grocer',
     stock: 20,
     image: 'https://picsum.photos/seed/vegbox/400/300',
     description: 'Seven seasonal vegetables picked by local farms.',
@@ -100,14 +142,21 @@ export const DEMO_PRODUCTS = [
 ];
 
 /**
- * Creates the demo users and products. Safe to run repeatedly:
+ * Creates the demo users, stores and products. Safe to run repeatedly:
  *  - users are matched by email (their password is reset to the demo one, so
  *    the login chips never break)
- *  - products are matched by name, so your own edits are never overwritten
+ *  - stores are matched by slug, so their public URL stays stable
+ *  - products are matched by name and only attached to their demo store when
+ *    they do not already belong to one, so your own edits survive
  */
 export async function seedDemoData() {
-  const summary = { users: { created: [], updated: [] }, products: { created: 0 } };
+  const summary = {
+    users: { created: [], updated: [] },
+    stores: { created: [], updated: [] },
+    products: { created: 0, linked: 0 },
+  };
 
+  // --- users first: stores reference their owners ---------------------------
   for (const spec of DEMO_USERS) {
     const existing = await User.findOne({ email: spec.email }).select(
       '+passwordHash',
@@ -117,6 +166,8 @@ export async function seedDemoData() {
       existing.name = spec.name;
       existing.phone = spec.phone;
       existing.role = spec.role;
+      // Accounts created before usernames existed get a handle now.
+      if (spec.username) existing.username = spec.username;
       existing.passwordHash = await User.hashPassword(DEMO_PASSWORD);
       await existing.save();
       summary.users.updated.push(spec.email);
@@ -130,12 +181,57 @@ export async function seedDemoData() {
     }
   }
 
-  for (const spec of DEMO_PRODUCTS) {
-    const exists = await Product.exists({ name: spec.name });
-    if (!exists) {
-      await Product.create(spec);
-      summary.products.created += 1;
+  // --- demo stores, each with its own public /s/<slug> page -----------------
+  const storesBySlug = new Map();
+
+  for (const spec of DEMO_STORES) {
+    const owner = spec.ownerEmail
+      ? await User.findOne({ email: spec.ownerEmail })
+      : null;
+
+    let store = await Store.findOne({ slug: spec.slug });
+
+    if (store) {
+      store.name = spec.name;
+      store.description = spec.description;
+      store.phone = spec.phone;
+      store.address = spec.address;
+      if (owner) store.owner = owner._id;
+      await store.save();
+      summary.stores.updated.push(spec.slug);
+    } else {
+      store = await Store.create({
+        name: spec.name,
+        slug: spec.slug,
+        description: spec.description,
+        phone: spec.phone,
+        address: spec.address,
+        owner: owner?._id ?? null,
+      });
+      summary.stores.created.push(spec.slug);
     }
+
+    storesBySlug.set(spec.slug, store);
+  }
+
+  // --- catalogue ------------------------------------------------------------
+  for (const spec of DEMO_PRODUCTS) {
+    const { storeSlug, ...fields } = spec;
+    const store = storeSlug ? storesBySlug.get(storeSlug) : null;
+    const existing = await Product.findOne({ name: spec.name });
+
+    if (existing) {
+      // Never steal a product that was deliberately assigned elsewhere.
+      if (store && !existing.store) {
+        existing.store = store._id;
+        await existing.save();
+        summary.products.linked += 1;
+      }
+      continue;
+    }
+
+    await Product.create({ ...fields, store: store?._id ?? null });
+    summary.products.created += 1;
   }
 
   return summary;
@@ -159,7 +255,10 @@ if (invokedDirectly) {
     console.log('[seed] done');
     console.log(`[seed] users created: ${summary.users.created.join(', ') || 'none'}`);
     console.log(`[seed] users refreshed: ${summary.users.updated.join(', ') || 'none'}`);
+    console.log(`[seed] stores created: ${summary.stores.created.join(', ') || 'none'}`);
+    console.log(`[seed] stores refreshed: ${summary.stores.updated.join(', ') || 'none'}`);
     console.log(`[seed] products created: ${summary.products.created}`);
+    console.log(`[seed] products attached to a store: ${summary.products.linked}`);
     console.log(`[seed] demo password for every account: ${DEMO_PASSWORD}`);
   } catch (err) {
     console.error('[seed] failed:', err.message);

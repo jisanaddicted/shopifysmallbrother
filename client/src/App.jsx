@@ -5,11 +5,14 @@ import CartDrawer from './components/store/CartDrawer';
 import { useAuth } from './context/AuthContext';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductManager from './pages/admin/ProductManager';
+import AdminStores from './pages/admin/AdminStores';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import Checkout from './pages/customer/Checkout';
 import OrderTracker from './pages/customer/OrderTracker';
+import ShopPage from './pages/customer/ShopPage';
 import Storefront from './pages/customer/Storefront';
+import MerchantDashboard from './pages/store/MerchantDashboard';
 import RiderConsole from './pages/rider/RiderConsole';
 import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES } from './utils/constants';
 
@@ -90,6 +93,16 @@ export default function App() {
             }
           />
 
+          {/* Store owner */}
+          <Route
+            path={ROUTES.MERCHANT_DASHBOARD}
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.STORE]}>
+                <MerchantDashboard />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Admin */}
           <Route
             path={ROUTES.ADMIN_DASHBOARD}
@@ -107,6 +120,17 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path={ROUTES.ADMIN_STORES}
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+                <AdminStores />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* A store's public page - anyone with the link, even logged out. */}
+          <Route path={ROUTES.SHOP} element={<ShopPage />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

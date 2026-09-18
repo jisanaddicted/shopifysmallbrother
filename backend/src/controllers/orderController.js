@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
+import Store from '../models/Store.js';
 import User from '../models/User.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import {
@@ -12,12 +13,15 @@ import {
 import { priceOrder, riderAllowedStatuses } from '../utils/pricing.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { canAccessOrder } from '../utils/orderAccess.js';
+import { activeStoreIds, isBoundToStore } from '../utils/storeRider.js';
 import { emitOrderStatusUpdated } from '../sockets/index.js';
 
-// The tracker needs the rider's name/phone and the customer's details.
+// The tracker needs the rider's name/phone and the customer's details, and
+// the store so the page can show which merchant the order is from.
 const ORDER_POPULATE = [
   { path: 'rider', select: 'name phone email location' },
   { path: 'customer', select: 'name email phone' },
+  { path: 'store', select: 'name slug image' },
 ];
 
 const toFiniteNumber = (value) => {
@@ -104,6 +108,37 @@ export const createOrder = asyncHandler(async (req, res) => {
   const products = await Product.find({ _id: { $in: productIds } });
   const byId = new Map(products.map((product) => [String(product._id), product]));
 
+  // Which store is this order for? Derived from the products, so the client
+  // cannot mislabel it. A basket mixing several stores is rejected rather than
+  // guessed at, because only one store can own the order.
+  const storeIds = [
+    ...new Set(
+      products.map((product) => product.store).filter(Boolean).map(String),
+    ),
+  ];
+
+  if (storeIds.length > 1) {
+    throw new HttpError(
+      400,
+      'Your cart mixes items from different stores. Please order them separately.',
+    );
+  }
+
+  let storeId = storeIds[0] || null;
+
+  // Fall back to an explicit storeId (useful when every product was deleted
+  // since the basket was filled).
+  if (!storeId && mongoose.isValidObjectId(req.body?.storeId)) {
+    storeId = String(req.body.storeId);
+  }
+
+  if (storeId) {
+    const storeExists = await Store.exists({ _id: storeId, isActive: true });
+    if (!storeExists) {
+      throw new HttpError(400, 'That store is not accepting orders right now.');
+    }
+  }
+
   const lines = items.map((line) => {
     const product = byId.get(String(line?.productId));
     const quantity = Math.max(1, Number.parseInt(line?.quantity, 10) || 1);
@@ -133,6 +168,7 @@ export const createOrder = asyncHandler(async (req, res) => {
 
   const order = await Order.create({
     customer: req.user._id,
+    store: storeId,
     items: lines,
     ...priceOrder(lines),
     address: cleanAddress,
@@ -292,6 +328,113 @@ export const updateRiderLocation = asyncHandler(async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Rider pool - orders nobody has taken yet
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/orders/pool (rider)
+ *
+ * The "available deliveries" list: unclaimed orders belonging to the stores
+ * this rider has accepted an invitation for. Orders with no store at all (the
+ * general catalogue) are open to every rider so nothing is ever orphaned.
+ */
+export const listOrderPool = asyncHandler(async (req, res) => {
+  const storeIds = await activeStoreIds(req.user._id);
+
+  const orders = await Order.find({
+    rider: null,
+    status: { $nin: [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED] },
+    $or: [{ store: { $in: storeIds } }, { store: null }],
+  })
+    // Oldest first: the order that has waited longest gets picked up first.
+    .sort({ createdAt: 1 })
+    .limit(50)
+    .populate(ORDER_POPULATE);
+
+  res.json({ orders });
+});
+
+/**
+ * POST /api/orders/:id/claim (rider)
+ *
+ * "Take" a delivery from the pool. The update is a single atomic operation, so
+ * if two riders tap at the same instant exactly one wins and the other gets a
+ * clear message instead of a silent overwrite.
+ */
+export const claimOrder = asyncHandler(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    throw new HttpError(400, 'That order id is not valid.');
+  }
+
+  const existing = await Order.findById(req.params.id).select('store rider');
+  if (!existing) throw new HttpError(404, 'That order does not exist.');
+
+  if (existing.rider) {
+    throw new HttpError(
+      409,
+      String(existing.rider) === String(req.user._id)
+        ? 'You already have this delivery.'
+        : 'Another rider already took this order.',
+    );
+  }
+
+  // Only riders bound to the owning store may take it.
+  if (existing.store) {
+    const bound = await isBoundToStore(req.user._id, existing.store);
+    if (!bound) {
+      throw new HttpError(403, 'You are not a rider for that store.');
+    }
+  }
+
+  const claimed = await Order.findOneAndUpdate(
+    {
+      _id: existing._id,
+      rider: null,
+      status: { $nin: [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED] },
+    },
+    {
+      $set: { rider: req.user._id },
+      $push: {
+        statusHistory: {
+          status: existing.status,
+          note: `${req.user.name || 'A rider'} took this delivery`,
+          by: req.user._id,
+          at: new Date(),
+        },
+      },
+    },
+    { new: true },
+  ).populate(ORDER_POPULATE);
+
+  if (!claimed) {
+    throw new HttpError(409, 'Sorry, another rider just took that order.');
+  }
+
+  // Anyone watching the tracker sees that a rider is now attached.
+  emitOrderStatusUpdated(claimed._id, claimed.status, 'Rider assigned');
+
+  res.json({ order: claimed });
+});
+
+/**
+ * GET /api/orders/store/mine (store)
+ *
+ * Every order placed with this merchant, newest first. This is what a store
+ * owner watches to see orders come in and whether a rider has taken them.
+ */
+export const listStoreOrders = asyncHandler(async (req, res) => {
+  const store = await Store.findOne({ owner: req.user._id }).select('_id');
+  if (!store) throw new HttpError(404, 'You do not have a store yet.');
+
+  const orders = await Order.find({ store: store._id })
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .populate(ORDER_POPULATE);
+
+  res.json({ orders });
+});
+
+// ---------------------------------------------------------------------------
 // Admin
 // ---------------------------------------------------------------------------
 
@@ -369,6 +512,9 @@ export default {
   listRiderOrders,
   updateOrderStatus,
   updateRiderLocation,
+  listOrderPool,
+  claimOrder,
+  listStoreOrders,
   listAllOrders,
   assignRider,
 };

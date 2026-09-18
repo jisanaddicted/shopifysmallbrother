@@ -28,6 +28,20 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+
+    /**
+     * Public handle. Riders and stores must have one - it is how a store or an
+     * admin finds somebody to invite. It is optional for customers, so the
+     * unique index below has to be partial, otherwise every customer without a
+     * username would collide on `null`.
+     */
+    username: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      default: undefined,
+    },
+
     phone: { type: String, trim: true, default: '' },
 
     // Never returned by a query unless explicitly asked for (+passwordHash).
@@ -53,6 +67,12 @@ const userSchema = new mongoose.Schema(
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   },
+);
+
+// Unique only among the documents that actually have a username.
+userSchema.index(
+  { username: 1 },
+  { unique: true, partialFilterExpression: { username: { $type: 'string' } } },
 );
 
 // The client reads `_id || id`, so expose both.

@@ -15,9 +15,11 @@ const router = Router();
 router.get('/', listProducts);
 router.get('/:id', getProduct);
 
-// Only an admin may change it.
-router.post('/', requireAuth, requireRole(ROLES.ADMIN), createProduct);
-router.put('/:id', requireAuth, requireRole(ROLES.ADMIN), updateProduct);
-router.delete('/:id', requireAuth, requireRole(ROLES.ADMIN), deleteProduct);
+// Admins manage every product; a merchant manages their own store's products
+// (the controller refuses anything that belongs to another store).
+const manageProducts = requireRole(ROLES.ADMIN, ROLES.STORE);
+router.post('/', requireAuth, manageProducts, createProduct);
+router.put('/:id', requireAuth, manageProducts, updateProduct);
+router.delete('/:id', requireAuth, manageProducts, deleteProduct);
 
 export default router;

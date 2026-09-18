@@ -77,6 +77,7 @@ export function AuthProvider({ children }) {
       isAuthenticated: Boolean(token),
       isCustomer: role === ROLES.CUSTOMER,
       isRider: role === ROLES.RIDER,
+      isStore: role === ROLES.STORE,
       isAdmin: role === ROLES.ADMIN,
       login,
       register,

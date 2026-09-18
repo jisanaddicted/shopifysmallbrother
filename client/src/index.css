@@ -470,6 +470,51 @@ ol {
   width: auto;
 }
 
+/* Inline validation hints (see the username check in Register.jsx). */
+.field-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.field-ok {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+/* A public handle, e.g. @sam.rider */
+.handle {
+  font-weight: 600;
+  color: var(--brand-dark);
+  white-space: nowrap;
+}
+
+/* The public storefront banner above a store's products. */
+.store-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.store-banner__url {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.store-banner__url code {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.1rem 0.35rem;
+}
+
 /* --- Alerts --------------------------------------------------------------- */
 .alert {
   padding: 0.7rem 0.85rem;

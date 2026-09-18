@@ -14,9 +14,11 @@ async function start() {
   if (config.autoSeed) {
     const summary = await seedDemoData();
     console.log(
-      `[seed] demo accounts ready (created: ${summary.users.created.length}, ` +
-        `refreshed: ${summary.users.updated.length}, password: ${DEMO_PASSWORD})`,
+      `[seed] demo data ready (users +${summary.users.created.length}/~${summary.users.updated.length}, ` +
+        `stores +${summary.stores.created.length}/~${summary.stores.updated.length}, ` +
+        `products +${summary.products.created}, password: ${DEMO_PASSWORD})`,
     );
+    console.log('[seed] storefronts: /s/joes-pizza and /s/green-grocer');
   }
 
   const app = createApp();

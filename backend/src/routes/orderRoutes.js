@@ -2,11 +2,14 @@ import { Router } from 'express';
 import {
   assignRider,
   cancelOrder,
+  claimOrder,
   createOrder,
   getOrder,
   listAllOrders,
   listMyOrders,
+  listOrderPool,
   listRiderOrders,
+  listStoreOrders,
   updateOrderStatus,
   updateRiderLocation,
 } from '../controllers/orderController.js';
@@ -22,10 +25,15 @@ router.use(requireAuth);
 router.post('/', requireRole(ROLES.CUSTOMER, ROLES.ADMIN), createOrder);
 router.get('/mine', requireRole(ROLES.CUSTOMER, ROLES.ADMIN), listMyOrders);
 router.get('/rider/assigned', requireRole(ROLES.RIDER), listRiderOrders);
+// Unclaimed orders from the stores this rider is bound to.
+router.get('/pool', requireRole(ROLES.RIDER), listOrderPool);
+// Orders placed with the signed-in merchant's store.
+router.get('/store/mine', requireRole(ROLES.STORE), listStoreOrders);
 router.get('/', requireRole(ROLES.ADMIN), listAllOrders);
 
 // --- One order ------------------------------------------------------------
 router.get('/:id', getOrder);
+router.post('/:id/claim', requireRole(ROLES.RIDER), claimOrder);
 router.patch('/:id/cancel', cancelOrder);
 router.patch(
   '/:id/status',

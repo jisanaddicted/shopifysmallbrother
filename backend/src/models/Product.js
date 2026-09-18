@@ -16,6 +16,14 @@ const productSchema = new mongoose.Schema(
       default: 0,
     },
     category: { type: String, trim: true, default: '', index: true },
+    // Which merchant this belongs to. Null means a "global" product that only
+    // appears on the general /store catalogue, not on any store page.
+    store: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Store',
+      default: null,
+      index: true,
+    },
     stock: {
       type: Number,
       min: [0, 'Stock cannot be negative.'],

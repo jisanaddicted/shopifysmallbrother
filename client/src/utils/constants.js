@@ -25,7 +25,26 @@ export const STORAGE_KEYS = {
 export const ROLES = {
   CUSTOMER: 'customer',
   RIDER: 'rider',
+  STORE: 'store',
   ADMIN: 'admin',
+};
+
+// Roles that sign up with a username (it is how a store finds a rider).
+export const ROLES_REQUIRING_USERNAME = [ROLES.RIDER, ROLES.STORE];
+
+// --- Store <-> rider binding ----------------------------------------------
+export const STORE_RIDER_STATUS = {
+  PENDING: 'pending',
+  ACTIVE: 'active',
+  DECLINED: 'declined',
+  REVOKED: 'revoked',
+};
+
+export const STORE_RIDER_STATUS_LABELS = {
+  [STORE_RIDER_STATUS.PENDING]: 'Invitation sent',
+  [STORE_RIDER_STATUS.ACTIVE]: 'Delivering',
+  [STORE_RIDER_STATUS.DECLINED]: 'Declined',
+  [STORE_RIDER_STATUS.REVOKED]: 'Removed',
 };
 
 // --- Order lifecycle -------------------------------------------------------
@@ -106,16 +125,24 @@ export const ROUTES = {
   CHECKOUT: '/checkout',
   ORDER_TRACKER: '/track/:orderId',
   RIDER_CONSOLE: '/rider',
+  MERCHANT_DASHBOARD: '/merchant',
   ADMIN_DASHBOARD: '/admin',
   ADMIN_PRODUCTS: '/admin/products',
+  ADMIN_STORES: '/admin/stores',
+  // A store's public storefront: /s/<slug> (see shopPath below).
+  SHOP: '/s/:slug',
 };
 
 // Build a real tracker URL from an order id: orderTrackerPath('abc') -> /track/abc
 export const orderTrackerPath = (orderId) => `/track/${orderId}`;
 
+// Build a store's public URL: shopPath('joes-pizza') -> /s/joes-pizza
+export const shopPath = (slug) => `/s/${slug}`;
+
 // Where each role lands after a successful login.
 export const HOME_ROUTE_BY_ROLE = {
   [ROLES.CUSTOMER]: ROUTES.STORE,
   [ROLES.RIDER]: ROUTES.RIDER_CONSOLE,
+  [ROLES.STORE]: ROUTES.MERCHANT_DASHBOARD,
   [ROLES.ADMIN]: ROUTES.ADMIN_DASHBOARD,
 };
