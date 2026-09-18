@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Delivery app logo">
+  <rect width="64" height="64" rx="14" fill="#2563eb" />
+  <path d="M14 22h20a6 6 0 0 1 6 6v14H14z" fill="#ffffff" />
+  <path d="M40 30h6l6 8v4h-12z" fill="#93c5fd" />
+  <circle cx="23" cy="45" r="5" fill="#0f172a" />
+  <circle cx="45" cy="45" r="5" fill="#0f172a" />
+</svg>
