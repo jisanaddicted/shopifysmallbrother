@@ -17,10 +17,34 @@ you one place to start everything.
 | Requirement | Notes |
 | --- | --- |
 | Node.js 20+ | the backend uses `node --watch` and top-level `await` |
-| MongoDB 4.4+ | running locally, or any connection string you provide |
+| MongoDB | a local server **or** a MongoDB Atlas cluster |
 
-MongoDB is expected on `mongodb://127.0.0.1:27017` by default — change
-`MONGO_URI` in `backend/.env` if yours lives elsewhere.
+The connection string lives in `backend/.env` (`MONGO_URI`). A local server is
+the fallback default (`mongodb://127.0.0.1:27017/delivery_app`).
+
+## Connecting to MongoDB Atlas
+
+```ini
+MONGO_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/delivery_app?retryWrites=true&w=majority&appName=<app>
+```
+
+Two gotchas that produce confusing errors:
+
+1. **Include the database name.** The part between the last `/` and the `?` is
+   the database. Atlas' copy button often omits it, and Mongoose then quietly
+   writes to a database called `test`.
+2. **`querySrv ECONNREFUSED` is usually DNS, not Atlas.** `mongodb+srv://`
+   needs an SRV lookup, and some routers/VPNs refuse those queries — Node's
+   resolver reports it as a connection refusal, which looks like a dead
+   cluster. Check with `Resolve-DnsName -Type SRV _mongodb._tcp.<cluster>.mongodb.net`.
+   If Windows resolves it but Node doesn't, set:
+
+   ```ini
+   MONGO_DNS_SERVERS=8.8.8.8,1.1.1.1
+   ```
+
+Also make sure this machine's public IP is on the cluster's
+**Network Access** allow-list, otherwise the connection times out.
 
 ## Quick start
 

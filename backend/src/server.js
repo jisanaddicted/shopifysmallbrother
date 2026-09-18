@@ -54,10 +54,20 @@ async function start() {
 start().catch((err) => {
   console.error('[api] failed to start:', err.message);
 
-  // The most common failure by far - say exactly what to do about it.
-  if (/ECONNREFUSED|server selection/i.test(err.message)) {
+  // The most common failures by far - say exactly what to do about each.
+  if (/querySrv|queryTxt/i.test(err.message)) {
     console.error(
-      '[api] is MongoDB running? Start the MongoDB service, or point MONGO_URI in backend/.env somewhere else.',
+      '[api] your DNS resolver refused the SRV lookup for the Atlas cluster. ' +
+        'Set MONGO_DNS_SERVERS=8.8.8.8,1.1.1.1 in backend/.env.',
+    );
+  } else if (/ECONNREFUSED|server selection/i.test(err.message)) {
+    console.error(
+      '[api] could not reach MongoDB. Check MONGO_URI in backend/.env, and - for Atlas - ' +
+        'that this machine\'s IP is on the cluster\'s Network Access allow-list.',
+    );
+  } else if (/Authentication failed|bad auth/i.test(err.message)) {
+    console.error(
+      '[api] MongoDB rejected the credentials in MONGO_URI (check the user and password).',
     );
   }
 

@@ -24,6 +24,9 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: toInt(process.env.PORT, 5000),
   mongoUri: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/delivery_app',
+  // Optional DNS override, only needed when a router/VPN blocks the SRV
+  // lookups that mongodb+srv:// URLs require. See config/db.js.
+  mongoDnsServers: toList(process.env.MONGO_DNS_SERVERS, []),
   jwtSecret: process.env.JWT_SECRET || 'dev-only-insecure-secret',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   // The Vite dev server is a different origin, so CORS has to allow it.
