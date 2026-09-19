@@ -28,6 +28,8 @@ export function SocketProvider({ children }) {
   const [riderLocations, setRiderLocations] = useState({});
   // { [orderId]: { status, at } } - live status pushed from the server
   const [statusUpdates, setStatusUpdates] = useState({});
+  // { [orderId]: { storeName, at } } - live "a new order just landed" pings
+  const [newOrders, setNewOrders] = useState({});
 
   const socketRef = useRef(null);
 
@@ -71,6 +73,18 @@ export function SocketProvider({ children }) {
       }));
     };
 
+    // "An order just landed for one of your stores" - the rider console
+    // surfaces this as an accept prompt and refreshes the pool.
+    const handleNewOrder = (payload = {}) => {
+      const { orderId, storeName } = payload;
+      if (!orderId) return;
+
+      setNewOrders((prev) => ({
+        ...prev,
+        [orderId]: { storeName: storeName || 'a store', at: Date.now() },
+      }));
+    };
+
     // The server telling us something went wrong (e.g. "that order is not
     // assigned to you"). Previously this reused handleStatusUpdated, which
     // silently swallowed the message because there is no `status` in it.
@@ -85,6 +99,7 @@ export function SocketProvider({ children }) {
     socket.on('connect_error', handleConnectError);
     socket.on(SOCKET_EVENTS.RIDER_LOCATION_UPDATED, handleRiderLocation);
     socket.on(SOCKET_EVENTS.ORDER_STATUS_UPDATED, handleStatusUpdated);
+    socket.on(SOCKET_EVENTS.ORDER_NEW, handleNewOrder);
     socket.on(SOCKET_EVENTS.SERVER_ERROR, handleServerError);
 
     return () => {
@@ -93,12 +108,23 @@ export function SocketProvider({ children }) {
       socket.off('connect_error', handleConnectError);
       socket.off(SOCKET_EVENTS.RIDER_LOCATION_UPDATED, handleRiderLocation);
       socket.off(SOCKET_EVENTS.ORDER_STATUS_UPDATED, handleStatusUpdated);
+      socket.off(SOCKET_EVENTS.ORDER_NEW, handleNewOrder);
       socket.off(SOCKET_EVENTS.SERVER_ERROR, handleServerError);
     };
   }, [isAuthenticated, token]);
 
   const joinOrder = useCallback((orderId) => joinOrderRoom(orderId), []);
   const leaveOrder = useCallback((orderId) => leaveOrderRoom(orderId), []);
+
+  // The rider console calls this once the order is visible / claimed.
+  const clearNewOrder = useCallback((orderId) => {
+    setNewOrders((prev) => {
+      if (!prev[orderId]) return prev;
+      const next = { ...prev };
+      delete next[orderId];
+      return next;
+    });
+  }, []);
   const broadcastLocation = useCallback(
     (orderId, coords) => emitRiderLocation(orderId, coords),
     [],
@@ -116,6 +142,8 @@ export function SocketProvider({ children }) {
       connectionError,
       riderLocations,
       statusUpdates,
+      newOrders,
+      clearNewOrder,
       getRiderLocation,
       joinOrder,
       leaveOrder,
@@ -127,6 +155,8 @@ export function SocketProvider({ children }) {
       connectionError,
       riderLocations,
       statusUpdates,
+      newOrders,
+      clearNewOrder,
       getRiderLocation,
       joinOrder,
       leaveOrder,

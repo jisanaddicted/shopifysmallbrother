@@ -1,4 +1,10 @@
 import api from './api';
+// The rider's delivery pool + claim live in storeService (they are bound to
+// store membership). Re-exported here so `orderService.claimOrder(...)` works
+// for callers that only import this service.
+import { getOrderPool, claimOrder } from './storeService';
+
+export { getOrderPool, claimOrder };
 
 // ---------------------------------------------------------------------------
 // Customer endpoints
@@ -57,21 +63,14 @@ export const pushRiderLocation = (orderId, { lat, lng }) =>
 // Admin endpoints
 // ---------------------------------------------------------------------------
 
-/** GET /orders?status=&page= - the dispatch board. */
+/** GET /orders?status=&page= - the admin overview board (read-only). */
 export const getAllOrders = (params = {}) =>
   api
     .get('/orders', { params })
     .then((res) => res.data.orders || res.data || []);
 
-/** PATCH /orders/:id/assign - give an order to a rider. */
-export const assignRider = (orderId, riderId) =>
-  api
-    .patch(`/orders/${orderId}/assign`, { riderId })
-    .then((res) => res.data.order || res.data);
-
-/** GET /admin/riders - riders available for dispatch. */
-export const getAvailableRiders = () =>
-  api.get('/admin/riders').then((res) => res.data.riders || res.data || []);
+// Note: there is no assignRider() anymore. Riders claim deliveries
+// themselves from their pool (see claimOrder below).
 
 export default {
   createOrder,
@@ -82,6 +81,6 @@ export default {
   updateOrderStatus,
   pushRiderLocation,
   getAllOrders,
-  assignRider,
-  getAvailableRiders,
+  getOrderPool,
+  claimOrder,
 };

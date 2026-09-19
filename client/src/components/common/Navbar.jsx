@@ -59,14 +59,22 @@ export default function Navbar() {
 
           {isAuthenticated ? (
             <>
-              <span className="navbar__user" title={user?.email}>
+              <Link
+                className="navbar__user"
+                to={ROUTES.PROFILE}
+                title={
+                  user?.username
+                    ? `@${user.username} — view profile`
+                    : 'View profile'
+                }
+              >
                 <span className="avatar" aria-hidden="true">
                   {initials(user?.name || user?.email)}
                 </span>
                 <span className="navbar__user-name">
-                  {user?.name || user?.email}
+                  {user?.username ? `@${user.username}` : user?.name || user?.email}
                 </span>
-              </span>
+              </Link>
               <button
                 type="button"
                 className="btn btn-outline btn-sm"

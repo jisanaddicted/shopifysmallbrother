@@ -8,6 +8,7 @@ import ProductManager from './pages/admin/ProductManager';
 import AdminStores from './pages/admin/AdminStores';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import ProfilePage from './pages/profile/ProfilePage';
 import Checkout from './pages/customer/Checkout';
 import OrderTracker from './pages/customer/OrderTracker';
 import ShopPage from './pages/customer/ShopPage';
@@ -55,6 +56,16 @@ export default function App() {
           <Route path={ROUTES.HOME} element={<HomeRedirect />} />
           <Route path={ROUTES.LOGIN} element={<Login />} />
           <Route path={ROUTES.REGISTER} element={<Register />} />
+
+          {/* Any signed-in user: their own profile (riders see their username). */}
+          <Route
+            path={ROUTES.PROFILE}
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Customer */}
           <Route

@@ -15,7 +15,7 @@ import { formatCurrency, formatStatus } from '../../utils/formatters';
 const PING_INTERVAL_MS = 4000;
 
 export default function RiderConsole() {
-  const { broadcastLocation, joinOrder, leaveOrder, connected } = useSocket();
+  const { broadcastLocation, joinOrder, leaveOrder, connected, newOrders, clearNewOrder } = useSocket();
 
   const [orders, setOrders] = useState([]);
   const [activeId, setActiveId] = useState(null);
@@ -83,6 +83,20 @@ export default function RiderConsole() {
     await Promise.all([loadOrders(), loadExtras()]);
   }, [loadOrders, loadExtras]);
 
+  // Live "new order" notifications (order:new over the socket). A fresh ping
+  // means new work for one of my stores, so the pool is refreshed right away.
+  const pingCountRef = useRef(0);
+  useEffect(() => {
+    const count = Object.keys(newOrders).length;
+    if (count > pingCountRef.current) loadExtras();
+    pingCountRef.current = count;
+  }, [newOrders, loadExtras]);
+
+  // What the notification bell should render, newest first.
+  const newOrderEntries = Object.entries(newOrders).sort(
+    (a, b) => (b[1]?.at || 0) - (a[1]?.at || 0),
+  );
+
   // --- Answer a store invitation -------------------------------------------
   const respond = async (requestId, action) => {
     setPoolBusy(true);
@@ -116,6 +130,7 @@ export default function RiderConsole() {
       await loadOrders();
       setPool((prev) => prev.filter((o) => (o._id || o.id) !== orderId));
       setActiveId(newId);
+      clearNewOrder(orderId);
     } catch (err) {
       setError(err.message || 'Could not take that delivery.');
       loadExtras();
@@ -306,6 +321,53 @@ export default function RiderConsole() {
                       }
                     >
                       Decline
+                    </button>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {/* --- Live notifications: orders waiting to be accepted ----------------- */}
+      {newOrderEntries.length > 0 ? (
+        <section className="panel">
+          <div className="panel__header">
+            <h2 className="panel__title">
+              New orders ({newOrderEntries.length})
+            </h2>
+            <span className="live-dot live-dot--on">Live</span>
+          </div>
+
+          <ul className="rider-list">
+            {newOrderEntries.map(([id, ping]) => (
+              <li key={id}>
+                <div className="rider-list__item">
+                  <span className="rider-list__id">
+                    {ping.orderNumber || `#${id.slice(-6).toUpperCase()}`}
+                  </span>
+                  <span className="muted small">
+                    just arrived from {ping.storeName}
+                    {ping.total != null
+                      ? ` · ${formatCurrency(ping.total)}`
+                      : ''}
+                  </span>
+                  <span className="button-row">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={poolBusy}
+                      onClick={() => claim(id)}
+                    >
+                      Accept delivery
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => clearNewOrder(id)}
+                    >
+                      Dismiss
                     </button>
                   </span>
                 </div>

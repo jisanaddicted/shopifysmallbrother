@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import {
-  assignRider,
   cancelOrder,
   claimOrder,
   createOrder,
@@ -45,6 +44,5 @@ router.patch(
   requireRole(ROLES.RIDER, ROLES.ADMIN),
   updateRiderLocation,
 );
-router.patch('/:id/assign', requireRole(ROLES.ADMIN), assignRider);
 
 export default router;

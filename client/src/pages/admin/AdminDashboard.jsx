@@ -18,26 +18,19 @@ const STATUS_FILTERS = ['all', ...Object.values(ORDER_STATUS)];
 
 export default function AdminDashboard() {
   const [orders, setOrders] = useState([]);
-  const [riders, setRiders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
-  const [assigningId, setAssigningId] = useState(null);
 
   const loadBoard = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      const [orderList, riderList] = await Promise.all([
-        orderService.getAllOrders(),
-        orderService.getAvailableRiders(),
-      ]);
-
+      const orderList = await orderService.getAllOrders();
       setOrders(Array.isArray(orderList) ? orderList : []);
-      setRiders(Array.isArray(riderList) ? riderList : []);
     } catch (err) {
-      setError(err.message || 'Could not load the dispatch board.');
+      setError(err.message || 'Could not load the orders board.');
     } finally {
       setLoading(false);
     }
@@ -70,36 +63,22 @@ export default function AdminDashboard() {
     };
   }, [orders]);
 
-  const handleAssign = async (orderId, riderId) => {
-    if (!riderId) return;
-
-    setAssigningId(orderId);
-    setError('');
-
-    try {
-      const updated = await orderService.assignRider(orderId, riderId);
-      setOrders((prev) =>
-        prev.map((order) =>
-          (order._id || order.id) === orderId ? { ...order, ...updated } : order,
-        ),
-      );
-    } catch (err) {
-      setError(err.message || 'Could not assign that rider.');
-    } finally {
-      setAssigningId(null);
-    }
-  };
+  const riderName = (order) =>
+    order.rider?.name || (order.rider ? 'Rider' : 'Awaiting rider');
 
   if (loading) {
-    return <LoadingSpinner fullPage label="Loading the dispatch board…" />;
+    return <LoadingSpinner fullPage label="Loading the orders board…" />;
   }
 
   return (
     <div className="page">
       <header className="page__header">
         <div>
-          <h1>Dispatch board</h1>
-          <p className="muted">Assign riders and watch every order move.</p>
+          <h1>Orders</h1>
+          <p className="muted">
+            Riders are notified automatically - they accept each delivery from
+            their own console.
+          </p>
         </div>
 
         <button
@@ -202,21 +181,13 @@ export default function AdminDashboard() {
                   </td>
 
                   <td>
-                    <select
-                      value={typeof assignedId === 'string' ? assignedId : ''}
-                      onChange={(event) => handleAssign(id, event.target.value)}
-                      disabled={assigningId === id}
-                    >
-                      <option value="">Unassigned</option>
-                      {riders.map((rider) => (
-                        <option
-                          key={rider._id || rider.id}
-                          value={rider._id || rider.id}
-                        >
-                          {rider.name || rider.email}
-                        </option>
-                      ))}
-                    </select>
+                    {order.rider ? (
+                      <span>{riderName(order)}</span>
+                    ) : (
+                      <span className="muted small">
+                        Notified · waiting for a rider to accept
+                      </span>
+                    )}
                   </td>
 
                   <td>{formatCurrency(order.total)}</td>

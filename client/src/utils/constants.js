@@ -113,6 +113,8 @@ export const SOCKET_EVENTS = {
   RIDER_LOCATION: 'rider:location',
   RIDER_LOCATION_UPDATED: 'rider:location:updated',
   ORDER_STATUS_UPDATED: 'order:status:updated',
+  // Fired the moment an order lands: riders bound to that store hear it live.
+  ORDER_NEW: 'order:new',
   SERVER_ERROR: 'server:error',
 };
 
@@ -129,6 +131,7 @@ export const ROUTES = {
   ADMIN_DASHBOARD: '/admin',
   ADMIN_PRODUCTS: '/admin/products',
   ADMIN_STORES: '/admin/stores',
+  PROFILE: '/profile',
   // A store's public storefront: /s/<slug> (see shopPath below).
   SHOP: '/s/:slug',
 };

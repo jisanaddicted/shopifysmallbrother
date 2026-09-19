@@ -14,7 +14,7 @@ import { priceOrder, riderAllowedStatuses } from '../utils/pricing.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { canAccessOrder } from '../utils/orderAccess.js';
 import { activeStoreIds, isBoundToStore } from '../utils/storeRider.js';
-import { emitOrderStatusUpdated } from '../sockets/index.js';
+import { emitOrderStatusUpdated, notifyStoreRiders } from '../sockets/index.js';
 
 // The tracker needs the rider's name/phone and the customer's details, and
 // the store so the page can show which merchant the order is from.
@@ -193,6 +193,18 @@ export const createOrder = asyncHandler(async (req, res) => {
   );
 
   await order.populate(ORDER_POPULATE);
+
+  // Live notification: every rider with an active binding to this store is
+  // pinged immediately and can accept (claim) the delivery from their console.
+  if (order.store) {
+    notifyStoreRiders(order.store._id || order.store, {
+      orderId: String(order._id),
+      orderNumber: String(order._id).slice(-6).toUpperCase(),
+      storeName: order.store?.name || 'A store',
+      total: order.total,
+      address: order.address?.line1 || '',
+    });
+  }
 
   res.status(201).json({ order });
 });
@@ -470,39 +482,12 @@ export const listAllOrders = asyncHandler(async (req, res) => {
 });
 
 /**
- * PATCH /api/orders/:id/assign
- * body: { riderId } - an empty riderId unassigns the order.
+ * (removed) PATCH /api/orders/:id/assign
+ *
+ * Manual dispatch is gone on purpose: riders are bound to a store by the
+ * admin/merchant, get pinged in real time when an order arrives, and claim
+ * it themselves (POST /:id/claim). There is no admin "choose a rider" step.
  */
-export const assignRider = asyncHandler(async (req, res) => {
-  const { riderId } = req.body || {};
-
-  const order = await loadOrderFor(req.params.id, req.user);
-
-  if (!riderId) {
-    order.rider = null;
-    await order.save();
-    await order.populate(ORDER_POPULATE);
-    return res.json({ order });
-  }
-
-  if (!mongoose.isValidObjectId(riderId)) {
-    throw new HttpError(400, 'That rider id is not valid.');
-  }
-
-  const rider = await User.findById(riderId);
-  if (!rider || rider.role !== ROLES.RIDER) {
-    throw new HttpError(400, 'That account is not a rider.');
-  }
-
-  order.rider = rider._id;
-  await order.save();
-  await order.populate(ORDER_POPULATE);
-
-  // Let anyone watching the tracker know a rider is now attached.
-  emitOrderStatusUpdated(order._id, order.status, 'Rider assigned');
-
-  res.json({ order });
-});
 
 export default {
   createOrder,
@@ -516,5 +501,4 @@ export default {
   claimOrder,
   listStoreOrders,
   listAllOrders,
-  assignRider,
 };

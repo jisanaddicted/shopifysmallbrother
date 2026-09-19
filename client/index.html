@@ -24,6 +24,25 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <script>
+      // Surface boot-time crashes instead of a silent white page: if the
+      // app throws before React paints anything, show the error in #root.
+      window.addEventListener('error', function (event) {
+        var root = document.getElementById('root');
+        if (!root || root.childElementCount) return;
+        var message =
+          (event && event.error && event.error.message) ||
+          (event && event.message) ||
+          'Unknown error';
+        var box = document.createElement('pre');
+        box.style.cssText =
+          'padding:16px;margin:16px;color:#b91c1c;white-space:pre-wrap;font-family:monospace';
+        box.textContent = 'The app failed to start:\n' + message;
+        root.appendChild(box);
+      });
+    </script>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

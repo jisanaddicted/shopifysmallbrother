@@ -1103,6 +1103,62 @@ ol {
   background: var(--surface);
 }
 
+/* --- Profile page --------------------------------------------------------- */
+.navbar__user {
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem 0.2rem 0.25rem;
+  transition: background 0.15s ease;
+}
+
+.navbar__user:hover {
+  background: var(--brand-soft, rgba(0, 0, 0, 0.06));
+}
+
+.avatar--lg {
+  width: 64px;
+  height: 64px;
+  font-size: 1.4rem;
+}
+
+.profile {
+  display: grid;
+  gap: 1rem;
+  max-width: 720px;
+}
+
+@media (min-width: 720px) {
+  .profile {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.profile__identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.profile__username {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--brand, inherit);
+  letter-spacing: 0.01em;
+}
+
+.profile__name {
+  margin: 0;
+  font-weight: 600;
+}
+
+.profile__hint {
+  margin: 0;
+}
+
+
 .timeline__item.is-done {
   color: var(--ink);
 }

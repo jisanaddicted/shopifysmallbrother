@@ -5,11 +5,18 @@ import User from '../models/User.js';
 import { ROLES, SOCKET_EVENTS } from '../utils/constants.js';
 import { verifyToken } from '../utils/jwt.js';
 import { canAccessOrder } from '../utils/orderAccess.js';
+import StoreRider from '../models/StoreRider.js';
 
 /** Every order has its own room, so a tracker only hears about its own order. */
 const roomFor = (orderId) => `order:${orderId}`;
 
 let io = null;
+
+/**
+ * riderId -> Set<socketId>. Lets notifyStoreRiders() reach every open tab of
+ * every bound rider, even before they join any order room.
+ */
+const riderSockets = new Map();
 
 /**
  * Verifies the JWT sent in the handshake (`auth: { token }` - see
@@ -55,6 +62,14 @@ export function initSockets(httpServer) {
 
   io.on('connection', (socket) => {
     console.log(`[socket] ${socket.user.role} connected (${socket.id})`);
+
+    // Riders register themselves so "new order" pings can find their tabs.
+    const isRider = socket.user.role === ROLES.RIDER;
+    if (isRider) {
+      const riderId = String(socket.user._id);
+      if (!riderSockets.has(riderId)) riderSockets.set(riderId, new Set());
+      riderSockets.get(riderId).add(socket.id);
+    }
 
     /** Join the room for one order - only if this user may see it. */
     socket.on(
@@ -135,6 +150,14 @@ export function initSockets(httpServer) {
     );
 
     socket.on('disconnect', (reason) => {
+      if (isRider) {
+        const riderId = String(socket.user._id);
+        const tabs = riderSockets.get(riderId);
+        if (tabs) {
+          tabs.delete(socket.id);
+          if (tabs.size === 0) riderSockets.delete(riderId);
+        }
+      }
       console.log(`[socket] ${socket.id} disconnected (${reason})`);
     });
   });
@@ -158,6 +181,44 @@ export function emitOrderStatusUpdated(orderId, status, note = '') {
   });
 }
 
+/**
+ * Real-time "an order just arrived" ping.
+ *
+ * Given the store the order belongs to, this finds every rider whose binding
+ * to that store is active and pings all of their open sockets. The payload is
+ * a preview only - the rider's console re-fetches /orders/pool for the truth.
+ *
+ * Riders who are offline simply miss the ping; the pool list is the fallback,
+ * which is also why unbinding and claim-free pool access are never removed.
+ */
+export async function notifyStoreRiders(storeId, payload) {
+  if (!io || !storeId) return;
+
+  const bindings = await StoreRider.find({
+    store: storeId,
+    status: 'active',
+  }).select('rider');
+
+  const targets = new Set();
+  for (const binding of bindings) {
+    const tabs = riderSockets.get(String(binding.rider));
+    if (tabs) for (const socketId of tabs) targets.add(socketId);
+  }
+  if (targets.size === 0) return;
+
+  io.to([...targets]).emit(SOCKET_EVENTS.ORDER_NEW, {
+    storeId: String(storeId),
+    ...payload,
+    at: Date.now(),
+  });
+}
+
 export { roomFor };
 
-export default { initSockets, getIO, emitOrderStatusUpdated, roomFor };
+export default {
+  initSockets,
+  getIO,
+  emitOrderStatusUpdated,
+  notifyStoreRiders,
+  roomFor,
+};

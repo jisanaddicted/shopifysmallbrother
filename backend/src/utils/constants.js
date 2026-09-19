@@ -82,6 +82,8 @@ export const SOCKET_EVENTS = {
   RIDER_LOCATION: 'rider:location',
   RIDER_LOCATION_UPDATED: 'rider:location:updated',
   ORDER_STATUS_UPDATED: 'order:status:updated',
+  // Fired the moment an order lands: riders bound to that store hear it live.
+  ORDER_NEW: 'order:new',
   SERVER_ERROR: 'server:error',
 };
 
