@@ -23,12 +23,24 @@ const BLANK_FORM = {
   slug: '',
 };
 
+const storeKey = (entry) => String(entry?._id || entry?.id || '');
+
+const isSameStore = (a, b) => {
+  const ka = storeKey(a);
+  const kb = storeKey(b);
+  return Boolean(ka && kb && ka === kb);
+};
+
 export default function MerchantDashboard() {
-  const { refreshSession } = useAuth();
+  const { refreshSession, stores: sessionStores } = useAuth();
   const { newOrders, statusUpdates } = useSocket();
   const storeIdRef = useRef(null);
 
   const [store, setStore] = useState(null);
+  // Every store this account runs (owner + appointed admin), as
+  // [{ store, role, isOwner }]. Powers the "My storefronts" card with each
+  // store's landing-page link (/s/<slug>).
+  const [myStores, setMyStores] = useState([]);
   const [riders, setRiders] = useState([]);
   const [members, setMembers] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -76,45 +88,110 @@ export default function MerchantDashboard() {
     }
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
+  const load = useCallback(
+    async (storeId) => {
+      setLoading(true);
+      setError('');
 
-    try {
-      const [mine, orderList] = await Promise.all([
-        storeService.getMyStore(),
-        storeService.listStoreOrders(),
-      ]);
+      try {
+        // The store switcher: `storeId` picks one of the account's several
+        // stores; without it the primary store is used. `mine/all` is the
+        // source for the "My storefronts" card (every landing-page link),
+        // while `mine` still carries the primary roster inline.
+        const [mine, allStores, orderList] = await Promise.all([
+          storeService.getMyStore(),
+          storeService.listMyMerchantStores().catch(() => []),
+          storeService.listStoreOrders(storeId),
+        ]);
 
-      const nextStore = mine.store;
-      setStore(nextStore);
-      storeIdRef.current = nextStore?._id || nextStore?.id || null;
-      setIsOwner(mine.isOwner !== false);
-      setRiders(mine.riders || []);
-      setMembers(mine.members || mine.riders || []);
-      setOrders(orderList);
+        const entries = Array.isArray(allStores) ? allStores : [];
+        setMyStores(entries);
 
-      setForm({
-        name: nextStore?.name || '',
-        description: nextStore?.description || '',
-        phone: nextStore?.phone || '',
-        line1: nextStore?.address?.line1 || '',
-        city: nextStore?.address?.city || '',
-        image: nextStore?.image || '',
-        slug: nextStore?.slug || '',
-      });
+        const activeId = storeId || null;
+        const activeEntry = activeId
+          ? entries.find(
+              (entry) =>
+                String(entry.store?._id || entry.store?.id) ===
+                String(activeId),
+            )
+          : null;
+        const nextStore = activeEntry?.store || mine.store || null;
+        setStore(nextStore);
+        storeIdRef.current = nextStore?._id || nextStore?.id || null;
+        // The ownership flag follows the ACTIVE store, not the primary one,
+        // so switching to an administered store correctly hides owner
+        // controls. Falls back to `mine` when the switcher list is empty.
+        const ownerFlag = activeEntry
+          ? activeEntry.isOwner !== false
+          : mine.isOwner !== false;
+        setIsOwner(ownerFlag);
+        setRiders(mine.riders || []);
+        setMembers(mine.members || mine.riders || []);
+        // When a non-primary store is active the roster inline in `mine`
+        // belongs to the primary store - reload it for the active one
+        // (owner only: the roster endpoints are owner-only, so a store
+        // admin viewing an administered store keeps an empty roster
+        // instead of a 403).
+        if (activeEntry && !isSameStore(mine.store, nextStore)) {
+          if (activeEntry.isOwner !== false) {
+            await loadRoster(storeIdRef.current);
+          } else {
+            setRiders([]);
+            setMembers([]);
+          }
+        }
+        setOrders(orderList);
 
-      if (mine.isOwner === false) loadInvites();
-    } catch (err) {
-      setError(err.message || 'Could not load your store.');
-    } finally {
-      setLoading(false);
-    }
-  }, [loadInvites]);
+        setForm({
+          name: nextStore?.name || '',
+          description: nextStore?.description || '',
+          phone: nextStore?.phone || '',
+          line1: nextStore?.address?.line1 || '',
+          city: nextStore?.address?.city || '',
+          image: nextStore?.image || '',
+          slug: nextStore?.slug || '',
+        });
+
+        if (mine.isOwner === false && !activeEntry) loadInvites();
+      } catch (err) {
+        setError(err.message || 'Could not load your store.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loadInvites, loadRoster],
+  );
+
+  // Switch the whole dashboard (orders, roster, storefront form) to another
+  // of this account's stores.
+  const switchStore = useCallback(
+    (storeId) => {
+      load(storeId);
+    },
+    [load],
+  );
 
   useEffect(() => {
     load();
   }, [load]);
+
+  // Keep the switcher list fresh without wiping the active dashboard: the
+  // session (AuthContext) already carries every store, so merge it in. This
+  // guarantees every store's landing-page link is visible even if
+  // `/stores/mine/all` failed on first load.
+  useEffect(() => {
+    if (!Array.isArray(sessionStores) || sessionStores.length === 0) return;
+    setMyStores((prev) => {
+      const seen = new Set(prev.map((entry) => storeKey(entry.store)));
+      const merged = [...prev];
+      for (const entry of sessionStores) {
+        if (!entry?.store || seen.has(storeKey(entry.store))) continue;
+        seen.add(storeKey(entry.store));
+        merged.push(entry);
+      }
+      return merged;
+    });
+  }, [sessionStores]);
 
   // Live-refresh without a manual click, so "rider accepted but status still
   // shows old / undefined" can never go stale on screen:
@@ -125,7 +202,7 @@ export default function MerchantDashboard() {
   const refreshOrders = useCallback(async () => {
     try {
       const [orderList, links] = await Promise.all([
-        storeService.listStoreOrders(),
+        storeService.listStoreOrders(storeIdRef.current || undefined),
         storeIdRef.current
           ? storeService.listStoreRiders(storeIdRef.current).catch(() => null)
           : Promise.resolve(null),
@@ -165,13 +242,18 @@ export default function MerchantDashboard() {
     setError('');
 
     try {
-      const updated = await storeService.updateMyStore({
-        name: form.name,
-        description: form.description,
-        phone: form.phone,
-        image: form.image,
-        address: { line1: form.line1, city: form.city },
-      });
+      // Target the ACTIVE store so saving while viewing a second storefront
+      // edits that store, not the primary one.
+      const updated = await storeService.updateMyStore(
+        {
+          name: form.name,
+          description: form.description,
+          phone: form.phone,
+          image: form.image,
+          address: { line1: form.line1, city: form.city },
+        },
+        storeIdRef.current || undefined,
+      );
 
       setStore(updated);
       setForm((prev) => ({ ...prev, slug: updated.slug || prev.slug }));
@@ -249,7 +331,7 @@ export default function MerchantDashboard() {
         flash('Invitation declined.');
       }
 
-      await load();
+      await load(storeIdRef.current || undefined);
     } catch (err) {
       setRosterError(err.message || 'Could not respond to the invitation.');
     } finally {
@@ -270,7 +352,7 @@ export default function MerchantDashboard() {
         <p className="alert alert--danger">
           {error || 'No store is linked to this account yet.'}
         </p>
-        <button type="button" className="btn btn-outline" onClick={load}>
+        <button type="button" className="btn btn-outline" onClick={() => load()}>
           Try again
         </button>
       </div>
@@ -283,6 +365,19 @@ export default function MerchantDashboard() {
       order.status !== ORDER_STATUS.CANCELLED,
   );
 
+  const activeStoreId = storeIdRef.current
+    ? String(storeIdRef.current)
+    : String(store?._id || store?.id || '');
+  // Full public URL for copy/share: origin + /s/<slug>. Falls back to the
+  // relative landing-page path when the slug is missing.
+  const storeUrl = (entry) => {
+    const slug = entry?.slug || '';
+    if (typeof window !== 'undefined' && window.location?.origin && slug) {
+      return `${window.location.origin}${shopPath(slug)}`;
+    }
+    return slug ? shopPath(slug) : '#';
+  };
+
   return (
     <div className="page">
       <header className="page__header">
@@ -293,13 +388,125 @@ export default function MerchantDashboard() {
             {store.isActive ? '' : ' · closed to customers'}
           </p>
         </div>
-        <button type="button" className="btn btn-outline btn-sm" onClick={load}>
-          Refresh
-        </button>
+        <div className="button-row">
+          {store.slug ? (
+            <a
+              className="btn btn-outline btn-sm"
+              href={storeUrl(store)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open landing page
+            </a>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => load(storeIdRef.current || undefined)}
+          >
+            Refresh
+          </button>
+        </div>
       </header>
 
       {notice ? <p className="alert alert--ok">{notice}</p> : null}
       {error ? <p className="alert alert--danger">{error}</p> : null}
+
+      {/* ---- Every storefront this account runs, each with its own landing-page link */}
+      <section className="panel">
+        <div className="panel__header">
+          <h2 className="panel__title">My storefronts</h2>
+          <span className="muted small">
+            Every store landing page for this account — open, copy or share
+            each link.
+          </span>
+        </div>
+
+        {myStores.length === 0 ? (
+          <p className="muted">
+            {store.slug ? (
+              <>
+                Landing page:{' '}
+                <Link to={shopPath(store.slug)}>/s/{store.slug}</Link>
+              </>
+            ) : (
+              'No storefronts yet.'
+            )}
+          </p>
+        ) : (
+          <ul className="rider-list">
+            {myStores.map((entry) => {
+              const entryStore = entry.store || {};
+              const key = storeKey(entryStore) || entryStore.slug;
+              const isActive = activeStoreId
+                ? String(entryStore._id || entryStore.id) === activeStoreId
+                : false;
+              const landing = storeUrl(entryStore);
+              return (
+                <li key={key}>
+                  <div
+                    className={`rider-list__item${isActive ? ' is-active' : ''}`}
+                  >
+                    <span className="rider-list__id">
+                      {entryStore.name || 'Unnamed store'}
+                      {isActive ? ' · viewing' : ''}
+                    </span>
+                    <span className="muted small">
+                      <Link to={shopPath(entryStore.slug)}>
+                        /s/{entryStore.slug}
+                      </Link>
+                      {entry.role === 'admin' ? ' · store admin' : ' · owner'}
+                      {entryStore.isActive === false
+                        ? ' · closed to customers'
+                        : ''}
+                    </span>
+                    <div className="button-row">
+                      <a
+                        className="btn btn-ghost btn-sm"
+                        href={landing}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open
+                      </a>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          const url = landing;
+                          if (navigator.clipboard?.writeText) {
+                            navigator.clipboard
+                              .writeText(url)
+                              .then(() => flash('Landing-page link copied.'))
+                              .catch(() =>
+                                flash(`Copy this link: ${url}`),
+                              );
+                          } else {
+                            flash(`Copy this link: ${url}`);
+                          }
+                        }}
+                      >
+                        Copy link
+                      </button>
+                      {!isActive && entryStore._id ? (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          onClick={() =>
+                            switchStore(entryStore._id || entryStore.id)
+                          }
+                        >
+                          View
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <div className="stats">
         <div className="stat">

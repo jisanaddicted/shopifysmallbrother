@@ -12,12 +12,24 @@ export const getPublicStore = (slug) =>
 // Merchant (store owner)
 // ---------------------------------------------------------------------------
 
-/** GET /stores/mine -> { store, riders } */
+/** GET /stores/mine -> { store, riders } (primary store only). */
 export const getMyStore = () => api.get('/stores/mine').then((res) => res.data);
 
-/** PATCH /stores/mine */
-export const updateMyStore = (payload) =>
-  api.patch('/stores/mine', payload).then((res) => res.data.store);
+/**
+ * GET /stores/mine/all -> { stores: [{ store, role, isOwner }] }
+ * Every store this account runs (owner + appointed admin). Powers the
+ * merchant dashboard "My storefronts" card with each landing-page link.
+ */
+export const listMyMerchantStores = () =>
+  api.get('/stores/mine/all').then((res) => res.data.stores || []);
+
+/** PATCH /stores/mine (?storeId= to target one of several stores) */
+export const updateMyStore = (payload, storeId) =>
+  api
+    .patch('/stores/mine', payload, {
+      params: storeId ? { storeId } : {},
+    })
+    .then((res) => res.data.store);
 
 // ---------------------------------------------------------------------------
 // Rider roster
@@ -88,13 +100,18 @@ export const getOrderPool = () =>
 export const claimOrder = (orderId) =>
   api.post(`/orders/${orderId}/claim`).then((res) => res.data.order);
 
-/** GET /orders/store/mine - orders placed with this merchant's store. */
-export const listStoreOrders = () =>
-  api.get('/orders/store/mine').then((res) => res.data.orders || []);
+/** GET /orders/store/mine - orders placed with this merchant's store.
+ * Pass ?storeId= to pick one of several stores; without it the primary
+ * store is used. */
+export const listStoreOrders = (storeId) =>
+  api
+    .get('/orders/store/mine', { params: storeId ? { storeId } : {} })
+    .then((res) => res.data.orders || []);
 
 export default {
   getPublicStore,
   getMyStore,
+  listMyMerchantStores,
   updateMyStore,
   listStoreOrders,
   searchRiders,

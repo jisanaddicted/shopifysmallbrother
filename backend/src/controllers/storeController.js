@@ -10,6 +10,7 @@ import { normaliseUsername, slugify, uniqueSlug } from '../utils/slug.js';
 import {
   loadManageableStore,
   primaryStoreFor,
+  storesForUser,
   STORE_ROLES,
 } from '../utils/storeAccess.js';
 
@@ -91,9 +92,35 @@ export const getMyStore = asyncHandler(async (req, res) => {
   });
 });
 
-/** PATCH /api/stores/mine - edit the storefront details (owner only). */
+/**
+ * GET /api/stores/mine/all - every store this account runs (owner + admin).
+ *
+ * The merchant dashboard shows only the primary store today; this powers the
+ * new "My storefronts" card with each store's landing-page link (/s/<slug>)
+ * and lets the dashboard switch between stores. Uses storesForUser so an
+ * appointed store admin sees their stores too. Ordered owners-first to match
+ * the session ordering.
+ */
+export const listMyMerchantStores = asyncHandler(async (req, res) => {
+  const entries = await storesForUser(req.user);
+
+  res.json({
+    stores: entries.map((entry) => ({
+      store: entry.store,
+      role: entry.role,
+      isOwner: entry.role === STORE_ROLES.OWNER,
+    })),
+  });
+});
+
+/** PATCH /api/stores/mine - edit the storefront details (owner only).
+ * Accepts `?storeId=` (or body.storeId) to edit one of several stores;
+ * without it the primary store is used. */
 export const updateMyStore = asyncHandler(async (req, res) => {
-  const entry = await primaryStoreFor(req.user);
+  const requested = req.query.storeId || req.body?.storeId || null;
+  const entry = requested
+    ? await loadManageableStore(requested, req.user)
+    : await primaryStoreFor(req.user);
   if (!entry) throw new HttpError(404, 'You do not have a store yet.');
 
   if (entry.role !== STORE_ROLES.OWNER) {
@@ -319,6 +346,7 @@ export const removeStoreRider = asyncHandler(async (req, res) => {
 export default {
   getPublicStore,
   getMyStore,
+  listMyMerchantStores,
   updateMyStore,
   listStores,
   searchRiders,

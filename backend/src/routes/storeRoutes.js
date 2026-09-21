@@ -3,6 +3,7 @@ import {
   getMyStore,
   getPublicStore,
   inviteRider,
+  listMyMerchantStores,
   listStores,
   listStoreRiders,
   removeStoreRider,
@@ -23,6 +24,9 @@ const router = Router();
  * check). WRITE is owner-only, which the controller enforces.
  */
 router.get('/mine', requireAuth, requireStoreStaff, getMyStore);
+// Every store this account runs (owner + appointed admin). Must sit before
+// "/:slug" so "all" is not treated as a store slug.
+router.get('/mine/all', requireAuth, requireStoreStaff, listMyMerchantStores);
 router.patch('/mine', requireAuth, requireStoreStaff, updateMyStore);
 
 // Every merchant on the platform (admin only).

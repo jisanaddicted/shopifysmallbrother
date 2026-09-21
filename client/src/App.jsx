@@ -1,9 +1,11 @@
-import { Link, Navigate, Route, Routes } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Navbar from './components/common/Navbar';
+import DashboardLayout from './components/common/DashboardLayout';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import CartDrawer from './components/store/CartDrawer';
 import { useAuth } from './context/AuthContext';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminStores from './pages/admin/AdminStores';
 import ProductManager from './pages/admin/ProductManager';
 
 import Login from './pages/auth/Login';
@@ -47,13 +49,23 @@ function NotFound() {
 /**
  * Route table. Every protected page is wrapped in <ProtectedRoute> so the
  * role check happens before the page (and its API calls) ever mount.
+ *
+ * The store dashboard (/merchant*) and the admin panel (/admin*) render
+ * inside <DashboardLayout> - a side navbar - so the top <Navbar/> is hidden
+ * on those routes. Everywhere else (customer, rider, auth, public shop) the
+ * top navbar stays as-is.
  */
 export default function App() {
+  const location = useLocation();
+  const pathname = location.pathname || '';
+  const hideTopNavbar =
+    pathname.startsWith('/merchant') || pathname.startsWith('/admin');
+
   return (
     <>
-      <Navbar />
+      {hideTopNavbar ? null : <Navbar />}
 
-      <main className="app-main">
+      <main className={hideTopNavbar ? 'app-main app-main--dash' : 'app-main'}>
         <Routes>
           <Route path={ROUTES.HOME} element={<HomeRedirect />} />
           <Route path={ROUTES.LOGIN} element={<Login />} />
@@ -106,42 +118,31 @@ export default function App() {
             }
           />
 
-          {/* Store owner and the store admins the owner appointed */}
+          {/* Store owner and the store admins the owner appointed.
+              Side-navbar shell instead of the top navbar. */}
           <Route
-            path={ROUTES.MERCHANT_DASHBOARD}
             element={
               <ProtectedRoute allowedRoles={[ROLES.STORE]}>
-                <MerchantDashboard />
+                <DashboardLayout variant="merchant" />
               </ProtectedRoute>
             }
-          />
-          <Route
-            path={ROUTES.MERCHANT_PRODUCTS}
-            element={
-              <ProtectedRoute allowedRoles={[ROLES.STORE]}>
-                <ProductManager />
-              </ProtectedRoute>
-            }
-          />
+          >
+            <Route path={ROUTES.MERCHANT_DASHBOARD} element={<MerchantDashboard />} />
+            <Route path={ROUTES.MERCHANT_PRODUCTS} element={<ProductManager />} />
+          </Route>
 
-          {/* Admin */}
+          {/* Admin panel. Side-navbar shell instead of the top navbar. */}
           <Route
-            path={ROUTES.ADMIN_DASHBOARD}
             element={
               <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
-                <AdminDashboard />
+                <DashboardLayout variant="admin" />
               </ProtectedRoute>
             }
-          />
-                    <Route
-            path={ROUTES.ADMIN_PRODUCTS}
-            element={
-              <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
-                <ProductManager />
-              </ProtectedRoute>
-            }
-          />
-
+          >
+            <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboard />} />
+            <Route path={ROUTES.ADMIN_PRODUCTS} element={<ProductManager />} />
+            <Route path={ROUTES.ADMIN_STORES} element={<AdminStores />} />
+          </Route>
 
           {/* A store's public page - anyone with the link, even logged out. */}
           <Route path={ROUTES.SHOP} element={<ShopPage />} />
