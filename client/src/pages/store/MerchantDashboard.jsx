@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import storeService from '../../services/storeService';
 import {
   ORDER_STATUS,
@@ -24,6 +25,8 @@ const BLANK_FORM = {
 
 export default function MerchantDashboard() {
   const { refreshSession } = useAuth();
+  const { newOrders, statusUpdates } = useSocket();
+  const storeIdRef = useRef(null);
 
   const [store, setStore] = useState(null);
   const [riders, setRiders] = useState([]);
@@ -85,6 +88,7 @@ export default function MerchantDashboard() {
 
       const nextStore = mine.store;
       setStore(nextStore);
+      storeIdRef.current = nextStore?._id || nextStore?.id || null;
       setIsOwner(mine.isOwner !== false);
       setRiders(mine.riders || []);
       setMembers(mine.members || mine.riders || []);
@@ -111,6 +115,49 @@ export default function MerchantDashboard() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Live-refresh without a manual click, so "rider accepted but status still
+  // shows old / undefined" can never go stale on screen:
+  //  - `order:new` now also fires when a rider claims or advances an order
+  //    (server pings the store owner + members), so re-fetch orders + roster.
+  //  - `order:status:updated` patches the visible row immediately even before
+  //    the re-fetch lands.
+  const refreshOrders = useCallback(async () => {
+    try {
+      const [orderList, links] = await Promise.all([
+        storeService.listStoreOrders(),
+        storeIdRef.current
+          ? storeService.listStoreRiders(storeIdRef.current).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      setOrders(orderList);
+      if (Array.isArray(links)) {
+        setRiders(links.filter((link) => link.role !== 'admin'));
+        setMembers(links);
+      }
+    } catch {
+      // Best-effort live refresh - the last fetched lists stay on screen.
+    }
+  }, []);
+
+  const newOrderCountRef = useRef(0);
+  useEffect(() => {
+    const count = Object.keys(newOrders || {}).length;
+    if (count > newOrderCountRef.current) refreshOrders();
+    newOrderCountRef.current = count;
+  }, [newOrders, refreshOrders]);
+
+  useEffect(() => {
+    const entries = Object.entries(statusUpdates || {});
+    if (entries.length === 0) return;
+    setOrders((prev) =>
+      prev.map((order) => {
+        const id = String(order._id || order.id);
+        const live = statusUpdates[id];
+        return live?.status ? { ...order, status: live.status } : order;
+      }),
+    );
+  }, [statusUpdates]);
 
   const saveStore = async (event) => {
     event.preventDefault();
@@ -407,10 +454,21 @@ export default function MerchantDashboard() {
               </tr>
             </thead>
             <tbody>
-              {riders.map((link) => (
+              {riders.map((link) => {
+                // `link.status` is the invitation state (pending/active/...),
+                // never the delivery state. When the row arrives without it
+                // (stale cache / partial payload) fall back to `pending`
+                // instead of rendering a bare "undefined" badge.
+                const linkStatus = link.status || STORE_RIDER_STATUS.PENDING;
+                const handle =
+                  link.rider?.username ||
+                  link.rider?.name ||
+                  link.rider?.email ||
+                  'rider';
+                return (
                 <tr key={link._id || link.id}>
                   <td className="table__product">
-                    <strong>@{link.rider?.username}</strong>
+                    <strong>@{handle}</strong>
                     <span className="muted small">
                       {link.rider?.name || link.rider?.email || ''}
                     </span>
@@ -418,14 +476,14 @@ export default function MerchantDashboard() {
                   <td>
                     <span
                       className={`badge badge--${
-                        link.status === STORE_RIDER_STATUS.ACTIVE
+                        linkStatus === STORE_RIDER_STATUS.ACTIVE
                           ? 'success'
-                          : link.status === STORE_RIDER_STATUS.PENDING
+                          : linkStatus === STORE_RIDER_STATUS.PENDING
                             ? 'warn'
                             : 'info'
                       }`}
                     >
-                      {STORE_RIDER_STATUS_LABELS[link.status] || link.status}
+                      {STORE_RIDER_STATUS_LABELS[linkStatus] || linkStatus}
                     </span>
                   </td>
                   <td className="table__actions">
@@ -441,7 +499,8 @@ export default function MerchantDashboard() {
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -476,6 +535,19 @@ export default function MerchantDashboard() {
               <tbody>
                 {orders.map((order) => {
                   const id = order._id || order.id;
+                  // Live socket status wins over the last REST fetch, so the
+                  // row updates the moment the rider accepts / advances.
+                  // `?? ORDER_STATUS.PENDING` guarantees the badge never
+                  // renders "undefined" even if the payload lacks `status`.
+                  const liveStatus =
+                    statusUpdates[String(id)]?.status ??
+                    order.status ??
+                    ORDER_STATUS.PENDING;
+                  const riderHandle =
+                    order.rider?.username ||
+                    order.rider?.name ||
+                    order.rider?.email ||
+                    null;
                   return (
                     <tr key={id}>
                       <td className="table__product">
@@ -491,14 +563,18 @@ export default function MerchantDashboard() {
                       <td>
                         <span
                           className={`badge badge--${
-                            ORDER_STATUS_TONE[order.status] || 'info'
+                            ORDER_STATUS_TONE[liveStatus] || 'info'
                           }`}
                         >
-                          {formatStatus(order.status)}
+                          {formatStatus(liveStatus)}
                         </span>
                       </td>
                       <td>
-                        {order.rider ? `@${order.rider.username}` : 'Unclaimed'}
+                        {order.rider
+                          ? riderHandle
+                            ? `@${riderHandle}`
+                            : 'Assigned'
+                          : 'Unclaimed'}
                       </td>
                     </tr>
                   );

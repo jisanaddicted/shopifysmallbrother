@@ -24,8 +24,10 @@ import { emitOrderStatusUpdated, notifyStoreMembers } from '../sockets/index.js'
 
 // The tracker needs the rider's name/phone and the customer's details, and
 // the store so the page can show which merchant the order is from.
+// NOTE: `username` MUST stay in the rider select - the merchant dashboard
+// renders `@${order.rider.username}` and drops to `@undefined` without it.
 const ORDER_POPULATE = [
-  { path: 'rider', select: 'name phone email location' },
+  { path: 'rider', select: 'name username phone email location' },
   { path: 'customer', select: 'name email phone' },
   { path: 'store', select: 'name slug image' },
 ];
@@ -323,6 +325,17 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
     by: req.user._id,
   });
 
+  // Same staleness trap as claimOrder: the merchant dashboard never joins
+  // the per-order room, it only refreshes on `order:new`. Ping the store so
+  // the merchant's Orders table + rider column update without Refresh.
+  if (updated.store) {
+    notifyStoreMembers(updated.store, {
+      orderId: String(updated._id),
+      kind: 'status',
+      status,
+    }).catch(() => {});
+  }
+
   res.json({ order: updated });
 });
 
@@ -423,10 +436,24 @@ export const claimOrder = asyncHandler(async (req, res) => {
       status: { $nin: [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED] },
     },
     {
-      $set: { rider: req.user._id },
+      // Claiming IS accepting the delivery, so the order must move forward
+      // too. Previously only `rider` was set and `status` stayed `pending`,
+      // which is why the merchant dashboard kept showing the old status
+      // after a rider accepted. A `pending` order becomes `confirmed`;
+      // anything further along keeps its status.
+      $set: {
+        rider: req.user._id,
+        status:
+          existing.status === ORDER_STATUS.PENDING
+            ? ORDER_STATUS.CONFIRMED
+            : existing.status,
+      },
       $push: {
         statusHistory: {
-          status: existing.status || ORDER_STATUS.PENDING,
+          status:
+            existing.status === ORDER_STATUS.PENDING
+              ? ORDER_STATUS.CONFIRMED
+              : existing.status || ORDER_STATUS.PENDING,
           note: `${req.user.name || 'A rider'} took this delivery`,
           by: req.user._id,
           at: new Date(),
@@ -442,6 +469,18 @@ export const claimOrder = asyncHandler(async (req, res) => {
 
   // Anyone watching the tracker sees that a rider is now attached.
   emitOrderStatusUpdated(claimed._id, claimed.status, 'Rider assigned');
+
+  // The merchant dashboard listens for `order:new` to refresh its lists.
+  // Claim + status updates only emitted `order:status:updated` to the order
+  // room, which the merchant never joins - so the merchant view stayed stale
+  // ("undefined" / old status) until a manual Refresh. Ping the store's
+  // members AND the owner so the dashboard live-refreshes.
+  if (claimed.store) {
+    notifyStoreMembers(claimed.store, {
+      orderId: String(claimed._id),
+      kind: 'claimed',
+    }).catch(() => {});
+  }
 
   res.json({ order: claimed });
 });

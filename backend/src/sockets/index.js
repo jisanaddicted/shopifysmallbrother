@@ -228,6 +228,22 @@ export async function notifyStoreMembers(storeId, payload) {
     const tabs = userSockets.get(String(binding.rider));
     if (tabs) for (const socketId of tabs) targets.add(socketId);
   }
+
+  // The store owner is not in the StoreRider table, but the merchant
+  // dashboard must still hear live pings (new order / rider claimed /
+  // status changed). Without this the merchant only sees updates after a
+  // manual Refresh, which reads as "status still undefined / stale".
+  try {
+    const { default: Store } = await import('../models/Store.js');
+    const store = await Store.findById(storeId).select('owner');
+    if (store?.owner) {
+      const tabs = userSockets.get(String(store.owner));
+      if (tabs) for (const socketId of tabs) targets.add(socketId);
+    }
+  } catch {
+    // Live ping is best-effort: the REST lists are the source of truth.
+  }
+
   if (targets.size === 0) return;
 
   io.to([...targets]).emit(SOCKET_EVENTS.ORDER_NEW, {
