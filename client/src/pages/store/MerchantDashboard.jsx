@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { useAuth } from '../../context/AuthContext';
 import storeService from '../../services/storeService';
 import {
   ORDER_STATUS,
@@ -22,20 +23,30 @@ const BLANK_FORM = {
 };
 
 export default function MerchantDashboard() {
+  const { refreshSession } = useAuth();
+
   const [store, setStore] = useState(null);
   const [riders, setRiders] = useState([]);
+  const [members, setMembers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [form, setForm] = useState(BLANK_FORM);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
+  // False for an appointed store admin: they see orders/products but cannot
+  // edit the storefront or manage the team.
+  const [isOwner, setIsOwner] = useState(true);
+  // Store-admin invitations waiting for this account's answer.
+  const [invites, setInvites] = useState([]);
 
   // Rider roster controls
   const [term, setTerm] = useState('');
   const [results, setResults] = useState([]);
   const [rosterBusy, setRosterBusy] = useState(false);
   const [rosterError, setRosterError] = useState('');
+  // What role a found person is invited for: rider or store admin.
+  const [inviteRole, setInviteRole] = useState('rider');
 
   const flash = (message) => {
     setNotice(message);
@@ -45,9 +56,20 @@ export default function MerchantDashboard() {
   const loadRoster = useCallback(async (storeId) => {
     try {
       const links = await storeService.listStoreRiders(storeId);
-      setRiders(links);
+      setRiders(links.filter((link) => link.role !== 'admin'));
+      setMembers(links);
     } catch (err) {
       setRosterError(err.message || 'Could not load the rider roster.');
+    }
+  }, []);
+
+  // Pending store-admin invitations addressed to this account.
+  const loadInvites = useCallback(async () => {
+    try {
+      const requests = await storeService.listMyRequests();
+      setInvites(requests.filter((request) => request.role === 'admin'));
+    } catch {
+      setInvites([]);
     }
   }, []);
 
@@ -63,7 +85,9 @@ export default function MerchantDashboard() {
 
       const nextStore = mine.store;
       setStore(nextStore);
+      setIsOwner(mine.isOwner !== false);
       setRiders(mine.riders || []);
+      setMembers(mine.members || mine.riders || []);
       setOrders(orderList);
 
       setForm({
@@ -75,12 +99,14 @@ export default function MerchantDashboard() {
         image: nextStore?.image || '',
         slug: nextStore?.slug || '',
       });
+
+      if (mine.isOwner === false) loadInvites();
     } catch (err) {
       setError(err.message || 'Could not load your store.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadInvites]);
 
   useEffect(() => {
     load();
@@ -110,16 +136,17 @@ export default function MerchantDashboard() {
     }
   };
 
-  const searchRiders = async (event) => {
+  const searchPeople = async (event) => {
     event.preventDefault();
     setRosterError('');
 
     try {
-      const found = await storeService.searchRiders(term);
-      setResults(found);
+      // Global people search: any user, by username, with a profile card.
+      const found = await storeService.lookupUser(term.trim());
+      setResults(found || null);
 
-      if (found.length === 0) {
-        setRosterError(`No rider matched “${term}”. Check the spelling.`);
+      if (!found) {
+        setRosterError(`No account matched “${term.trim()}”. Check the spelling.`);
       }
     } catch (err) {
       setRosterError(err.message || 'The search failed.');
@@ -131,10 +158,12 @@ export default function MerchantDashboard() {
     setRosterError('');
 
     try {
-      await storeService.inviteRider(store._id, username);
+      await storeService.inviteRider(store._id, username, inviteRole);
       await loadRoster(store._id);
-      setResults((prev) => prev.filter((r) => r.username !== username));
-      flash(`Invitation sent to @${username}. They accept it in their console.`);
+      setResults(null);
+      flash(
+        `Invitation sent to @${username} as ${inviteRole === 'admin' ? 'a store admin' : 'a rider'}. They accept it in their console.`,
+      );
     } catch (err) {
       setRosterError(err.message || 'Could not send the invitation.');
     } finally {
@@ -152,6 +181,30 @@ export default function MerchantDashboard() {
       flash('Rider removed from this store.');
     } catch (err) {
       setRosterError(err.message || 'Could not remove the rider.');
+    } finally {
+      setRosterBusy(false);
+    }
+  };
+
+  // Accept or decline a store-admin invitation. Accepting re-reads the
+  // session so the new store appears in the navbar/account immediately.
+  const respondToInvite = async (requestId, action) => {
+    setRosterBusy(true);
+    setRosterError('');
+
+    try {
+      await storeService.respondToRequest(requestId, action);
+
+      if (action === 'accept') {
+        await refreshSession();
+        flash('Welcome aboard! You can now see this store and its orders.');
+      } else {
+        flash('Invitation declined.');
+      }
+
+      await load();
+    } catch (err) {
+      setRosterError(err.message || 'Could not respond to the invitation.');
     } finally {
       setRosterBusy(false);
     }
@@ -218,20 +271,89 @@ export default function MerchantDashboard() {
         </div>
       </div>
 
-      {/* ---- Rider roster ------------------------------------------------ */}
+      {/* ---- Pending store-admin invitations ----------------------------- */}
+      {invites.length > 0 ? (
+        <section className="panel">
+          <div className="panel__header">
+            <h2 className="panel__title">Invitations</h2>
+            <span className="muted small">
+              A store owner has appointed you to help run their store.
+            </span>
+          </div>
+
+          {rosterError ? <p className="alert alert--warn">{rosterError}</p> : null}
+
+          <ul className="rider-list">
+            {invites.map((invite) => (
+              <li key={invite._id || invite.id}>
+                <div className="rider-list__item">
+                  <span className="rider-list__id">
+                    {invite.store?.name || 'A store'}
+                  </span>
+                  <span className="muted small">
+                    Invited by{' '}
+                    {invite.invitedBy?.username
+                      ? `@${invite.invitedBy.username}`
+                      : invite.invitedBy?.name || 'the owner'}
+                  </span>
+                  <div className="button-row">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={rosterBusy}
+                      onClick={() =>
+                        respondToInvite(invite._id || invite.id, 'accept')
+                      }
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={rosterBusy}
+                      onClick={() =>
+                        respondToInvite(invite._id || invite.id, 'decline')
+                      }
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {/* ---- Rider roster - owner only ----------------------------------- */}
+      {isOwner ? (
       <section className="panel">
         <div className="panel__header">
-          <h2 className="panel__title">Riders</h2>
+          <h2 className="panel__title">Team</h2>
           <span className="muted small">
-            Find a rider by the username they signed up with.
+            Search anyone on the platform by username, then invite them as a
+            rider or a store admin.
           </span>
         </div>
 
-        <form className="filters" onSubmit={searchRiders}>
+        <div className="filters">
+          <label className="field field--inline">
+            <span>Invite as</span>
+            <select
+              value={inviteRole}
+              onChange={(event) => setInviteRole(event.target.value)}
+            >
+              <option value="rider">Rider</option>
+              <option value="admin">Store admin</option>
+            </select>
+          </label>
+        </div>
+
+        <form className="filters" onSubmit={searchPeople}>
           <input
             type="search"
             className="filters__search"
-            placeholder="e.g. speedyrider"
+            placeholder="username, e.g. sam.rider"
             value={term}
             onChange={(event) => setTerm(event.target.value)}
           />
@@ -246,24 +368,32 @@ export default function MerchantDashboard() {
 
         {rosterError ? <p className="alert alert--warn">{rosterError}</p> : null}
 
-        {results.length > 0 ? (
+        {results ? (
           <ul className="rider-list">
-            {results.map((rider) => (
-              <li key={rider._id || rider.id}>
-                <div className="rider-list__item">
-                  <span className="rider-list__id">@{rider.username}</span>
-                  <span className="muted small">{rider.name || rider.email}</span>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    disabled={rosterBusy}
-                    onClick={() => invite(rider.username)}
-                  >
-                    Add to this store
-                  </button>
-                </div>
-              </li>
-            ))}
+            <li>
+              <div className="rider-list__item">
+                <span className="rider-list__id">@{results.username}</span>
+                <span className="muted small">{results.name}</span>
+                <span className="badge badge--info">
+                  {results.role === 'rider' ? 'Rider' : results.role}
+                </span>
+                <span className="muted small">
+                  {results.stats?.deliveriesCompleted != null
+                    ? `${results.stats.deliveriesCompleted} delivered · ${results.stats.deliveriesActive} active · ${results.stats.stores} store${results.stats.stores === 1 ? '' : 's'}`
+                    : results.stats?.storesOwned != null
+                      ? `${results.stats.storesOwned} owned · ${results.stats.storesManaged} managed`
+                      : ''}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={rosterBusy}
+                  onClick={() => invite(results.username)}
+                >
+                  Invite as {inviteRole === 'admin' ? 'store admin' : 'rider'}
+                </button>
+              </div>
+            </li>
           </ul>
         ) : null}
 
@@ -316,6 +446,7 @@ export default function MerchantDashboard() {
           </table>
         </div>
       </section>
+      ) : null}
 
       {/* ---- Orders ------------------------------------------------------ */}
       <section className="panel">
@@ -378,7 +509,8 @@ export default function MerchantDashboard() {
         )}
       </section>
 
-      {/* ---- Storefront details ------------------------------------------ */}
+      {/* ---- Storefront details - owner only ------------------------------ */}
+      {isOwner ? (
       <section className="panel">
         <div className="panel__header">
           <h2 className="panel__title">Storefront details</h2>
@@ -430,6 +562,7 @@ export default function MerchantDashboard() {
           </div>
         </form>
       </section>
+      ) : null}
     </div>
   );
 }

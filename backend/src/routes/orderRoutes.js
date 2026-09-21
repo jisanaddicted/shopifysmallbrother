@@ -12,7 +12,7 @@ import {
   updateOrderStatus,
   updateRiderLocation,
 } from '../controllers/orderController.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole, requireStoreStaff } from '../middleware/auth.js';
 import { ROLES } from '../utils/constants.js';
 
 const router = Router();
@@ -26,8 +26,9 @@ router.get('/mine', requireRole(ROLES.CUSTOMER, ROLES.ADMIN), listMyOrders);
 router.get('/rider/assigned', requireRole(ROLES.RIDER), listRiderOrders);
 // Unclaimed orders from the stores this rider is bound to.
 router.get('/pool', requireRole(ROLES.RIDER), listOrderPool);
-// Orders placed with the signed-in merchant's store.
-router.get('/store/mine', requireRole(ROLES.STORE), listStoreOrders);
+// Orders placed with a store the signed-in account runs: as owner, or as a
+// store admin the owner appointed (who keeps their own platform role).
+router.get('/store/mine', requireStoreStaff, listStoreOrders);
 router.get('/', requireRole(ROLES.ADMIN), listAllOrders);
 
 // --- One order ------------------------------------------------------------

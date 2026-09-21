@@ -38,9 +38,13 @@ export default function Register() {
 
   const redirectTo = HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.HOME;
 
-  // Stores and riders are found by their username, so those two roles need one.
-  const needsUsername = ROLES_REQUIRING_USERNAME.includes(form.role);
+  // Stores and riders MUST pick a username. A customer may too (optional):
+  // a store owner can appoint any account as a store admin, and a handle is
+  // how they find them - without one they can only be invited by email.
+  const mustHaveUsername = ROLES_REQUIRING_USERNAME.includes(form.role);
   const isStore = form.role === ROLES.STORE;
+
+  const needsUsername = mustHaveUsername || form.username.trim().length > 0;
 
   useEffect(() => {
     if (isAuthenticated && !loading) {
@@ -96,13 +100,22 @@ export default function Register() {
     const username = form.username.trim().toLowerCase();
 
     if (needsUsername) {
-      if (!USERNAME_PATTERN.test(username)) {
+      if (form.username.trim() && !USERNAME_PATTERN.test(username)) {
         setError(
           'Pick a username: 3-20 characters using letters, numbers, dot, dash or underscore, starting with a letter.',
         );
         return;
       }
-      if (usernameState.available === false) {
+      if (mustHaveUsername && !USERNAME_PATTERN.test(username)) {
+        setError(
+          'Pick a username: 3-20 characters using letters, numbers, dot, dash or underscore, starting with a letter.',
+        );
+        return;
+      }
+      if (
+        usernameState.available === false &&
+        USERNAME_PATTERN.test(username)
+      ) {
         setError(usernameState.reason || 'That username is already taken.');
         return;
       }
@@ -168,7 +181,15 @@ export default function Register() {
 
         {needsUsername ? (
           <label className="field">
-            <span>{isStore ? 'Store username' : 'Rider username'}</span>
+            <span>
+              {isStore
+                ? 'Store username'
+                : form.role === ROLES.STORE_ADMIN
+                  ? 'Store admin username'
+                  : form.role === ROLES.RIDER
+                    ? 'Rider username'
+                    : 'Username (optional)'}
+            </span>
             <input
               type="text"
               name="username"
@@ -176,7 +197,7 @@ export default function Register() {
               onChange={handleChange}
               placeholder={isStore ? 'joes.pizza' : 'sam.rider'}
               autoComplete="username"
-              required
+              required={mustHaveUsername}
             />
 
             {form.username.trim() ? (
@@ -195,7 +216,9 @@ export default function Register() {
               </span>
             ) : (
               <span className="muted small block">
-                Stores and admins will find you by this handle.
+                {mustHaveUsername
+                  ? 'Stores and admins will find you by this handle.'
+                  : 'Optional - a store owner needs a handle or your email to appoint you a store admin.'}
               </span>
             )}
           </label>
@@ -218,7 +241,12 @@ export default function Register() {
           <select name="role" value={form.role} onChange={handleChange}>
             <option value={ROLES.CUSTOMER}>Customer — I want to order</option>
             <option value={ROLES.RIDER}>Rider — I want to deliver</option>
-            <option value={ROLES.STORE}>Store — I want to sell and dispatch</option>
+            <option value={ROLES.STORE}>
+              Store — I want to sell and dispatch
+            </option>
+            <option value={ROLES.STORE_ADMIN}>
+              Store admin — I manage a store's products &amp; orders
+            </option>
           </select>
         </label>
 

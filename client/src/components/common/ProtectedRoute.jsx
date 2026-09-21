@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { HOME_ROUTE_BY_ROLE, ROUTES } from '../../utils/constants';
+import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES } from '../../utils/constants';
 import LoadingSpinner from './LoadingSpinner';
 
 /**
@@ -13,7 +13,7 @@ import LoadingSpinner from './LoadingSpinner';
  * Wrong role     -> their own home page
  */
 export default function ProtectedRoute({ children, allowedRoles }) {
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading, user, runsStore } = useAuth();
   const location = useLocation();
 
   // Still verifying a stored token - don't bounce the user out yet.
@@ -29,7 +29,15 @@ export default function ProtectedRoute({ children, allowedRoles }) {
 
   const role = user?.role;
 
-  if (allowedRoles?.length && !allowedRoles.includes(role)) {
+  // A store admin keeps their platform role (`customer` or `storeadmin`);
+  // what opens the store pages is the accepted membership in their session,
+  // not the role. Both kinds count as store staff here.
+  const effectiveRole =
+    (runsStore || role === ROLES.STORE_ADMIN) && role !== ROLES.ADMIN
+      ? ROLES.STORE
+      : role;
+
+  if (allowedRoles?.length && !allowedRoles.includes(effectiveRole)) {
     return <Navigate to={HOME_ROUTE_BY_ROLE[role] || ROUTES.HOME} replace />;
   }
 

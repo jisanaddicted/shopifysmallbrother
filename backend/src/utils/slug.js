@@ -39,9 +39,13 @@ export function isValidUsername(value) {
   return /^[a-z][a-z0-9._-]{2,19}$/.test(String(value || '').trim().toLowerCase());
 }
 
-/** Normalises a username for storage/lookup. */
+/** Normalises a username for storage/lookup. Strips a leading @ so users can
+ * type @handle naturally (the UI displays handles as @username). */
 export function normaliseUsername(value) {
-  return String(value || '').trim().toLowerCase();
+  return String(value || '')
+    .trim()
+    .replace(/^@+/, '')
+    .toLowerCase();
 }
 
 /** Suggests a username from a name/email, e.g. "Sam Rider" -> "sam.rider". */

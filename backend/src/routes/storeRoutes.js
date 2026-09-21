@@ -8,20 +8,30 @@ import {
   removeStoreRider,
   updateMyStore,
 } from '../controllers/storeController.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole, requireStoreStaff } from '../middleware/auth.js';
 import { ROLES } from '../utils/constants.js';
 
 const router = Router();
 
 // --- Fixed paths first, before "/:slug" can capture them -------------------
-router.get('/mine', requireAuth, requireRole(ROLES.STORE), getMyStore);
-router.patch('/mine', requireAuth, requireRole(ROLES.STORE), updateMyStore);
+
+/**
+ * The store this account runs.
+ *
+ * READ is open to the owner AND to every store admin the owner appointed (they
+ * keep their own platform role - usually `customer` - so this cannot be a role
+ * check). WRITE is owner-only, which the controller enforces.
+ */
+router.get('/mine', requireAuth, requireStoreStaff, getMyStore);
+router.patch('/mine', requireAuth, requireStoreStaff, updateMyStore);
 
 // Every merchant on the platform (admin only).
 router.get('/', requireAuth, requireRole(ROLES.ADMIN), listStores);
 
-// --- Rider roster: a merchant manages their own, an admin may manage any ----
-const manageRoster = requireRole(ROLES.STORE, ROLES.ADMIN);
+// --- Rider roster: only the store owner manages their own team. A store admin
+// the owner appointed can work with products and orders, but not with the
+// team itself; platform admins no longer assign people to stores. ------------
+const manageRoster = requireRole(ROLES.STORE);
 router.get('/:id/riders', requireAuth, manageRoster, listStoreRiders);
 router.post('/:id/riders', requireAuth, manageRoster, inviteRider);
 router.delete('/:id/riders/:riderId', requireAuth, manageRoster, removeStoreRider);

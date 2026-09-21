@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { useAuth } from '../../context/AuthContext';
 import productService from '../../services/productService';
 import { formatCurrency, truncate } from '../../utils/formatters';
 
@@ -13,6 +14,16 @@ const EMPTY_FORM = {
 };
 
 export default function ProductManager() {
+  const { user, stores, storeRole } = useAuth();
+  // Platform admins manage every catalogue; a store owner or an appointed
+  // store admin only ever sees and edits the store(s) they run.
+  const isPlatformAdmin = user?.role === 'admin';
+  const memberStores = useMemo(
+    () => (stores || []).map((entry) => entry.store).filter(Boolean),
+    [stores],
+  );
+  const [storeId, setStoreId] = useState('');
+
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,19 +34,41 @@ export default function ProductManager() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
+  // Default the target store: the primary one from the session.
+  useEffect(() => {
+    if (!isPlatformAdmin && memberStores.length && !storeId) {
+      setStoreId(String(memberStores[0]._id || memberStores[0].id));
+    }
+  }, [isPlatformAdmin, memberStores, storeId]);
+
   const loadProducts = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      const list = await productService.getProducts();
-      setProducts(Array.isArray(list) ? list : []);
+      if (isPlatformAdmin) {
+        const list = await productService.getProducts();
+        setProducts(Array.isArray(list) ? list : []);
+      } else {
+        // One call per store they run, merged newest-first. The backend also
+        // re-checks every write, so this list is only ever a convenience.
+        const lists = await Promise.all(
+          memberStores.map((store) =>
+            productService.getProducts({ store: store._id || store.id }),
+          ),
+        );
+        setProducts(
+          lists
+            .flat()
+            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+        );
+      }
     } catch (err) {
       setError(err.message || 'Could not load the inventory.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isPlatformAdmin, memberStores]);
 
   useEffect(() => {
     loadProducts();
@@ -83,6 +116,12 @@ export default function ProductManager() {
       image: form.image.trim(),
       description: form.description.trim(),
     };
+
+    // A member running several stores must say which one; the backend pins
+    // the product for anybody with a single store.
+    if (!isPlatformAdmin && memberStores.length > 1 && storeId) {
+      payload.storeId = storeId;
+    }
 
     setSaving(true);
 
@@ -143,7 +182,12 @@ export default function ProductManager() {
       <header className="page__header">
         <div>
           <h1>Inventory</h1>
-          <p className="muted">{products.length} products in the catalogue</p>
+          <p className="muted">
+            {isPlatformAdmin
+              ? `${products.length} products across every store`
+              : `${products.length} products in ${memberStores.length > 1 ? 'your stores' : memberStores[0]?.name || 'your store'}`}
+            {storeRole === 'admin' ? ' · you were appointed as a store admin' : ''}
+          </p>
         </div>
 
         <button
@@ -163,6 +207,22 @@ export default function ProductManager() {
           <h2 className="panel__title">
             {editingId ? 'Edit product' : 'Add a product'}
           </h2>
+
+          {!isPlatformAdmin && memberStores.length > 1 ? (
+            <label className="field">
+              <span>Store</span>
+              <select
+                value={storeId}
+                onChange={(event) => setStoreId(event.target.value)}
+              >
+                {memberStores.map((store) => (
+                  <option key={store._id || store.id} value={store._id || store.id}>
+                    {store.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label className="field">
             <span>Name</span>

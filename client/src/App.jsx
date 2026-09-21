@@ -5,7 +5,7 @@ import CartDrawer from './components/store/CartDrawer';
 import { useAuth } from './context/AuthContext';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import ProductManager from './pages/admin/ProductManager';
-import AdminStores from './pages/admin/AdminStores';
+
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import ProfilePage from './pages/profile/ProfilePage';
@@ -15,15 +15,17 @@ import ShopPage from './pages/customer/ShopPage';
 import Storefront from './pages/customer/Storefront';
 import MerchantDashboard from './pages/store/MerchantDashboard';
 import RiderConsole from './pages/rider/RiderConsole';
-import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES } from './utils/constants';
-
+import { ROLES, ROUTES } from './utils/constants';
 /** "/" sends everyone to the right home page for their role. */
 function HomeRedirect() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, runsStore, homeRoute } = useAuth();
 
-  const target = isAuthenticated
-    ? HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.STORE
-    : ROUTES.LOGIN;
+  const target = isAuthenticated ? homeRoute : ROUTES.LOGIN;
+
+  // Keeps `user`/`runsStore` referenced so the redirect re-runs when the
+  // session (and thus the home route) changes after /auth/me answers.
+  void user;
+  void runsStore;
 
   return <Navigate to={target} replace />;
 }
@@ -104,12 +106,20 @@ export default function App() {
             }
           />
 
-          {/* Store owner */}
+          {/* Store owner and the store admins the owner appointed */}
           <Route
             path={ROUTES.MERCHANT_DASHBOARD}
             element={
               <ProtectedRoute allowedRoles={[ROLES.STORE]}>
                 <MerchantDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={ROUTES.MERCHANT_PRODUCTS}
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.STORE]}>
+                <ProductManager />
               </ProtectedRoute>
             }
           />
@@ -123,7 +133,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route
+                    <Route
             path={ROUTES.ADMIN_PRODUCTS}
             element={
               <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
@@ -131,14 +141,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path={ROUTES.ADMIN_STORES}
-            element={
-              <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
-                <AdminStores />
-              </ProtectedRoute>
-            }
-          />
+
 
           {/* A store's public page - anyone with the link, even logged out. */}
           <Route path={ROUTES.SHOP} element={<ShopPage />} />

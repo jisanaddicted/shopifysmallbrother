@@ -14,7 +14,13 @@ import { priceOrder, riderAllowedStatuses } from '../utils/pricing.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { canAccessOrder } from '../utils/orderAccess.js';
 import { activeStoreIds, isBoundToStore } from '../utils/storeRider.js';
-import { emitOrderStatusUpdated, notifyStoreRiders } from '../sockets/index.js';
+import {
+  loadManageableStore,
+  managedStoreIds,
+  primaryStoreFor,
+  STORE_ROLES,
+} from '../utils/storeAccess.js';
+import { emitOrderStatusUpdated, notifyStoreMembers } from '../sockets/index.js';
 
 // The tracker needs the rider's name/phone and the customer's details, and
 // the store so the page can show which merchant the order is from.
@@ -38,7 +44,15 @@ async function loadOrderFor(orderId, user) {
   const order = await Order.findById(orderId).populate(ORDER_POPULATE);
   if (!order) throw new HttpError(404, 'That order does not exist.');
 
-  if (!canAccessOrder(order, user)) {
+  // A rider's bound stores unlock view access to that store's unclaimed
+  // orders (the pool). For everyone else the stores they run - as owner or as
+  // an appointed store admin - unlock that store's orders. Action endpoints
+  // re-check their own stricter rules.
+  const isRider = user.role === ROLES.RIDER;
+  const boundStoreIds = isRider ? await activeStoreIds(user._id) : [];
+  const memberStoreIds = await managedStoreIds(user);
+
+  if (!canAccessOrder(order, user, boundStoreIds, memberStoreIds)) {
     throw new HttpError(403, 'This order does not belong to you.');
   }
 
@@ -197,7 +211,7 @@ export const createOrder = asyncHandler(async (req, res) => {
   // Live notification: every rider with an active binding to this store is
   // pinged immediately and can accept (claim) the delivery from their console.
   if (order.store) {
-    notifyStoreRiders(order.store._id || order.store, {
+    notifyStoreMembers(order.store._id || order.store, {
       orderId: String(order._id),
       orderNumber: String(order._id).slice(-6).toUpperCase(),
       storeName: order.store?.name || 'A store',
@@ -378,7 +392,11 @@ export const claimOrder = asyncHandler(async (req, res) => {
     throw new HttpError(400, 'That order id is not valid.');
   }
 
-  const existing = await Order.findById(req.params.id).select('store rider');
+  // `status` is part of the select because it is copied into the history
+  // entry below - forgetting it pushed `status: undefined` into the document
+  // (updates skip schema validation), which then made every later save() of
+  // the order fail validation and bricked the rider's delivery.
+  const existing = await Order.findById(req.params.id).select('store rider status');
   if (!existing) throw new HttpError(404, 'That order does not exist.');
 
   if (existing.rider) {
@@ -408,7 +426,7 @@ export const claimOrder = asyncHandler(async (req, res) => {
       $set: { rider: req.user._id },
       $push: {
         statusHistory: {
-          status: existing.status,
+          status: existing.status || ORDER_STATUS.PENDING,
           note: `${req.user.name || 'A rider'} took this delivery`,
           by: req.user._id,
           at: new Date(),
@@ -429,21 +447,35 @@ export const claimOrder = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET /api/orders/store/mine (store)
+ * GET /api/orders/store/mine?storeId= (store owner or store admin)
  *
- * Every order placed with this merchant, newest first. This is what a store
- * owner watches to see orders come in and whether a rider has taken them.
+ * Every order placed with a store this account runs, newest first. This is
+ * what a store owner - and every admin they appointed - watches to see orders
+ * come in and whether a rider has taken them.
+ *
+ * `?storeId=` picks one of several stores; without it the primary store (the
+ * one owned, otherwise the first one administered) is used.
  */
 export const listStoreOrders = asyncHandler(async (req, res) => {
-  const store = await Store.findOne({ owner: req.user._id }).select('_id');
-  if (!store) throw new HttpError(404, 'You do not have a store yet.');
+  const requested = req.query.storeId || req.body?.storeId || null;
 
-  const orders = await Order.find({ store: store._id })
+  const entry = requested
+    ? await loadManageableStore(requested, req.user)
+    : await primaryStoreFor(req.user);
+
+  if (!entry) throw new HttpError(404, 'You do not have a store yet.');
+
+  const orders = await Order.find({ store: entry.store._id })
     .sort({ createdAt: -1 })
     .limit(200)
     .populate(ORDER_POPULATE);
 
-  res.json({ orders });
+  res.json({
+    orders,
+    store: entry.store,
+    role: entry.role,
+    isOwner: entry.role === STORE_ROLES.OWNER,
+  });
 });
 
 // ---------------------------------------------------------------------------

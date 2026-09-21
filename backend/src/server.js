@@ -16,9 +16,14 @@ async function start() {
     console.log(
       `[seed] demo data ready (users +${summary.users.created.length}/~${summary.users.updated.length}, ` +
         `stores +${summary.stores.created.length}/~${summary.stores.updated.length}, ` +
-        `products +${summary.products.created}, password: ${DEMO_PASSWORD})`,
+        `products +${summary.products.created}, ` +
+        `team +${summary.memberships.created.length}/~${summary.memberships.updated.length}, ` +
+        `password: ${DEMO_PASSWORD})`,
     );
     console.log('[seed] storefronts: /s/joes-pizza and /s/green-grocer');
+    console.log(
+      '[seed] store admin: storeadmin@example.com helps run /s/joes-pizza',
+    );
   }
 
   const app = createApp();

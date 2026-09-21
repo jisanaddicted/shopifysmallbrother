@@ -6,8 +6,13 @@ import { ROLES } from './constants.js';
  *   - the customer who placed it
  *   - the rider it is assigned to
  *   - any admin
+ *   - a rider bound (active invitation) to the order's store, while the order
+ *     is still unclaimed - that is the "available deliveries" pool. Once
+ *     another rider takes it, this rule stops applying (order.rider is set).
+ *
+ * `boundStoreIds` is only consulted for riders; other roles ignore it.
  */
-export function canAccessOrder(order, user) {
+export function canAccessOrder(order, user, boundStoreIds = [], memberStoreIds = []) {
   if (!order || !user) return false;
   if (user.role === ROLES.ADMIN) return true;
 
@@ -18,18 +23,42 @@ export function canAccessOrder(order, user) {
     return true;
   }
 
+  // Unclaimed pool order: visible to riders of the owning store (or to any
+  // rider when the order has no store at all - the general catalogue).
+  if (user.role === ROLES.RIDER && !order.rider) {
+    const storeId = order.store?._id || order.store;
+    if (!storeId) return true;
+    if (boundStoreIds.map(String).includes(String(storeId))) return true;
+  }
+
+  // Store members may watch orders of a store they help run (store admins;
+  // a claimed rider already qualifies as order.rider above).
+  const memberStoreId = order.store?._id || order.store;
+  if (
+    memberStoreId &&
+    memberStoreIds.map(String).includes(String(memberStoreId))
+  ) {
+    return true;
+  }
+
   return false;
 }
 
 /** Same check but loads the order first. Resolves to the order, or null. */
-export async function findAccessibleOrder(orderId, user, populate = []) {
+export async function findAccessibleOrder(
+  orderId,
+  user,
+  populate = [],
+  boundStoreIds = [],
+  memberStoreIds = [],
+) {
   const query = Order.findById(orderId);
   if (populate.length) query.populate(populate);
 
   const order = await query;
   if (!order) return null;
 
-  return canAccessOrder(order, user) ? order : null;
+  return canAccessOrder(order, user, boundStoreIds, memberStoreIds) ? order : null;
 }
 
 export default { canAccessOrder, findAccessibleOrder };

@@ -29,6 +29,18 @@ const storeRiderSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    // What this membership is: 'rider' delivers for the store, 'admin' helps
+    // run it (orders + roster) without owning it. Kept in sync with
+    // STORE_MEMBER_ROLES in utils/constants.js.
+    role: {
+      type: String,
+      enum: {
+        values: ['rider', 'admin'],
+        message: '{VALUE} is not a valid store member role.',
+      },
+      default: 'rider',
+      index: true,
+    },
     status: {
       type: String,
       enum: {

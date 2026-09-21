@@ -1,5 +1,7 @@
 import User from '../models/User.js';
 import { bearerFromHeader, verifyToken } from '../utils/jwt.js';
+import { storesForUser } from '../utils/storeAccess.js';
+import { ROLES } from '../utils/constants.js';
 import { HttpError } from './errorHandler.js';
 
 /**
@@ -55,4 +57,57 @@ export function requireRole(...roles) {
   };
 }
 
-export default { requireAuth, requireRole };
+/**
+ * Guards the store back office to the people who actually run a store: the
+ * owner who signed it up, and every store admin they appointed (an accepted
+ * `role: 'admin'` membership). A store admin keeps their own platform role, so
+ * this can never be a `requireRole()` check.
+ *
+ * The resolved memberships are attached to `req.stores` so the controller does
+ * not have to ask the database the same question twice.
+ *
+ * Platform admins pass through - they supervise every store. A caller who runs
+ * no store at all is rejected before anything is queried.
+ */
+export function requireStoreStaff(req, res, next) {
+  if (!req.user) {
+    return next(new HttpError(401, 'You need to sign in to do that.'));
+  }
+
+  if (req.user.role === ROLES.ADMIN) {
+    req.stores = [];
+    return next();
+  }
+
+  return storesForUser(req.user)
+    .then((stores) => {
+      if (stores.length === 0) {
+        return next(
+          new HttpError(
+            403,
+            'No store is linked to your account. Sign up as a store, or accept an invitation from a store owner.',
+          ),
+        );
+      }
+
+      req.stores = stores;
+      return next();
+    })
+    .catch(next);
+}
+
+/**
+ * The catalogue editors: platform admins, store owners and the store admins
+ * they appointed. The controller still checks that the product belongs to a
+ * store the caller runs, so this is only the first of two gates.
+ */
+export function requireProductManager(req, res, next) {
+  if (req.user?.role === ROLES.ADMIN) {
+    req.stores = [];
+    return next();
+  }
+
+  return requireStoreStaff(req, res, next);
+}
+
+export default { requireAuth, requireRole, requireStoreStaff, requireProductManager };

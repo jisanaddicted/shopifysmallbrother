@@ -8,6 +8,7 @@ import {
 } from '../utils/constants.js';
 import { signToken } from '../utils/jwt.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { storesForUser } from '../utils/storeAccess.js';
 import {
   isValidUsername,
   normaliseUsername,
@@ -46,10 +47,12 @@ export const register = asyncHandler(async (req, res) => {
     ? requestedRole
     : ROLES.CUSTOMER;
 
-  // Stores and admins find riders by username, so riders and stores must have
-  // one. It is optional for customers.
+  // Stores and riders MUST have a username - it is how a store owner finds
+  // somebody to invite. A customer may pick one too (optional), because a
+  // store owner can appoint any account as a store admin; without a handle
+  // they could only be found by email.
   let username;
-  if (ROLES_REQUIRING_USERNAME.includes(role)) {
+  if (ROLES_REQUIRING_USERNAME.includes(role) || req.body?.username) {
     username = normaliseUsername(req.body?.username);
 
     if (!isValidUsername(username)) {
@@ -97,7 +100,17 @@ export const register = asyncHandler(async (req, res) => {
     });
   }
 
-  res.status(201).json({ token: signToken(user), user, store });
+  // A store admin sees the stores they were appointed to run, so the response
+  // carries the full list; `store` stays the primary one for the older client
+  // code paths.
+  const entries = await storesForUser(user);
+
+  res.status(201).json({
+    token: signToken(user),
+    user,
+    store: store || entries[0]?.store || null,
+    stores: entries,
+  });
 });
 
 /**
@@ -130,11 +143,18 @@ export const login = asyncHandler(async (req, res) => {
     throw new HttpError(401, 'Invalid email or password.');
   }
 
-  // A store owner also gets their store back so the client can link to it.
-  const store =
-    user.role === ROLES.STORE ? await Store.findOne({ owner: user._id }) : null;
+  // Which stores does this account run? For a merchant, the store it signed
+  // up; for a store admin, the store(s) an owner appointed it to. The client
+  // needs the list to land an admin - who keeps their original role - on the
+  // store dashboard instead of the customer storefront.
+  const entries = await storesForUser(user);
 
-  res.json({ token: signToken(user), user, store });
+  res.json({
+    token: signToken(user),
+    user,
+    store: entries[0]?.store || null,
+    stores: entries,
+  });
 });
 
 /**
@@ -162,9 +182,21 @@ export const usernameAvailable = asyncHandler(async (req, res) => {
   });
 });
 
-/** GET /api/auth/me - used on refresh to re-validate the stored token. */
+/**
+ * GET /api/auth/me - used on refresh to re-validate the stored token.
+ *
+ * The store list is resolved on every call, so an account that accepted a
+ * store-admin invitation a minute ago has the dashboard available without
+ * signing in again.
+ */
 export const me = asyncHandler(async (req, res) => {
-  res.json({ user: req.user });
+  const entries = await storesForUser(req.user);
+
+  res.json({
+    user: req.user,
+    store: entries[0]?.store || null,
+    stores: entries,
+  });
 });
 
 /**

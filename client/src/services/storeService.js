@@ -29,14 +29,25 @@ export const searchRiders = (username) =>
     .get('/riders/lookup', { params: { username } })
     .then((res) => res.data.riders || []);
 
+/**
+ * GET /users/lookup?username= - the global people search behind both
+ * invitation types. Returns profile cards: name, @username, platform role
+ * and "quality" stats (deliveries completed/active for riders, stores
+ * managed for store admins).
+ */
+export const lookupUser = (username) =>
+  api
+    .get('/users/lookup', { params: { username } })
+    .then((res) => res.data.user || null);
+
 /** GET /stores/:id/riders -> links with { status, rider } */
 export const listStoreRiders = (storeId) =>
   api.get(`/stores/${storeId}/riders`).then((res) => res.data.riders || []);
 
-/** POST /stores/:id/riders { username } - invites a rider by username. */
-export const inviteRider = (storeId, username) =>
+/** POST /stores/:id/riders { username, role } - invites a rider or store admin. */
+export const inviteRider = (storeId, username, role = 'rider') =>
   api
-    .post(`/stores/${storeId}/riders`, { username })
+    .post(`/stores/${storeId}/riders`, { username, role })
     .then((res) => res.data.invitation);
 
 /** DELETE /stores/:id/riders/:riderId - revokes a binding. */
@@ -87,6 +98,7 @@ export default {
   updateMyStore,
   listStoreOrders,
   searchRiders,
+  lookupUser,
   listStoreRiders,
   inviteRider,
   removeStoreRider,

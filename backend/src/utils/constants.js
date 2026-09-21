@@ -7,17 +7,30 @@ export const ROLES = {
   CUSTOMER: 'customer',
   RIDER: 'rider',
   STORE: 'store',
+  // Signs up to *work at* stores: an owner appoints them and they then run
+  // the store's products and orders. They keep this role even after being
+  // appointed; the store list in their session is what opens the dashboard.
+  STORE_ADMIN: 'storeadmin',
   ADMIN: 'admin',
 };
 
 export const ROLE_VALUES = Object.values(ROLES);
 
-// Roles somebody can pick on the public register form. Admins are only ever
-// created by a seeder or an existing admin.
-export const SELF_SIGNUP_ROLES = [ROLES.CUSTOMER, ROLES.RIDER, ROLES.STORE];
+// Roles somebody can pick on the public register form. Platform admins are
+// only ever created by a seeder or an existing admin.
+export const SELF_SIGNUP_ROLES = [
+  ROLES.CUSTOMER,
+  ROLES.RIDER,
+  ROLES.STORE,
+  ROLES.STORE_ADMIN,
+];
 
 // Roles that must have a unique username (it is how stores/admins find them).
-export const ROLES_REQUIRING_USERNAME = [ROLES.RIDER, ROLES.STORE];
+export const ROLES_REQUIRING_USERNAME = [
+  ROLES.RIDER,
+  ROLES.STORE,
+  ROLES.STORE_ADMIN,
+];
 
 // ---------------------------------------------------------------------------
 // Store <-> rider binding.
@@ -33,6 +46,16 @@ export const STORE_RIDER_STATUS = {
 };
 
 export const STORE_RIDER_STATUS_VALUES = Object.values(STORE_RIDER_STATUS);
+
+// What a store membership can be: a delivery rider, or a store admin who
+// helps run the storefront (orders, roster) without owning it. The
+// StoreRider model's enum must stay in sync with these values.
+export const STORE_MEMBER_ROLES = {
+  RIDER: 'rider',
+  ADMIN: 'admin',
+};
+
+export const STORE_MEMBER_ROLE_VALUES = Object.values(STORE_MEMBER_ROLES);
 
 export const ORDER_STATUS = {
   PENDING: 'pending',

@@ -17,7 +17,9 @@ export default function AdminStores() {
   const [selectedId, setSelectedId] = useState(null);
   const [riders, setRiders] = useState([]);
   const [term, setTerm] = useState('');
-  const [results, setResults] = useState([]);
+  const [results, setResults] = useState(null);
+  // What role a found person is invited for: rider or store admin.
+  const [inviteRole, setInviteRole] = useState('rider');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -69,11 +71,12 @@ export default function AdminStores() {
     setError('');
 
     try {
-      const found = await storeService.searchRiders(term);
-      setResults(found);
+      // Global people search: any user, by username, with a profile card.
+      const found = await storeService.lookupUser(term.trim());
+      setResults(found || null);
 
-      if (found.length === 0) {
-        setError(`No rider matched “${term}”.`);
+      if (!found) {
+        setError(`No account matched “${term.trim()}”.`);
       }
     } catch (err) {
       setError(err.message || 'The search failed.');
@@ -85,11 +88,11 @@ export default function AdminStores() {
     setError('');
 
     try {
-      await storeService.inviteRider(selectedId, username);
+      await storeService.inviteRider(selectedId, username, inviteRole);
       await loadRoster(selectedId);
-      setResults((prev) => prev.filter((r) => r.username !== username));
+      setResults(null);
     } catch (err) {
-      setError(err.message || 'Could not attach that rider.');
+      setError(err.message || 'Could not attach that person.');
     } finally {
       setBusy(false);
     }
@@ -161,15 +164,28 @@ export default function AdminStores() {
       <section className="panel">
         <div className="panel__header">
           <h2 className="panel__title">
-            {store ? `Riders of ${store.name}` : 'Riders'}
+            {store ? `Team of ${store.name}` : 'Team'}
           </h2>
+        </div>
+
+        <div className="filters">
+          <label className="field field--inline">
+            <span>Invite as</span>
+            <select
+              value={inviteRole}
+              onChange={(event) => setInviteRole(event.target.value)}
+            >
+              <option value="rider">Rider</option>
+              <option value="admin">Store admin</option>
+            </select>
+          </label>
         </div>
 
         <form className="filters" onSubmit={search}>
           <input
             type="search"
             className="filters__search"
-            placeholder="Rider username…"
+            placeholder="username, e.g. sam.rider"
             value={term}
             onChange={(event) => setTerm(event.target.value)}
           />
@@ -182,24 +198,32 @@ export default function AdminStores() {
           </button>
         </form>
 
-        {results.length > 0 ? (
+        {results ? (
           <ul className="rider-list">
-            {results.map((rider) => (
-              <li key={rider._id || rider.id}>
-                <div className="rider-list__item">
-                  <span className="rider-list__id">@{rider.username}</span>
-                  <span className="muted small">{rider.name || rider.email}</span>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    disabled={busy}
-                    onClick={() => invite(rider.username)}
-                  >
-                    Add to this store
-                  </button>
-                </div>
-              </li>
-            ))}
+            <li>
+              <div className="rider-list__item">
+                <span className="rider-list__id">@{results.username}</span>
+                <span className="muted small">{results.name}</span>
+                <span className="badge badge--info">
+                  {results.role === 'rider' ? 'Rider' : results.role}
+                </span>
+                <span className="muted small">
+                  {results.stats?.deliveriesCompleted != null
+                    ? `${results.stats.deliveriesCompleted} delivered · ${results.stats.deliveriesActive} active · ${results.stats.stores} store${results.stats.stores === 1 ? '' : 's'}`
+                    : results.stats?.storesOwned != null
+                      ? `${results.stats.storesOwned} owned · ${results.stats.storesManaged} managed`
+                      : ''}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={busy}
+                  onClick={() => invite(results.username)}
+                >
+                  Invite as {inviteRole === 'admin' ? 'store admin' : 'rider'}
+                </button>
+              </div>
+            </li>
           </ul>
         ) : null}
 

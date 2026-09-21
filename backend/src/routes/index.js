@@ -6,6 +6,7 @@ import orderRoutes from './orderRoutes.js';
 import productRoutes from './productRoutes.js';
 import riderRoutes from './riderRoutes.js';
 import storeRoutes from './storeRoutes.js';
+import userRoutes from './userRoutes.js';
 
 const router = Router();
 
@@ -25,6 +26,7 @@ router.use('/products', productRoutes);
 router.use('/orders', orderRoutes);
 router.use('/stores', storeRoutes);
 router.use('/riders', riderRoutes);
+router.use('/users', userRoutes);
 router.use('/admin', adminRoutes);
 
 export default router;

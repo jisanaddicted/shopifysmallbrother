@@ -18,9 +18,11 @@ router.use(requireAuth);
  */
 router.get('/lookup', requireRole(ROLES.STORE, ROLES.ADMIN), searchRiders);
 
-// --- The rider's own view ---------------------------------------------------
-router.get('/requests', requireRole(ROLES.RIDER), listMyRequests);
-router.patch('/requests/:id', requireRole(ROLES.RIDER), respondToRequest);
+// --- Invitations (visible to the invited user, whatever their role) ---------
+// A rider invitation goes to a rider account; a store-admin invitation can go
+// to any user. Both are accepted from the same endpoints.
+router.get('/requests', listMyRequests);
+router.patch('/requests/:id', respondToRequest);
 router.get('/stores', requireRole(ROLES.RIDER), listMyStores);
 
 export default router;

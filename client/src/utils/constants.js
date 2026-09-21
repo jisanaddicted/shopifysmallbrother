@@ -17,6 +17,7 @@ export const DEFAULT_LOCALE = import.meta.env.VITE_DEFAULT_LOCALE || 'en-US';
 export const STORAGE_KEYS = {
   TOKEN: 'da.token',
   USER: 'da.user',
+  STORES: 'da.stores',
   CART: 'da.cart',
   ADDRESS: 'da.lastAddress',
 };
@@ -26,11 +27,19 @@ export const ROLES = {
   CUSTOMER: 'customer',
   RIDER: 'rider',
   STORE: 'store',
+  // Signs up to *work at* stores: a store owner appoints them and they then
+  // run that store's products and orders. Mirrors the backend constant.
+  STORE_ADMIN: 'storeadmin',
   ADMIN: 'admin',
 };
 
-// Roles that sign up with a username (it is how a store finds a rider).
-export const ROLES_REQUIRING_USERNAME = [ROLES.RIDER, ROLES.STORE];
+// Roles that sign up with a username (it is how a store finds a rider,
+// and how an owner finds a store admin to appoint).
+export const ROLES_REQUIRING_USERNAME = [
+  ROLES.RIDER,
+  ROLES.STORE,
+  ROLES.STORE_ADMIN,
+];
 
 // --- Store <-> rider binding ----------------------------------------------
 export const STORE_RIDER_STATUS = {
@@ -128,6 +137,7 @@ export const ROUTES = {
   ORDER_TRACKER: '/track/:orderId',
   RIDER_CONSOLE: '/rider',
   MERCHANT_DASHBOARD: '/merchant',
+  MERCHANT_PRODUCTS: '/merchant/products',
   ADMIN_DASHBOARD: '/admin',
   ADMIN_PRODUCTS: '/admin/products',
   ADMIN_STORES: '/admin/stores',
@@ -147,5 +157,8 @@ export const HOME_ROUTE_BY_ROLE = {
   [ROLES.CUSTOMER]: ROUTES.STORE,
   [ROLES.RIDER]: ROUTES.RIDER_CONSOLE,
   [ROLES.STORE]: ROUTES.MERCHANT_DASHBOARD,
+  // A store admin lands on the store dashboard too; until an owner appoints
+  // them it explains how to get appointed.
+  [ROLES.STORE_ADMIN]: ROUTES.MERCHANT_DASHBOARD,
   [ROLES.ADMIN]: ROUTES.ADMIN_DASHBOARD,
 };

@@ -2,8 +2,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Product from './models/Product.js';
 import Store from './models/Store.js';
+import StoreRider from './models/StoreRider.js';
 import User from './models/User.js';
-import { ROLES } from './utils/constants.js';
+import { ROLES, STORE_MEMBER_ROLES, STORE_RIDER_STATUS } from './utils/constants.js';
 
 /**
  * The accounts behind the "Demo accounts" chips on the login page.
@@ -39,6 +40,35 @@ export const DEMO_USERS = [
     username: 'joe.merchant',
     phone: '+1 555 010 0400',
     role: ROLES.STORE,
+  },
+  {
+    name: 'Sara Admin',
+    email: 'storeadmin@example.com',
+    // A store admin: an ordinary account (note the `customer` role) that a
+    // store owner appoints by username. She keeps her own role and gets the
+    // store's products and orders from the membership below.
+    username: 'sara.admin',
+    phone: '+1 555 010 0500',
+    role: ROLES.CUSTOMER,
+  },
+];
+
+/**
+ * Demo team memberships: who a store owner has appointed.
+ *
+ * This is the store-signup story in seed form - the store exists (DEMO_STORES
+ * above), the owner appoints an admin by username, and `active` means the
+ * invitation was already accepted, so the demo account can open the store
+ * dashboard straight away. A `pending` row is deliberately not seeded: the
+ * accept/decline half of the flow is exercised by inviting somebody new from
+ * the dashboard (see scripts/smokeTest.mjs).
+ */
+export const DEMO_MEMBERSHIPS = [
+  {
+    storeSlug: 'joes-pizza',
+    userEmail: 'storeadmin@example.com',
+    role: STORE_MEMBER_ROLES.ADMIN,
+    status: STORE_RIDER_STATUS.ACTIVE,
   },
 ];
 
@@ -142,18 +172,22 @@ export const DEMO_PRODUCTS = [
 ];
 
 /**
- * Creates the demo users, stores and products. Safe to run repeatedly:
+ * Creates the demo users, stores, team memberships and products. Safe to run
+ * repeatedly:
  *  - users are matched by email (their password is reset to the demo one, so
  *    the login chips never break)
  *  - stores are matched by slug, so their public URL stays stable
  *  - products are matched by name and only attached to their demo store when
  *    they do not already belong to one, so your own edits survive
+ *  - memberships are matched by (store, user) and flipped back to `active`,
+ *    so the demo store admin always has a dashboard to log into
  */
 export async function seedDemoData() {
   const summary = {
     users: { created: [], updated: [] },
     stores: { created: [], updated: [] },
     products: { created: 0, linked: 0 },
+    memberships: { created: [], updated: [] },
   };
 
   // --- users first: stores reference their owners ---------------------------
@@ -234,6 +268,42 @@ export async function seedDemoData() {
     summary.products.created += 1;
   }
 
+  // --- team memberships: the admins a store owner has appointed -------------
+  for (const spec of DEMO_MEMBERSHIPS) {
+    const store = storesBySlug.get(spec.storeSlug);
+    const member = await User.findOne({ email: spec.userEmail });
+
+    if (!store || !member) continue;
+
+    const label = `${spec.storeSlug} <- @${member.username || member.email}`;
+    const existing = await StoreRider.findOne({
+      store: store._id,
+      rider: member._id,
+    });
+
+    if (existing) {
+      // Back to an accepted membership even if a previous run revoked it, so
+      // the demo dashboard keeps working.
+      existing.role = spec.role;
+      existing.status = spec.status;
+      existing.respondedAt = spec.status === STORE_RIDER_STATUS.ACTIVE
+        ? new Date()
+        : null;
+      await existing.save();
+      summary.memberships.updated.push(label);
+    } else {
+      await StoreRider.create({
+        store: store._id,
+        rider: member._id,
+        role: spec.role,
+        status: spec.status,
+        invitedBy: store.owner ?? null,
+        respondedAt: spec.status === STORE_RIDER_STATUS.ACTIVE ? new Date() : null,
+      });
+      summary.memberships.created.push(label);
+    }
+  }
+
   return summary;
 }
 
@@ -259,6 +329,12 @@ if (invokedDirectly) {
     console.log(`[seed] stores refreshed: ${summary.stores.updated.join(', ') || 'none'}`);
     console.log(`[seed] products created: ${summary.products.created}`);
     console.log(`[seed] products attached to a store: ${summary.products.linked}`);
+    console.log(
+      `[seed] team memberships created: ${summary.memberships.created.join(', ') || 'none'}`,
+    );
+    console.log(
+      `[seed] team memberships refreshed: ${summary.memberships.updated.join(', ') || 'none'}`,
+    );
     console.log(`[seed] demo password for every account: ${DEMO_PASSWORD}`);
   } catch (err) {
     console.error('[seed] failed:', err.message);
@@ -268,4 +344,11 @@ if (invokedDirectly) {
   }
 }
 
-export default { seedDemoData, DEMO_USERS, DEMO_PRODUCTS, DEMO_PASSWORD };
+export default {
+  seedDemoData,
+  DEMO_USERS,
+  DEMO_STORES,
+  DEMO_MEMBERSHIPS,
+  DEMO_PRODUCTS,
+  DEMO_PASSWORD,
+};

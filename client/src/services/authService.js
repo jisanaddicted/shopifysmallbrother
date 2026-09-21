@@ -28,28 +28,58 @@ export function saveUser(user) {
   if (user) localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
 }
 
+/**
+ * The session response also lists every store the account runs, as
+ * `[{ store, role }]` - `role` is "owner" or "admin". Persisted so a store
+ * admin lands on the right dashboard even before /auth/me answers.
+ */
+export function saveStores(entries) {
+  if (Array.isArray(entries)) {
+    localStorage.setItem(STORAGE_KEYS.STORES, JSON.stringify(entries));
+  }
+}
+
+export function getStoredStores() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.STORES);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export function clearSession() {
   localStorage.removeItem(STORAGE_KEYS.TOKEN);
   localStorage.removeItem(STORAGE_KEYS.USER);
+  localStorage.removeItem(STORAGE_KEYS.STORES);
 }
 
 // ---------------------------------------------------------------------------
 // API calls - adjust the paths if your backend names them differently.
 // ---------------------------------------------------------------------------
 
+/** Pulls { token, user, stores } out of the shapes the auth endpoints use. */
+function readSession(data) {
+  return {
+    token: data.token || data.accessToken || data.jwt,
+    user: data.user || data.data?.user || null,
+    stores: Array.isArray(data.stores)
+      ? data.stores
+      : data.stores?.entries || [],
+  };
+}
+
 /**
  * POST /auth/login
- * Expected response: { token: "...", user: { _id, name, email, role } }
+ * Expected response: { token, user, store, stores: [{ store, role }] }
  */
 export async function login(email, password) {
   const { data } = await api.post('/auth/login', { email, password });
-
-  // Be forgiving about the exact response shape the server uses.
-  const token = data.token || data.accessToken || data.jwt;
-  const user = data.user || data.data?.user || null;
-  const session = { token, user };
+  const session = readSession(data);
 
   saveSession(session);
+  saveStores(session.stores);
   return session;
 }
 
@@ -59,22 +89,26 @@ export async function login(email, password) {
  */
 export async function register(payload) {
   const { data } = await api.post('/auth/register', payload);
+  const session = readSession(data);
 
-  const token = data.token || data.accessToken || data.jwt;
-  const user = data.user || data.data?.user || null;
-  const session = { token, user };
-
-  if (token || user) saveSession(session);
+  if (session.token || session.user) saveSession(session);
+  saveStores(session.stores);
   return session;
 }
 
-/** GET /auth/me - used on refresh to confirm the stored token is still valid. */
+/**
+ * GET /auth/me - used on refresh to confirm the stored token is still valid.
+ * The store list is refreshed with it, so an account that just accepted a
+ * store-admin invitation gets the dashboard without signing in again.
+ */
 export async function getProfile() {
   const { data } = await api.get('/auth/me');
   const user = data.user || data.data || data;
+  const stores = Array.isArray(data.stores) ? data.stores : [];
 
   saveUser(user);
-  return user;
+  saveStores(stores);
+  return { user, stores };
 }
 
 /** PATCH /auth/me - e.g. change name / phone / default address. */
@@ -114,5 +148,7 @@ export default {
   getStoredUser,
   saveSession,
   saveUser,
+  saveStores,
+  getStoredStores,
   clearSession,
 };

@@ -161,12 +161,13 @@ async function main() {
   // There is no admin "choose a rider" step. The admin/merchant binds the
   // rider to a store (by username), the rider accepts, and from then on every
   // new order for that store lands in their pool to claim and deliver.
+  const why = (r) => `${r.status}${r.data?.message ? ` - ${r.data.message}` : ''}`;
   const storeId = order?.store?._id || order?.store || null;
-  let claimOk = false;
+  let riderUserId = null;
 
   if (storeId) {
     const riderMe = await api('GET', '/auth/me', { token: sessions.rider });
-    const riderUserId = riderMe.data?.user?._id || riderMe.data?.user?.id;
+    riderUserId = riderMe.data?.user?._id || riderMe.data?.user?.id;
 
     // Clear any binding left by an earlier run so this stays repeatable.
     await api('DELETE', `/stores/${storeId}/riders/${riderUserId}`, {
@@ -181,14 +182,19 @@ async function main() {
     check(
       'an admin can invite a rider by username',
       (invite.status === 200 || invite.status === 201) && Boolean(requestId),
-      `got ${invite.status}`,
+      `got ${why(invite)}`,
     );
 
     const accepted = await api('PATCH', `/riders/requests/${requestId}`, {
       token: sessions.rider,
       body: { action: 'accept' },
     });
-    check('the rider accepts the store invitation', accepted.status === 200, `got ${accepted.status}`);
+    check('the rider accepts the store invitation', accepted.status === 200, `got ${why(accepted)}`);
+
+    // The reported bug: a bound rider opening an unclaimed store order got
+    // 403 "This order does not belong to you." instead of the order.
+    const peek = await api('GET', `/orders/${orderId}`, { token: sessions.rider });
+    check('a bound rider can open an unclaimed store order', peek.status === 200, `got ${why(peek)}`);
 
     const pool = await api('GET', '/orders/pool', { token: sessions.rider });
     check(
@@ -199,8 +205,11 @@ async function main() {
     const claimed = await api('POST', `/orders/${orderId}/claim`, {
       token: sessions.rider,
     });
-    claimOk = claimed.status === 200 && Boolean(claimed.data?.order?.rider);
-    check('the rider accepts the delivery by claiming it', claimOk, `got ${claimed.status}`);
+    check(
+      'the rider accepts the delivery by claiming it',
+      claimed.status === 200 && Boolean(claimed.data?.order?.rider),
+      `got ${why(claimed)}`,
+    );
 
     const assignedToMe = await api('GET', '/orders/rider/assigned', {
       token: sessions.rider,
@@ -217,26 +226,30 @@ async function main() {
     check(
       'the rider can advance the status',
       advance.status === 200 && advance.data?.order?.status === 'confirmed',
-      `got ${advance.status}/${advance.data?.order?.status}`,
+      `got ${why(advance)}/${advance.data?.order?.status}`,
     );
 
     const backwards = await api('PATCH', `/orders/${orderId}/status`, {
       token: sessions.rider,
       body: { status: 'pending' },
     });
-    check('the rider cannot move the status backwards', backwards.status === 400, `got ${backwards.status}`);
+    check(
+      'the rider cannot move the status backwards',
+      backwards.status === 400 && /cannot move/.test(String(backwards.data?.message)),
+      `got ${why(backwards)}`,
+    );
 
     const customerStatus = await api('PATCH', `/orders/${orderId}/status`, {
       token: sessions.customer,
       body: { status: 'delivered' },
     });
-    check('a customer cannot set the status', customerStatus.status === 403, `got ${customerStatus.status}`);
+    check('a customer cannot set the status', customerStatus.status === 403, `got ${why(customerStatus)}`);
 
     const ping = await api('PATCH', `/orders/${orderId}/location`, {
       token: sessions.rider,
       body: { lat: 27.7172, lng: 85.324 },
     });
-    check('the rider GPS fallback endpoint works', ping.status === 200, `got ${ping.status}`);
+    check('the rider GPS fallback endpoint works', ping.status === 200, `got ${why(ping)}`);
 
     const delivered = await api('PATCH', `/orders/${orderId}/status`, {
       token: sessions.rider,
@@ -245,11 +258,17 @@ async function main() {
     check(
       'the rider can mark the order delivered',
       delivered.status === 200 && delivered.data?.order?.status === 'delivered',
-      `got ${delivered.status}/${delivered.data?.order?.status}`,
+      `got ${why(delivered)}/${delivered.data?.order?.status}`,
     );
 
     const riderRead = await api('GET', `/orders/${orderId}`, { token: sessions.rider });
-    check('an involved rider can read the order', riderRead.status === 200, `got ${riderRead.status}`);
+    check('an involved rider can read the order', riderRead.status === 200, `got ${why(riderRead)}`);
+
+    // Unbind again: the later journeys expect this rider NOT to be bound to
+    // whatever store the catalogue order happened to come from.
+    await api('DELETE', `/stores/${storeId}/riders/${riderUserId}`, {
+      token: sessions.admin,
+    });
   }
 
   check(
@@ -257,6 +276,97 @@ async function main() {
     Boolean(storeId),
     'no product with a store was found - is the seed data loaded?',
   );
+
+  // --- Store admins: global search, invite by username, store dashboard ----
+  // Sara is an ordinary customer account. An owner/admin searches her
+  // globally by username, sees her profile card, and invites her as a store
+  // ADMIN (not a rider). After accepting, she manages the store's orders but
+  // still cannot take deliveries on the road.
+  const saLogin = await api('POST', '/auth/login', {
+    body: { email: 'storeadmin@example.com', password: 'password123' },
+  });
+  const saToken = saLogin.data?.token;
+  check(
+    'the seeded store admin can sign in',
+    saLogin.status === 200 && saLogin.data?.user?.username === 'sara.admin',
+    `got ${saLogin.status}/${saLogin.data?.user?.username}`,
+  );
+
+  if (saToken && storeId) {
+    const card = await api('GET', '/users/lookup?username=sam.rider', {
+      token: saToken,
+    });
+    check(
+      'global username search returns a profile card',
+      card.status === 200 && card.data?.user?.username === 'sam.rider',
+      `got ${card.status}`,
+    );
+    check(
+      'the profile card carries quality stats',
+      Boolean(card.data?.user?.stats),
+      JSON.stringify(card.data?.user?.stats || null).slice(0, 140),
+    );
+
+    // Re-run friendly: drop any membership left over from an earlier run.
+    const saMe = await api('GET', '/auth/me', { token: saToken });
+    const saUserId = saMe.data?.user?._id || saMe.data?.user?.id;
+    await api('DELETE', `/stores/${storeId}/riders/${saUserId}`, {
+      token: sessions.admin,
+    });
+
+    const inviteAdmin = await api('POST', `/stores/${storeId}/riders`, {
+      token: sessions.admin,
+      body: { username: 'sara.admin', role: 'admin' },
+    });
+    const adminReqId =
+      inviteAdmin.data?.invitation?._id || inviteAdmin.data?.invitation?.id;
+    check(
+      'an admin can invite a store admin by username',
+      (inviteAdmin.status === 200 || inviteAdmin.status === 201) &&
+        Boolean(adminReqId),
+      `got ${inviteAdmin.status} ${JSON.stringify(inviteAdmin.data?.message || null)}`,
+    );
+
+    const acceptedAdmin = await api('PATCH', `/riders/requests/${adminReqId}`, {
+      token: saToken,
+      body: { action: 'accept' },
+    });
+    check(
+      'the store admin accepts her invitation',
+      acceptedAdmin.status === 200,
+      `got ${acceptedAdmin.status}`,
+    );
+
+    const managed = await api('GET', '/orders/store/mine', { token: saToken });
+    check(
+      'the store admin sees the store orders on her dashboard',
+      managed.status === 200 &&
+        (managed.data?.orders || []).some(
+          (entry) => (entry._id || entry.id) === orderId,
+        ),
+      `got ${managed.status}`,
+    );
+
+    const claimAsAdmin = await api('POST', `/orders/${orderId}/claim`, {
+      token: saToken,
+    });
+    check(
+      'a store admin cannot take deliveries',
+      claimAsAdmin.status === 403,
+      `got ${claimAsAdmin.status}`,
+    );
+
+    const unknown = await api(
+      'GET',
+      '/users/lookup?username=nobody.by-this-name',
+      { token: saToken },
+    );
+    check(
+      'the global search reports unknown usernames cleanly',
+      unknown.status === 404 || unknown.data?.user === null,
+      `got ${unknown.status}`,
+    );
+  }
 
   const riderAsAdmin = await api('GET', '/orders', { token: sessions.rider });
   check('a rider cannot read the dispatch board', riderAsAdmin.status === 403, `got ${riderAsAdmin.status}`);

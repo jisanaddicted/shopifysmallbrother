@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import authService from '../../services/authService';
+import storeService from '../../services/storeService';
 import { initials } from '../../utils/formatters';
 
 /**
@@ -16,6 +17,40 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+
+  // Store invitations addressed to me. Riders answer theirs in the rider
+  // console; invited store admins (regular users) answer them right here.
+  const [invitations, setInvitations] = useState([]);
+  const [invBusy, setInvBusy] = useState(false);
+
+  const loadInvitations = useCallback(async () => {
+    const list = await storeService.listMyRequests().catch(() => []);
+    setInvitations(Array.isArray(list) ? list : []);
+  }, []);
+
+  useEffect(() => {
+    loadInvitations();
+  }, [loadInvitations]);
+
+  const respondToInvitation = async (requestId, action) => {
+    setInvBusy(true);
+    setError('');
+    setNotice('');
+
+    try {
+      await storeService.respondToRequest(requestId, action);
+      setNotice(
+        action === 'accept'
+          ? 'Invitation accepted.'
+          : 'Invitation declined.',
+      );
+      await loadInvitations();
+    } catch (err) {
+      setError(err.message || 'Could not answer that invitation.');
+    } finally {
+      setInvBusy(false);
+    }
+  };
 
   const handleSave = async (event) => {
     event.preventDefault();
@@ -118,6 +153,64 @@ export default function ProfilePage() {
             </button>
           )}
         </section>
+
+        {invitations.length > 0 ? (
+          <section className="card">
+            <h2>Store invitations</h2>
+            <p className="muted small">
+              A store owner or admin invited you. Accepting links your account
+              to that store.
+            </p>
+
+            {invitations.map((invite) => {
+              const id = invite._id || invite.id;
+              const storeName =
+                invite.store?.name || invite.store?.slug || 'a store';
+
+              return (
+                <div
+                  key={id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '0.75rem',
+                    padding: '0.6rem 0',
+                    borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+                  }}
+                >
+                  <div>
+                    <strong>{storeName}</strong>
+                    <p className="muted small" style={{ margin: 0 }}>
+                      {invite.role === 'admin'
+                        ? 'You were invited to help manage this store.'
+                        : 'You were invited to deliver for this store.'}
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={invBusy}
+                      onClick={() => respondToInvitation(id, 'accept')}
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      disabled={invBusy}
+                      onClick={() => respondToInvitation(id, 'decline')}
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+        ) : null}
 
         <section className="card">
           <h2>Details</h2>

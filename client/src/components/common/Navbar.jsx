@@ -35,12 +35,16 @@ export default function Navbar() {
             </>
           )}
           {isRider && <NavLink to={ROUTES.RIDER_CONSOLE}>My deliveries</NavLink>}
-          {isStore && <NavLink to={ROUTES.MERCHANT_DASHBOARD}>My store</NavLink>}
+          {isStore && (
+            <>
+              <NavLink to={ROUTES.MERCHANT_DASHBOARD}>My store</NavLink>
+              <NavLink to={ROUTES.MERCHANT_PRODUCTS}>Products</NavLink>
+            </>
+          )}
           {isAdmin && (
             <>
               <NavLink to={ROUTES.ADMIN_DASHBOARD}>Dispatch</NavLink>
               <NavLink to={ROUTES.ADMIN_PRODUCTS}>Products</NavLink>
-              <NavLink to={ROUTES.ADMIN_STORES}>Stores</NavLink>
             </>
           )}
         </nav>
