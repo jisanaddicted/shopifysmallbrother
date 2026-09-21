@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useLocation } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ProductCard from '../../components/store/ProductCard';
+import StoreNav from '../../components/storefront/StoreNav';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import storeService from '../../services/storeService';
+import menuService from '../../services/menuService';
 import { ROUTES } from '../../utils/constants';
 
 /**
@@ -14,24 +16,47 @@ import { ROUTES } from '../../utils/constants';
  * Signing in is only required once they try to check out.
  */
 export default function ShopPage() {
-  const { slug } = useParams();
+    const { slug } = useParams();
+  const location = useLocation();
   const { isAuthenticated } = useAuth();
   const { itemCount, openCart } = useCart();
 
   const [store, setStore] = useState(null);
+  const [menu, setMenu] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
+    const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('all');
+
+  /* Derive unique categories from the store's products. */
+  const categories = useMemo(() => {
+    const seen = new Set();
+    for (const p of products) {
+      if (p.category && p.category.trim()) seen.add(p.category);
+    }
+    return ['all', ...seen];
+  }, [products]);
+
+  /* Read ?category= from the URL so nav links filter the catalogue. */
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const cat = params.get('category');
+    if (cat && cat !== category) setCategory(cat);
+  }, [location.search, category]);
 
   const loadStore = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      const data = await storeService.getPublicStore(slug);
+      const [data, menuData] = await Promise.all([
+        storeService.getPublicStore(slug),
+        menuService.getPublicStoreMenu(slug),
+      ]);
       setStore(data.store || null);
       setProducts(Array.isArray(data.products) ? data.products : []);
+      setMenu(Array.isArray(menuData) ? menuData : []);
     } catch (err) {
       setError(err.message || 'Could not load that store.');
     } finally {
@@ -43,16 +68,18 @@ export default function ShopPage() {
     loadStore();
   }, [loadStore]);
 
-  const visible = useMemo(() => {
+    const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return products;
 
-    return products.filter(
-      (product) =>
+    return products.filter((product) => {
+      const matchesCategory = category === 'all' || product.category === category;
+      const matchesSearch =
+        !term ||
         String(product.name || '').toLowerCase().includes(term) ||
-        String(product.description || '').toLowerCase().includes(term),
-    );
-  }, [products, search]);
+        String(product.description || '').toLowerCase().includes(term);
+      return matchesCategory && matchesSearch;
+    });
+  }, [products, search, category]);
 
   if (loading) return <LoadingSpinner fullPage label="Loading the store…" />;
 
@@ -72,8 +99,10 @@ export default function ShopPage() {
     );
   }
 
-  return (
+    return (
     <div className="page">
+      {store ? <StoreNav menu={menu} /> : null}
+
       <div className="store-banner">
         <div>
           <h1>{store?.name}</h1>
@@ -89,7 +118,19 @@ export default function ShopPage() {
         </button>
       </div>
 
-      <div className="filters">
+            <div className="filters">
+        <select
+          className="filters__select"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+        >
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c === 'all' ? 'All categories' : c}
+            </option>
+          ))}
+        </select>
+
         <input
           type="search"
           className="filters__search"

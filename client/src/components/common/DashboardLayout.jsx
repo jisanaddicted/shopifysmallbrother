@@ -9,10 +9,12 @@ import { initials } from '../../utils/formatters';
  * panel). Replaces the top <Navbar/> on those routes so the merchant and the
  * admin get a persistent left rail instead of top links.
  *
- * variant="merchant" -> My store, Products, Profile
- * variant="admin"    -> Dispatch, Products, Stores, Profile
+ * variant="merchant" -> My store, Products
+ * variant="admin"    -> Dispatch, Products, Stores
  *
- * On small screens the rail collapses behind a hamburger in a slim top bar.
+ * The profile avatar lives in the top-right corner of the content topbar
+ * (not in the sidebar). On small screens the rail collapses behind a
+ * hamburger in that same topbar.
  */
 export default function DashboardLayout({ variant = 'merchant' }) {
   const { user, logout } = useAuth();
@@ -27,17 +29,17 @@ export default function DashboardLayout({ variant = 'merchant' }) {
   const brandTarget = HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.HOME;
   const isMerchant = variant === 'merchant';
 
-  const links = isMerchant
+    const links = isMerchant
     ? [
         { to: ROUTES.MERCHANT_DASHBOARD, label: 'My store', icon: '🏪', end: true },
         { to: ROUTES.MERCHANT_PRODUCTS, label: 'Products', icon: '📦', end: false },
-        { to: ROUTES.PROFILE, label: 'Profile', icon: '👤', end: false },
+        { to: ROUTES.MERCHANT_THEME, label: 'Theme', icon: '🎨', end: false },
       ]
     : [
         { to: ROUTES.ADMIN_DASHBOARD, label: 'Dispatch', icon: '🧭', end: true },
         { to: ROUTES.ADMIN_PRODUCTS, label: 'Products', icon: '📦', end: false },
         { to: ROUTES.ADMIN_STORES, label: 'Stores', icon: '🏬', end: false },
-        { to: ROUTES.PROFILE, label: 'Profile', icon: '👤', end: false },
+        { to: ROUTES.ADMIN_THEME, label: 'Theme', icon: '🎨', end: false },
       ];
 
   const title = isMerchant ? 'Store dashboard' : 'Admin panel';
@@ -49,22 +51,6 @@ export default function DashboardLayout({ variant = 'merchant' }) {
 
   return (
     <div className="dash">
-      {/* Slim top bar - only visible on narrow screens, toggles the rail. */}
-      <div className="dash__mobilebar">
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-label={open ? 'Close menu' : 'Open menu'}
-        >
-          {open ? '✕' : '☰'}
-        </button>
-        <Link to={brandTarget} className="dash__mobilebrand">
-          DeliveryApp · {title}
-        </Link>
-      </div>
-
       <aside className={`dash__sidebar ${open ? 'is-open' : ''}`}>
         <Link
           to={brandTarget}
@@ -131,8 +117,44 @@ export default function DashboardLayout({ variant = 'merchant' }) {
         />
       ) : null}
 
-      <div className="dash__content">
-        <Outlet />
+      <div className="dash__main">
+        <header className="dash__topbar">
+          <div className="dash__topbar-left">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm dash__menu-btn"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              aria-label={open ? 'Close menu' : 'Open menu'}
+            >
+              {open ? '✕' : '☰'}
+            </button>
+            <span className="dash__topbar-title">{title}</span>
+          </div>
+
+          <Link
+            className="dash__profile"
+            to={ROUTES.PROFILE}
+            title={
+              user?.username
+                ? `@${user.username} — view profile`
+                : 'View profile'
+            }
+          >
+            <span className="avatar" aria-hidden="true">
+              {initials(user?.name || user?.email)}
+            </span>
+            <span className="dash__profile-name">
+              {user?.username
+                ? `@${user.username}`
+                : user?.name || user?.email || 'Profile'}
+            </span>
+          </Link>
+        </header>
+
+        <div className="dash__content">
+          <Outlet />
+        </div>
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import OrderTracker from './pages/customer/OrderTracker';
 import ShopPage from './pages/customer/ShopPage';
 import Storefront from './pages/customer/Storefront';
 import MerchantDashboard from './pages/store/MerchantDashboard';
+import ThemeBuilder from './pages/store/ThemeBuilder';
 import RiderConsole from './pages/rider/RiderConsole';
 import { ROLES, ROUTES } from './utils/constants';
 /** "/" sends everyone to the right home page for their role. */
@@ -118,7 +119,7 @@ export default function App() {
             }
           />
 
-          {/* Store owner and the store admins the owner appointed.
+          {/* Store owner and store admins the owner appointed.
               Side-navbar shell instead of the top navbar. */}
           <Route
             element={
@@ -127,11 +128,15 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path={ROUTES.MERCHANT_DASHBOARD} element={<MerchantDashboard />} />
+            <Route
+              path={ROUTES.MERCHANT_DASHBOARD}
+              element={<MerchantDashboard />}
+            />
             <Route path={ROUTES.MERCHANT_PRODUCTS} element={<ProductManager />} />
+            <Route path={ROUTES.MERCHANT_THEME} element={<ThemeBuilder />} />
           </Route>
 
-          {/* Admin panel. Side-navbar shell instead of the top navbar. */}
+              Side-navbar shell instead of the top navbar. */}
           <Route
             element={
               <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
@@ -139,9 +144,13 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path={ROUTES.ADMIN_DASHBOARD} element={<AdminDashboard />} />
+            <Route
+              path={ROUTES.ADMIN_DASHBOARD}
+              element={<AdminDashboard />}
+            />
             <Route path={ROUTES.ADMIN_PRODUCTS} element={<ProductManager />} />
             <Route path={ROUTES.ADMIN_STORES} element={<AdminStores />} />
+            <Route path={ROUTES.ADMIN_THEME} element={<ThemeBuilder />} />
           </Route>
 
           {/* A store's public page - anyone with the link, even logged out. */}

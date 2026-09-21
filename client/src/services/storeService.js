@@ -8,6 +8,10 @@ import api from './api';
 export const getPublicStore = (slug) =>
   api.get(`/stores/${slug}`).then((res) => res.data);
 
+/** GET /menu/:slug - the storefront navigation tree (public). */
+export const getPublicStoreMenu = (slug) =>
+  api.get(`/menu/${slug}`).then((res) => res.data.menu || []);
+
 // ---------------------------------------------------------------------------
 // Merchant (store owner)
 // ---------------------------------------------------------------------------

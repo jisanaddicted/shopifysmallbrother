@@ -5,6 +5,7 @@ import authRoutes from './authRoutes.js';
 import orderRoutes from './orderRoutes.js';
 import productRoutes from './productRoutes.js';
 import riderRoutes from './riderRoutes.js';
+import menuRoutes from './menuRoutes.js';
 import storeRoutes from './storeRoutes.js';
 import userRoutes from './userRoutes.js';
 
@@ -24,6 +25,7 @@ router.get('/health', (req, res) => {
 router.use('/auth', authRoutes);
 router.use('/products', productRoutes);
 router.use('/orders', orderRoutes);
+router.use('/menu', menuRoutes);
 router.use('/stores', storeRoutes);
 router.use('/riders', riderRoutes);
 router.use('/users', userRoutes);
