@@ -131,7 +131,7 @@ export const updateMyStore = asyncHandler(async (req, res) => {
   }
 
   const store = entry.store;
-  const { name, description, phone, address, image, isActive, slug } =
+  const { name, description, phone, address, image, logo, isActive, slug } =
     req.body || {};
 
   if (name !== undefined) {
@@ -143,6 +143,7 @@ export const updateMyStore = asyncHandler(async (req, res) => {
   if (description !== undefined) store.description = String(description).trim();
   if (phone !== undefined) store.phone = String(phone).trim();
   if (image !== undefined) store.image = String(image).trim();
+  if (logo !== undefined) store.logo = String(logo || '').trim();
   if (isActive !== undefined) store.isActive = Boolean(isActive);
 
   if (address !== undefined) {

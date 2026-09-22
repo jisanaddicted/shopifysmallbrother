@@ -38,6 +38,7 @@ const storeSchema = new mongoose.Schema(
     phone: { type: String, trim: true, default: '' },
     address: { type: addressSchema, default: () => ({}) },
     image: { type: String, trim: true, default: '' },
+    logo: { type: String, trim: true, default: '' },
     isActive: { type: Boolean, default: true },
   },
   {

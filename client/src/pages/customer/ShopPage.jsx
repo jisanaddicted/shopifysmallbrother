@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useLocation } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ProductCard from '../../components/store/ProductCard';
+import StoreHeader from '../../components/storefront/StoreHeader';
 import StoreNav from '../../components/storefront/StoreNav';
+import MobileTabs from '../../components/storefront/MobileTabs';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import storeService from '../../services/storeService';
@@ -18,7 +20,7 @@ import { ROUTES } from '../../utils/constants';
 export default function ShopPage() {
     const { slug } = useParams();
   const location = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { itemCount, openCart } = useCart();
 
   const [store, setStore] = useState(null);
@@ -28,6 +30,8 @@ export default function ShopPage() {
   const [error, setError] = useState('');
     const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const searchRef = useRef(null);
 
   /* Derive unique categories from the store's products. */
   const categories = useMemo(() => {
@@ -103,22 +107,8 @@ export default function ShopPage() {
 
     return (
     <div className="page page--customer">
+      <StoreHeader store={store} itemCount={itemCount} user={user} onCartClick={openCart} />
       {store ? <StoreNav menu={menu} /> : null}
-
-      <div className="store-banner">
-        <div>
-          <h1>{store?.name}</h1>
-          {store?.description ? <p className="muted">{store.description}</p> : null}
-          <p className="store-banner__url">
-            {store?.address?.city ? `${store.address.city} · ` : ''}
-            Store page: <code>/s/{store?.slug}</code>
-          </p>
-        </div>
-
-        <button type="button" className="btn btn-outline" onClick={openCart}>
-          Cart {itemCount > 0 ? `(${itemCount})` : ''}
-        </button>
-      </div>
 
             <div className="filters">
         <select
@@ -135,6 +125,7 @@ export default function ShopPage() {
 
         <input
           type="search"
+          ref={searchRef}
           className="filters__search"
           placeholder="Search this store…"
           value={search}
@@ -160,6 +151,61 @@ export default function ShopPage() {
           ))}
         </div>
       )}
+
+      {/* Mobile-only bottom tab bar: Home · Menu · Cart · Search · Account */}
+      <MobileTabs
+        store={store}
+        itemCount={itemCount}
+        user={user}
+        menuOpen={menuOpen}
+        onCartClick={openCart}
+        onMenuClick={() => setMenuOpen((open) => !open)}
+        onSearchClick={() => {
+          searchRef.current?.focus();
+          searchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }}
+      />
+      {/* Mobile menu sheet: category list opened from the bottom MENU tab */}
+      {menuOpen ? (
+        <div className="menu-sheet" role="dialog" aria-label="Menu categories">
+          <button
+            type="button"
+            className="menu-sheet__scrim"
+            aria-label="Close menu"
+            onClick={() => setMenuOpen(false)}
+          />
+          <div className="menu-sheet__panel">
+            <div className="menu-sheet__head">
+              <strong>Menu</strong>
+              <button
+                type="button"
+                className="menu-sheet__close"
+                onClick={() => setMenuOpen(false)}
+                aria-label="Close menu"
+              >
+                ✕
+              </button>
+            </div>
+            <ul className="menu-sheet__list">
+              {categories.map((c) => (
+                <li key={c}>
+                  <button
+                    type="button"
+                    className={`menu-sheet__item${category === c ? ' is-active' : ''}`}
+                    onClick={() => {
+                      setCategory(c);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    {c === 'all' ? 'All items' : c}
+                    <span aria-hidden="true">→</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

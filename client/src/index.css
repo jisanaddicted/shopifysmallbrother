@@ -495,31 +495,116 @@ ol {
   white-space: nowrap;
 }
 
-/* The public storefront banner above a store's products. */
-.store-banner {
+/* Store header: logo left, cart + account icons right (public storefront). */
+.store-header {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.15rem;
-  margin-bottom: 1rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  gap: 1rem;
+  padding: 0.7rem 0.25rem;
+}
+
+.store-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.store-header__logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border-radius: 10px;
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.store-banner__url {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.store-banner__url code {
-  background: var(--surface-alt);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 0.1rem 0.35rem;
+  padding: 3px;
+  flex: 0 0 auto;
+}
+
+.store-header__mark {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #123524;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.store-header__name {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.store-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.store-header__icon-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.store-header__icon-btn:hover {
+  background: var(--surface-alt);
+  border-color: var(--line);
+  text-decoration: none;
+}
+
+.store-header__icon-btn:active {
+  transform: scale(0.96);
+}
+
+.store-header__badge {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #123524;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  border: 2px solid var(--bg);
+}
+
+@media (max-width: 640px) {
+  .store-header__name {
+    font-size: 1.05rem;
+    max-width: 46vw;
+  }
+  .store-header__icon-btn {
+    width: 38px;
+    height: 38px;
+  }
 }
 
 /* --- Alerts --------------------------------------------------------------- */
@@ -1848,6 +1933,188 @@ ol {
   }
 }
 
+/* Mobile-only bottom tab bar for the customer storefront.
+   Hidden on desktop; fixed green bar with 5 tabs on small screens. */
+.mobile-tabs {
+  display: none;
+}
+
+/* Bottom sheet opened from the mobile MENU tab. */
+.menu-sheet {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Leave room so the fixed tab bar never covers products. */
+  .page--customer {
+    padding-bottom: 5.5rem;
+  }
+
+  .mobile-tabs {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 400;
+    background: #123524;
+    border-top: 1px solid #0d281c;
+    padding: 0.45rem 0.25rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.18);
+  }
+
+  .mobile-tabs__tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    background: none;
+    border: none;
+    color: #ffffff;
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 0.25rem 0.1rem;
+    cursor: pointer;
+    text-decoration: none;
+    opacity: 0.9;
+  }
+
+  .mobile-tabs__tab:hover {
+    text-decoration: none;
+    opacity: 1;
+  }
+
+  .mobile-tabs__tab.is-active {
+    opacity: 1;
+  }
+
+  .mobile-tabs__tab.is-active .mobile-tabs__icon {
+    background: rgba(255, 255, 255, 0.16);
+  }
+
+  .mobile-tabs__tab.is-pulse .mobile-tabs__icon {
+    animation: mobile-tabs-pulse 0.35s ease;
+  }
+
+  @keyframes mobile-tabs-pulse {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+
+  .mobile-tabs__icon {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 30px;
+    border-radius: 999px;
+    transition: background 0.15s ease;
+  }
+
+  .mobile-tabs__label {
+    line-height: 1;
+  }
+
+  .mobile-tabs__badge {
+    position: absolute;
+    top: -7px;
+    right: 2px;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    background: #0f172a;
+    color: #fff;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    border: 2px solid #123524;
+  }
+
+  .menu-sheet {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+  }
+
+  .menu-sheet__scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .menu-sheet__panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-radius: 18px 18px 0 0;
+    padding: 0.75rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+    box-shadow: var(--shadow);
+  }
+
+  .menu-sheet__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.25rem 0 0.6rem;
+    font-size: 1rem;
+  }
+
+  .menu-sheet__close {
+    border: 1px solid var(--line);
+    background: var(--surface-alt);
+    border-radius: 999px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+  }
+
+  .menu-sheet__list {
+    display: flex;
+    flex-direction: column;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .menu-sheet__item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.8rem 0.25rem;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--ink);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .menu-sheet__item.is-active {
+    color: #123524;
+  }
+}
+
 /* === Theme builder (merchant + admin) ============================== */
 
 .theme-builder {
@@ -1934,4 +2201,55 @@ ol {
 
 .btn-danger:hover {
   background: var(--danger-soft);
+}
+
+/* Store logo uploader inside the theme builder. */
+.theme-logo {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.theme-logo__preview {
+  flex: 0 0 auto;
+}
+
+.theme-logo__img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 14px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  padding: 4px;
+  display: block;
+}
+
+.theme-logo__placeholder {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #123524;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+.theme-logo__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.theme-logo__body .panel__title {
+  margin: 0;
+}
+
+.btn.is-disabled {
+  opacity: 0.6;
+  pointer-events: none;
 }

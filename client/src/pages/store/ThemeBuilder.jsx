@@ -50,14 +50,21 @@ export default function ThemeBuilder() {
   const [saving, setSaving] = useState(false);
   const [errorMsg, setError] = useState('');
   const [successMsg, setSuccess] = useState('');
+  const [logoPreview, setLogoPreview] = useState('');
+  const [logoBusy, setLogoBusy] = useState(false);
 
   /* --- Load initial data --- */
+  const applyStore = useCallback((s) => {
+    setStore(s);
+    setLogoPreview(s?.logo || s?.image || '');
+  }, []);
+
   const loadMenu = useCallback(async (storeId) => {
     try {
       setLoading(true);
       setError('');
       const data = await menuService.loadStoreMenu(storeId);
-      setStore(data.store);
+      applyStore(data.store);
       setItems(data.items);
       setCategories(data.categories);
       setProducts(data.products);
@@ -66,7 +73,7 @@ export default function ThemeBuilder() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyStore]);
 
   useEffect(() => {
     if (isMerchant) {
@@ -74,7 +81,7 @@ export default function ThemeBuilder() {
         .getMyStore()
         .then((data) => {
           const s = data.store;
-          setStore(s);
+          applyStore(s);
           loadMenu(s._id || s.id);
         })
         .catch((err) => {
@@ -88,7 +95,62 @@ export default function ThemeBuilder() {
         .catch((err) => setError(err.message || 'Could not load stores.'))
         .finally(() => setLoading(false));
     }
-    }, [isMerchant, loadMenu]);
+    }, [isMerchant, loadMenu, applyStore]);
+
+  /* --- Logo upload: file input -> instant preview -> persist on the store -- */
+  const handleLogoFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !store) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file (PNG, JPG, SVG…).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Logo must be under 5 MB.');
+      return;
+    }
+    const localUrl = URL.createObjectURL(file);
+    setLogoPreview(localUrl);
+    setLogoBusy(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await storeService.uploadStoreLogo(
+        file,
+        store._id || store.id,
+      );
+      applyStore(updated);
+      setSuccess('Logo updated!');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setLogoPreview(store?.logo || store?.image || '');
+      setError(err.message || 'Could not upload the logo.');
+    } finally {
+      URL.revokeObjectURL(localUrl);
+      setLogoBusy(false);
+    }
+  };
+
+  const handleLogoRemove = async () => {
+    if (!store || logoBusy) return;
+    setLogoBusy(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await storeService.updateMyStore(
+        { logo: '' },
+        store._id || store.id,
+      );
+      applyStore(updated);
+      setSuccess('Logo removed.');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.message || 'Could not remove the logo.');
+    } finally {
+      setLogoBusy(false);
+    }
+  };
 
   /* --- Inline-edit operations on the flat item list --- */
   const updateItem = (id, field, value) => {
@@ -193,7 +255,7 @@ export default function ThemeBuilder() {
 
   const handleStoreSelect = (storeId) => {
     const s = allStores.find((st) => String(st._id) === storeId);
-        setStore(s);
+        applyStore(s);
     loadMenu(storeId);
   };
 
@@ -368,6 +430,49 @@ export default function ThemeBuilder() {
 
       {errorMsg ? <div className="alert alert--danger">{errorMsg}</div> : null}
       {successMsg ? <div className="alert alert--ok">{successMsg}</div> : null}
+
+      {store ? (
+        <section className="panel theme-logo">
+          <div className="theme-logo__preview">
+            {logoPreview ? (
+              <img src={logoPreview} alt={`${store.name} logo`} className="theme-logo__img" />
+            ) : (
+              <span className="theme-logo__placeholder" aria-hidden="true">
+                {String(store.name || '?').trim().slice(0, 2).toUpperCase() || '?'}
+              </span>
+            )}
+          </div>
+          <div className="theme-logo__body">
+            <h2 className="panel__title">Store logo</h2>
+            <p className="muted small">
+              Shown in the storefront header next to the store name. PNG or JPG
+              under 5 MB works best.
+            </p>
+            <div className="button-row">
+              <label className={`btn btn-outline btn-sm${logoBusy ? ' is-disabled' : ''}`}>
+                {logoBusy ? 'Uploading…' : logoPreview ? 'Change logo' : 'Upload logo'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={logoBusy}
+                  onChange={handleLogoFile}
+                />
+              </label>
+              {logoPreview ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm btn-danger"
+                  onClick={handleLogoRemove}
+                  disabled={logoBusy}
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {!store ? (
         <p className="muted">

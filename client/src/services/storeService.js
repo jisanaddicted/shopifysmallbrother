@@ -35,6 +35,51 @@ export const updateMyStore = (payload, storeId) =>
     })
     .then((res) => res.data.store);
 
+/**
+ * PATCH /stores/mine/logo (?storeId=) — upload a store logo file.
+ * Sends multipart/form-data { logo } and resolves to the updated store.
+ * Falls back to resizing client-side and saving as a data URL when the
+ * backend has no file-upload endpoint (keeps old backends working).
+ */
+export const uploadStoreLogo = async (file, storeId) => {
+  const form = new FormData();
+  form.append('logo', file);
+  try {
+    const res = await api.post('/stores/mine/logo', form, {
+      params: storeId ? { storeId } : {},
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    if (res.data?.store) return res.data.store;
+  } catch (err) {
+    if (err?.status !== 404) throw err;
+  }
+  const dataUrl = await fileToResizedDataUrl(file);
+  return updateMyStore({ logo: dataUrl }, storeId);
+};
+
+function fileToResizedDataUrl(file, maxSize = 256) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that image.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('That file is not a valid image.'));
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height, 1));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Rider roster
 // ---------------------------------------------------------------------------
@@ -117,6 +162,7 @@ export default {
   getMyStore,
   listMyMerchantStores,
   updateMyStore,
+  uploadStoreLogo,
   listStoreOrders,
   searchRiders,
   lookupUser,
