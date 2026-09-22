@@ -85,7 +85,7 @@ export default function ShopPage() {
 
   if (error) {
     return (
-      <div className="page">
+      <div className="page page--customer">
         <p className="alert alert--danger">{error}</p>
         <div className="button-row">
           <button type="button" className="btn btn-outline" onClick={loadStore}>
@@ -100,7 +100,7 @@ export default function ShopPage() {
   }
 
     return (
-    <div className="page">
+    <div className="page page--customer">
       {store ? <StoreNav menu={menu} /> : null}
 
       <div className="store-banner">

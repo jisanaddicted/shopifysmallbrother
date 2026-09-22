@@ -96,7 +96,7 @@ export default function Checkout() {
 
   if (items.length === 0) {
     return (
-      <div className="page">
+      <div className="page page--customer">
         <div className="card empty">
           <h1>Your cart is empty</h1>
           <p className="muted">Add a few products and come back here.</p>
@@ -109,7 +109,7 @@ export default function Checkout() {
   }
 
   return (
-    <div className="page">
+    <div className="page page--customer">
       <header className="page__header">
         <h1>Checkout</h1>
         <Link className="link-btn" to={ROUTES.STORE}>

@@ -59,7 +59,7 @@ export default function Storefront() {
   }, [products, search, category]);
 
   return (
-    <div className="page">
+    <div className="page page--customer">
       <header className="page__header">
         <div>
           <h1>Store</h1>

@@ -105,6 +105,13 @@ ol {
   gap: 1.25rem;
 }
 
+/* Customer-facing views (Storefront / Shop / Checkout / OrderTracker) get
+   extra breathing room on the left and right for the whole view. */
+.page--customer {
+  padding-left: 2rem;
+  padding-right: 2rem;
+}
+
 .page__header {
   display: flex;
   align-items: flex-start;
@@ -1579,6 +1586,11 @@ ol {
 
   .app-main {
     padding: 1rem 0.75rem 3rem;
+  }
+
+  .page--customer {
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 }
 

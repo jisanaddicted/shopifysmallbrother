@@ -1,4 +1,4 @@
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+﻿import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Navbar from './components/common/Navbar';
 import DashboardLayout from './components/common/DashboardLayout';
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -60,7 +60,9 @@ export default function App() {
   const location = useLocation();
   const pathname = location.pathname || '';
   const hideTopNavbar =
-    pathname.startsWith('/merchant') || pathname.startsWith('/admin');
+    pathname.startsWith('/merchant') ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/s/');
 
   return (
     <>
@@ -120,7 +122,7 @@ export default function App() {
           />
 
           {/* Store owner and store admins the owner appointed.
-              Side-navbar shell instead of the top navbar. */}
+              {/* Admin panel - side-navbar shell instead of the top navbar. */}
           <Route
             element={
               <ProtectedRoute allowedRoles={[ROLES.STORE]}>
@@ -136,7 +138,7 @@ export default function App() {
             <Route path={ROUTES.MERCHANT_THEME} element={<ThemeBuilder />} />
           </Route>
 
-              Side-navbar shell instead of the top navbar. */}
+              {/* Admin panel - side-navbar shell instead of the top navbar. */}
           <Route
             element={
               <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>

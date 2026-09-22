@@ -75,7 +75,7 @@ export default function OrderTracker() {
 
   if (error) {
     return (
-      <div className="page">
+      <div className="page page--customer">
         <p className="alert alert--danger">{error}</p>
         <div className="button-row">
           <button type="button" className="btn btn-outline" onClick={loadOrder}>
@@ -90,7 +90,7 @@ export default function OrderTracker() {
   }
 
   return (
-    <div className="page">
+    <div className="page page--customer">
       <header className="page__header">
         <div>
           <h1>Order #{String(orderId).slice(-6).toUpperCase()}</h1>
