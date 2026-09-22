@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom';
  * `buildTree`) — each item carries an `href` and `targetLabel` so the nav
  * never needs a second API call to resolve links.
  *
- * Top-level items with `children` render as full-width mega menus on hover
+ * Top-level items with `children` render as content-width mega menus on hover
  * (desktop). On touch devices the mega menu is toggled with a small caret
  * button next to the label.
  */
@@ -38,8 +38,16 @@ function NavLink({ to, label, isExternal: external, onClick }) {
 }
 
 function MegaMenuPanel({ children, parentLabel, closeMenu }) {
+  /* Column count = number of sub-link groups, capped at 4 per row so the
+     panel width always fits the content (1 col ≈ narrow, 4+ cols ≈ wide). */
+  const cols = Math.max(1, Math.min(children?.length || 1, 4));
   return (
-    <div className="store-nav__mega" role="menu" aria-label={`${parentLabel} submenu`}>
+    <div
+      className="store-nav__mega"
+      role="menu"
+      aria-label={`${parentLabel} submenu`}
+      style={{ '--mega-cols': cols }}
+    >
       <ul className="store-nav__mega-list">
         {children.map((child) => (
           <li key={child.id} className="store-nav__mega-item">

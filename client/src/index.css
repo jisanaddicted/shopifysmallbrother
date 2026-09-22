@@ -1602,22 +1602,26 @@ ol {
   position: sticky;
   top: 0;
   z-index: 100;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue',
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 .store-nav__list {
   display: flex;
   align-items: stretch;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 0 1.6rem;
+  gap: 0 1.9rem;
   list-style: none;
   margin: 0;
   padding: 0 2rem;
-  min-height: 2.9rem;
+  min-height: 3.4rem;
 }
 
 .store-nav__item {
   list-style: none;
-  position: static;
+  position: relative;
   display: flex;
   align-items: stretch;
 }
@@ -1631,12 +1635,13 @@ ol {
 .store-nav__link {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.7rem 0;
+  gap: 0.35rem;
+  padding: 0.85rem 0;
   color: #ffffff;
-  font-weight: 500;
-  font-size: 0.92rem;
-  letter-spacing: 0.01em;
+  font-weight: 600;
+  font-size: 1.02rem;
+  line-height: 1.3;
+  letter-spacing: 0.015em;
   border-bottom: 2px solid transparent;
   transition: color 0.2s, border-color 0.2s, opacity 0.2s;
   white-space: nowrap;
@@ -1658,8 +1663,8 @@ ol {
 }
 
 .store-nav__caret {
-  font-size: 0.65rem;
-  opacity: 0.85;
+  font-size: 0.75rem;
+  opacity: 0.9;
   transition: transform 0.2s;
   background: none;
   border: none;
@@ -1674,37 +1679,49 @@ ol {
   transform: rotate(180deg);
 }
 
-/* --- Mega menu panel: full-width drop-down under the navbar ------------- */
-/* Hidden by default; shown on li hover, keyboard focus, or .open (touch). */
+/* --- Mega menu panel: auto-width drop-down anchored under its parent item -- */
+/* Width grows with the number of sub-link columns (1 col ≈ 220px).
+   Hidden by default; shown on li hover, keyboard focus, or .open (touch).
+   Columns are counted in JS and exposed as --mega-cols on the panel. */
 .store-nav__mega {
   position: absolute;
   top: 100%;
-  left: 0;
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(6px);
+  width: max-content;
+  max-width: min(92vw, 900px);
   background: var(--surface);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border: 1px solid var(--line);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
   box-shadow: var(--shadow);
-  padding: 1.25rem 1.5rem 1.5rem;
+  padding: 1rem 1.25rem 1.15rem;
   display: none;
   z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
 .store-nav__item.has-dropdown:hover .store-nav__mega,
 .store-nav__item.has-dropdown:focus-within .store-nav__mega,
 .store-nav__item.has-dropdown.open .store-nav__mega {
   display: block;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
 }
 
 .store-nav__mega-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  /* One column per sub-link group; column count comes from --mega-cols so the
+     panel width always fits the content instead of stretching full-width. */
+  grid-template-columns: repeat(var(--mega-cols, 1), minmax(170px, 210px));
   gap: 1rem 1.5rem;
   list-style: none;
   margin: 0;
   padding: 0;
-  max-width: 1180px;
-  margin-inline: auto;
+  width: max-content;
+  max-width: min(88vw, 860px);
 }
 
 .store-nav__mega-item {
@@ -1714,6 +1731,8 @@ ol {
 
 .store-nav__mega-item > .store-nav__link {
   font-weight: 700;
+  font-size: 0.98rem;
+  letter-spacing: 0.01em;
   color: var(--ink);
   border-bottom: none;
   padding: 0 0 0.35rem;
@@ -1733,11 +1752,18 @@ ol {
 }
 
 .store-nav__mega-sub .store-nav__link {
-  padding: 0.25rem 0;
+  padding: 0.3rem 0;
   border-bottom: none;
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: 0.94rem;
+  line-height: 1.4;
   white-space: normal;
+  color: var(--ink-soft);
+}
+
+.store-nav__mega-sub .store-nav__link:hover {
+  color: var(--ink);
+  opacity: 1;
 }
 
 /* Legacy small dropdown class kept for backwards compat (no longer rendered
