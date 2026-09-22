@@ -52,7 +52,9 @@ export default function ShopPage() {
     try {
       const [data, menuData] = await Promise.all([
         storeService.getPublicStore(slug),
-        menuService.getPublicStoreMenu(slug),
+        /* The navbar is decorative — a menu failure must never blank the
+           whole storefront. Fall back to an empty menu and keep the store. */
+        menuService.getPublicStoreMenu(slug).catch(() => []),
       ]);
       setStore(data.store || null);
       setProducts(Array.isArray(data.products) ? data.products : []);

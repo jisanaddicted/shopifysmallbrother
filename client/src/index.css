@@ -1597,60 +1597,151 @@ ol {
 /* === Storefront navigation (customer-facing navbar) ================= */
 
 .store-nav {
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  background: #123524;
+  border-bottom: 1px solid #0d281c;
   position: sticky;
   top: 0;
   z-index: 100;
-  overflow-x: auto;
 }
-
 .store-nav__list {
   display: flex;
-  align-items: center;
-  gap: 1.25rem;
+  align-items: stretch;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0 1.6rem;
   list-style: none;
   margin: 0;
-  padding: 0 1.5rem;
-  height: 3.5rem;
-  overflow-x: auto;
-  scroll-behavior: smooth;
+  padding: 0 2rem;
+  min-height: 2.9rem;
 }
 
 .store-nav__item {
   list-style: none;
-  position: relative;
+  position: static;
+  display: flex;
+  align-items: stretch;
+}
+
+.store-nav__row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .store-nav__link {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.5rem 0;
-  color: var(--ink-soft);
-  font-weight: 600;
-  font-size: 0.95rem;
+  gap: 0.3rem;
+  padding: 0.7rem 0;
+  color: #ffffff;
+  font-weight: 500;
+  font-size: 0.92rem;
+  letter-spacing: 0.01em;
   border-bottom: 2px solid transparent;
-  transition: border-color 0.2s, color 0.2s;
+  transition: color 0.2s, border-color 0.2s, opacity 0.2s;
   white-space: nowrap;
   text-decoration: none;
 }
 
 .store-nav__link:hover {
-  border-bottom-color: var(--brand);
-  color: var(--brand);
+  border-bottom-color: #ffffff;
+  color: #ffffff;
+  opacity: 0.85;
+  text-decoration: none;
+}
+
+.store-nav__item.has-dropdown:hover > .store-nav__row .store-nav__link,
+.store-nav__item.has-dropdown.open > .store-nav__row .store-nav__link,
+.store-nav__item.has-dropdown:focus-within > .store-nav__row .store-nav__link {
+  color: #ffffff;
+  border-bottom-color: #ffffff;
 }
 
 .store-nav__caret {
-  font-size: 0.55rem;
-  opacity: 0.5;
+  font-size: 0.65rem;
+  opacity: 0.85;
   transition: transform 0.2s;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.4rem 0.1rem;
+  color: #ffffff;
+  line-height: 1;
 }
 
-.has-dropdown:hover .store-nav__caret {
+.store-nav__item.has-dropdown:hover .store-nav__caret,
+.store-nav__item.has-dropdown.open .store-nav__caret {
   transform: rotate(180deg);
 }
 
+/* --- Mega menu panel: full-width drop-down under the navbar ------------- */
+/* Hidden by default; shown on li hover, keyboard focus, or .open (touch). */
+.store-nav__mega {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.5rem 1.5rem;
+  display: none;
+  z-index: 200;
+}
+
+.store-nav__item.has-dropdown:hover .store-nav__mega,
+.store-nav__item.has-dropdown:focus-within .store-nav__mega,
+.store-nav__item.has-dropdown.open .store-nav__mega {
+  display: block;
+}
+
+.store-nav__mega-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem 1.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 1180px;
+  margin-inline: auto;
+}
+
+.store-nav__mega-item {
+  list-style: none;
+  min-width: 0;
+}
+
+.store-nav__mega-item > .store-nav__link {
+  font-weight: 700;
+  color: var(--ink);
+  border-bottom: none;
+  padding: 0 0 0.35rem;
+}
+
+.store-nav__mega-sub {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.store-nav__mega-sub-item {
+  list-style: none;
+}
+
+.store-nav__mega-sub .store-nav__link {
+  padding: 0.25rem 0;
+  border-bottom: none;
+  font-weight: 500;
+  font-size: 0.9rem;
+  white-space: normal;
+}
+
+/* Legacy small dropdown class kept for backwards compat (no longer rendered
+   by StoreNav, but harmless if some cached markup still uses it). */
 .store-nav__submenu {
   position: absolute;
   top: 100%;
@@ -1672,7 +1763,8 @@ ol {
 }
 
 .store-nav__item.has-dropdown:hover .store-nav__submenu,
-.store-nav__item.has-dropdown:focus-within .store-nav__submenu {
+.store-nav__item.has-dropdown:focus-within .store-nav__submenu,
+.store-nav__item.has-dropdown.open .store-nav__submenu {
   display: flex;
 }
 
@@ -1689,17 +1781,44 @@ ol {
   margin-left: 0.25rem;
 }
 
-/* Mobile: dropdown opens on click via .open class */
+/* Mobile: mega menu opens on tap via .open class, stacked statically */
 @media (max-width: 768px) {
-  .store-nav__item.has-dropdown:hover .store-nav__submenu,
-  .store-nav__item.has-dropdown:focus-within .store-nav__submenu {
+  .store-nav__list {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    padding: 0.6rem 1rem;
+  }
+
+  .store-nav__item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .store-nav__mega {
     position: static;
-    margin: 0;
-    box-shadow: none;
+    display: none;
     border: none;
-    background: transparent;
-    padding: 0.25rem 0 0 0;
-    min-width: auto;
+    box-shadow: none;
+    padding: 0.5rem 0 0.5rem 0.75rem;
+  }
+
+  .store-nav__item.has-dropdown.open .store-nav__mega {
+    display: block;
+  }
+
+  /* Hide on hover-capable breakage: keep hover rule from forcing it open */
+  .store-nav__item.has-dropdown:hover .store-nav__mega {
+    display: none;
+  }
+
+  .store-nav__item.has-dropdown.open:hover .store-nav__mega {
+    display: block;
+  }
+
+  .store-nav__mega-list {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
   }
 }
 

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 /**
@@ -6,8 +7,9 @@ import { Link } from 'react-router-dom';
  * `buildTree`) — each item carries an `href` and `targetLabel` so the nav
  * never needs a second API call to resolve links.
  *
- * Items with `children` render as hover dropdowns (Shopify-style). On touch
- * devices the dropdown is toggled with a small caret button next to the label.
+ * Top-level items with `children` render as full-width mega menus on hover
+ * (desktop). On touch devices the mega menu is toggled with a small caret
+ * button next to the label.
  */
 
 function isExternal(href) {
@@ -35,36 +37,77 @@ function NavLink({ to, label, isExternal: external, onClick }) {
   );
 }
 
-function NavItem({ item }) {
+function MegaMenuPanel({ children, parentLabel, closeMenu }) {
+  return (
+    <div className="store-nav__mega" role="menu" aria-label={`${parentLabel} submenu`}>
+      <ul className="store-nav__mega-list">
+        {children.map((child) => (
+          <li key={child.id} className="store-nav__mega-item">
+            <NavLink
+              to={child.href || '#'}
+              label={child.targetLabel || child.label}
+              isExternal={isExternal(child.href)}
+              onClick={closeMenu}
+            />
+            {child.children && child.children.length > 0 ? (
+              <ul className="store-nav__mega-sub">
+                {child.children.map((grand) => (
+                  <li key={grand.id} className="store-nav__mega-sub-item">
+                    <NavLink
+                      to={grand.href || '#'}
+                      label={grand.targetLabel || grand.label}
+                      isExternal={isExternal(grand.href)}
+                      onClick={closeMenu}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function NavItem({ item, openId, setOpenId }) {
   const hasChildren = item.children && item.children.length > 0;
   const external = isExternal(item.href);
+  const isOpen = openId === item.id;
 
   if (hasChildren) {
     return (
-      <li className="store-nav__item has-dropdown">
-        <NavLink
-          to={item.href || '#'}
-          label={item.label}
-          isExternal={external}
+      <li
+        className={`store-nav__item has-dropdown${isOpen ? ' open' : ''}`}
+        onMouseEnter={() => setOpenId(item.id)}
+        onMouseLeave={() => setOpenId(null)}
+      >
+        <div className="store-nav__row">
+          <NavLink
+            to={item.href || '#'}
+            label={item.label}
+            isExternal={external}
+            onClick={() => setOpenId(null)}
+          />
+          <button
+            type="button"
+            className="store-nav__caret"
+            aria-expanded={isOpen}
+            aria-label={`Toggle ${item.label} submenu`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setOpenId(isOpen ? null : item.id);
+            }}
+          >
+            ▾
+          </button>
+        </div>
+        <MegaMenuPanel
+          children={item.children}
+          parentLabel={item.label}
+          closeMenu={() => setOpenId(null)}
         />
-        <span
-          className="store-nav__caret"
-          aria-label={`Toggle ${item.label} submenu`}
-          role="button"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const parentLi = e.currentTarget.closest('li');
-            parentLi.classList.toggle('open');
-          }}
-        >
-          ▾
-        </span>
-        <ul className="store-nav__submenu">
-          {item.children.map((child) => (
-            <NavItem key={child.id} item={child} />
-          ))}
-        </ul>
       </li>
     );
   }
@@ -81,15 +124,22 @@ function NavItem({ item }) {
 }
 
 export default function StoreNav({ menu }) {
+  const [openId, setOpenId] = useState(null);
+
   if (!menu || !menu.length) return null;
 
   return (
-    <nav className="store-nav" aria-label="Main navigation">
+    <nav
+      className="store-nav"
+      aria-label="Main navigation"
+      onMouseLeave={() => setOpenId(null)}
+    >
       <ul className="store-nav__list">
         {menu.map((item) => (
-          <NavItem key={item.id} item={item} />
+          <NavItem key={item.id} item={item} openId={openId} setOpenId={setOpenId} />
         ))}
       </ul>
     </nav>
   );
 }
+

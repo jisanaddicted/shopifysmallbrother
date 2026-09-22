@@ -63,7 +63,14 @@ function buildTree(items, productMap) {
     }
   }
 
-  return root.sort((a, b) => (a.position || 0) - (b.position || 0));
+  /* Sort siblings by position at every level so dropdown / mega-menu column
+     order matches the order set in the theme builder. */
+  const byPosition = (a, b) => (a.position || 0) - (b.position || 0);
+  for (const node of byId.values()) {
+    if (node.children.length > 1) node.children.sort(byPosition);
+  }
+
+  return root.sort(byPosition);
 }
 
 /** Unique, alphabetically-sorted category names used by a store's products. */
