@@ -7,9 +7,14 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
+    // Allow Cloudflare quick-tunnel hosts (https://*.trycloudflare.com) plus
+    // LAN access (http://192.168.x.x:5173) for same-WiFi phone testing.
+    host: true,
+    allowedHosts: ['.trycloudflare.com'],
   },
   preview: {
     port: 4173,
+    host: true,
   },
   build: {
     outDir: 'dist',

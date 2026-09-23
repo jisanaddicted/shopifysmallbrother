@@ -1939,8 +1939,10 @@ ol {
   display: none;
 }
 
-/* Bottom sheet opened from the mobile MENU tab. */
-.menu-sheet {
+/* Bottom sheets opened from the mobile tab bar. Both are display:none above
+   768px, so they only ever exist inside the mobile experience. */
+.menu-sheet,
+.account-sheet {
   display: none;
 }
 
@@ -2112,6 +2114,150 @@ ol {
 
   .menu-sheet__item.is-active {
     color: #123524;
+  }
+
+  /* Bottom sheet opened from the mobile ACCOUNT tab: the signed-in shopper's
+     own account details, or Create account / Log in when they are a guest. */
+  .account-sheet {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 510;
+  }
+
+  .account-sheet__scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .account-sheet__panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 85vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-radius: 18px 18px 0 0;
+    padding: 0.75rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+    box-shadow: var(--shadow);
+  }
+
+  .account-sheet__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.25rem 0 0.4rem;
+    font-size: 1rem;
+  }
+
+  .account-sheet__close {
+    border: 1px solid var(--line);
+    background: var(--surface-alt);
+    border-radius: 999px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1;
+  }
+
+  .account-sheet__context {
+    margin: 0 0 0.75rem;
+  }
+
+  .account-sheet__guest h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1.15rem;
+  }
+
+  .account-sheet__identity {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.15rem 0 0.75rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .account-sheet__who {
+    min-width: 0;
+  }
+
+  .account-sheet__name {
+    margin: 0.3rem 0 0;
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--ink);
+  }
+
+  .account-sheet__line {
+    margin: 0.1rem 0 0;
+    overflow-wrap: anywhere;
+  }
+
+  .account-sheet__section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.85rem 0 0.35rem;
+  }
+
+  .account-sheet__section-head h3 {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  .account-sheet__orders {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .account-sheet__order {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.7rem 0.15rem;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .account-sheet__order:hover {
+    text-decoration: none;
+  }
+
+  .account-sheet__order-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+  }
+
+  .account-sheet__order-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.2rem;
+    text-align: right;
+    flex: 0 0 auto;
+  }
+
+  .account-sheet__notice {
+    margin: 0.85rem 0 0;
+  }
+
+  .account-sheet__cta-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-top: 0.9rem;
   }
 }
 

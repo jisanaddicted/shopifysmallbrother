@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import authService from '../../services/authService';
 import {
@@ -26,6 +26,7 @@ const USERNAME_PATTERN = /^[a-z][a-z0-9._-]{2,19}$/;
 export default function Register() {
   const { register, isAuthenticated, user, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [form, setForm] = useState(INITIAL_FORM);
   const [error, setError] = useState('');
@@ -36,7 +37,17 @@ export default function Register() {
     reason: '',
   });
 
-  const redirectTo = HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.HOME;
+  // The storefront's account sheet sends shoppers here with `from` set, so a
+  // brand-new customer lands back in the store they were browsing. A merchant,
+  // rider or admin still goes to their own home - not back into a shop.
+  const from = location.state?.from;
+  const backToStore =
+    user?.role === ROLES.CUSTOMER && from?.pathname
+      ? `${from.pathname}${from.search || ''}`
+      : '';
+
+  const redirectTo =
+    backToStore || HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.HOME;
 
   // Stores and riders MUST pick a username. A customer may too (optional):
   // a store owner can appoint any account as a store admin, and a handle is

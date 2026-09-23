@@ -5,6 +5,7 @@ import ProductCard from '../../components/store/ProductCard';
 import StoreHeader from '../../components/storefront/StoreHeader';
 import StoreNav from '../../components/storefront/StoreNav';
 import MobileTabs from '../../components/storefront/MobileTabs';
+import CustomerAccountSheet from '../../components/storefront/CustomerAccountSheet';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import storeService from '../../services/storeService';
@@ -31,6 +32,8 @@ export default function ShopPage() {
     const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [menuOpen, setMenuOpen] = useState(false);
+  /* The ACCOUNT tab's sheet: this shopper's own account, not the store's. */
+  const [accountOpen, setAccountOpen] = useState(false);
   const searchRef = useRef(null);
 
   /* Derive unique categories from the store's products. */
@@ -158,8 +161,16 @@ export default function ShopPage() {
         itemCount={itemCount}
         user={user}
         menuOpen={menuOpen}
+        accountOpen={accountOpen}
         onCartClick={openCart}
-        onMenuClick={() => setMenuOpen((open) => !open)}
+        onMenuClick={() => {
+          setAccountOpen(false);
+          setMenuOpen((open) => !open);
+        }}
+        onAccountClick={() => {
+          setMenuOpen(false);
+          setAccountOpen(true);
+        }}
         onSearchClick={() => {
           searchRef.current?.focus();
           searchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -206,6 +217,13 @@ export default function ShopPage() {
           </div>
         </div>
       ) : null}
+      {/* Mobile account sheet: the shopper's own account details, or the
+          Create account / Log in choice when they are browsing as a guest. */}
+      <CustomerAccountSheet
+        open={accountOpen}
+        onClose={() => setAccountOpen(false)}
+        store={store}
+      />
     </div>
   );
 }

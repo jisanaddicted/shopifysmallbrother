@@ -32,10 +32,11 @@ async function start() {
   // socket.io shares the same HTTP server (and therefore the same port).
   initSockets(server);
 
-  await new Promise((resolve) => server.listen(config.port, resolve));
+  await new Promise((resolve) => server.listen(config.port, '0.0.0.0', resolve));
 
   console.log(`[api] REST   -> http://localhost:${config.port}/api`);
   console.log(`[api] socket -> http://localhost:${config.port}`);
+  console.log(`[api] LAN    -> http://<this-machine-ip>:${config.port}/api (same Wi-Fi)`);
 
   let shuttingDown = false;
   const shutdown = async (signal) => {

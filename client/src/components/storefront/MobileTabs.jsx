@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ROUTES, shopPath } from '../../utils/constants';
 
 /**
@@ -69,9 +69,18 @@ function AccountIcon() {
   );
 }
 
-export default function MobileTabs({ store, itemCount, user, onCartClick, onSearchClick, onMenuClick, menuOpen }) {
+export default function MobileTabs({
+  store,
+  itemCount,
+  user,
+  onCartClick,
+  onSearchClick,
+  onMenuClick,
+  onAccountClick,
+  menuOpen,
+  accountOpen,
+}) {
   const location = useLocation();
-  const navigate = useNavigate();
   const [accountPulse, setAccountPulse] = useState(false);
 
   const slug = store?.slug || '';
@@ -79,12 +88,13 @@ export default function MobileTabs({ store, itemCount, user, onCartClick, onSear
   const isHome = slug
     ? location.pathname === homePath && !location.search
     : location.pathname === ROUTES.STORE;
-  const accountPath = user ? ROUTES.PROFILE : ROUTES.LOGIN;
-
+  // The ACCOUNT tab opens the account sheet in place: the shopper's own
+  // details when signed in, or Create account / Log in when they are a guest.
+  // Navigating away would lose the store they are browsing.
   const handleAccount = () => {
     setAccountPulse(true);
     setTimeout(() => setAccountPulse(false), 350);
-    navigate(accountPath);
+    onAccountClick?.();
   };
 
   return (
@@ -130,9 +140,10 @@ export default function MobileTabs({ store, itemCount, user, onCartClick, onSear
 
       <button
         type="button"
-        className={`mobile-tabs__tab${accountPulse ? ' is-pulse' : ''}`}
+        className={`mobile-tabs__tab${accountOpen ? ' is-active' : ''}${accountPulse ? ' is-pulse' : ''}`}
         onClick={handleAccount}
-        aria-label={user ? 'My account' : 'Log in'}
+        aria-expanded={Boolean(accountOpen)}
+        aria-label={user ? 'Open your account' : 'Create an account or log in'}
       >
         <span className="mobile-tabs__icon"><AccountIcon /></span>
         <span className="mobile-tabs__label">ACCOUNT</span>

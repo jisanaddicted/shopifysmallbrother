@@ -3,12 +3,41 @@
 // socket server all have to agree on. Change them here, not inline.
 // ---------------------------------------------------------------------------
 
-// --- Environment (see client/.env.example) ---------------------------------
-export const API_BASE_URL =
-  import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// --- Environment (see client/.env.example, client/.env.production) ---------
+// Same-origin friendly: when the built site is served by the backend itself
+// (one Cloudflare URL for app + API), VITE_API_URL=/api and VITE_SOCKET_URL=/
+// resolve against window.location.origin so the phone uses the tunnel host
+// instead of localhost. `.env.production` sets both automatically for builds.
+//
+// Values are trimmed first: a stray space is not harmless here. Building with
+// `set VITE_API_URL=/api && ...` in cmd.exe stores "/api " (the space before
+// `&&` becomes part of the value), and every request then became
+// `/api%20/auth/login` -> "Route not found". Trim makes that impossible.
+const readEnv = (value) => (typeof value === 'string' ? value.trim() : '');
 
-export const SOCKET_URL =
-  import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+// "/api/" + "/auth/login" would otherwise double the slash.
+const dropTrailingSlash = (value) =>
+  value.length > 1 ? value.replace(/\/+$/, '') : value;
+
+const sameOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+const resolveApiUrl = (raw) => {
+  const value = readEnv(raw);
+  if (!value) return 'http://localhost:5000/api';
+  if (value.startsWith('/')) return `${sameOrigin}${dropTrailingSlash(value)}`;
+  return dropTrailingSlash(value);
+};
+const resolveSocketUrl = (raw) => {
+  const value = readEnv(raw);
+  // "/" means "the host serving this page"; socket.io only needs the origin.
+  if (!value || value === '/') return sameOrigin || 'http://localhost:5000';
+  if (value.startsWith('/')) return `${sameOrigin}${dropTrailingSlash(value)}`;
+  return dropTrailingSlash(value);
+};
+
+export const API_BASE_URL = resolveApiUrl(import.meta.env.VITE_API_URL);
+
+export const SOCKET_URL = resolveSocketUrl(import.meta.env.VITE_SOCKET_URL);
 
 export const DEFAULT_CURRENCY = import.meta.env.VITE_DEFAULT_CURRENCY || 'USD';
 export const DEFAULT_LOCALE = import.meta.env.VITE_DEFAULT_LOCALE || 'en-US';

@@ -56,9 +56,25 @@ const safe = (socket, handler) => async (payload = {}) => {
 };
 
 export function initSockets(httpServer) {
+  // Same policy as the REST CORS layer in app.js: named origins plus any
+  // https://*.trycloudflare.com host, so a fresh quick-tunnel works for
+  // live tracking without editing backend/.env.
+  const TUNNEL_SUFFIX = '.trycloudflare.com';
+  const socketCorsOrigin = (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (config.clientOrigins.includes('*')) return callback(null, true);
+    if (config.clientOrigins.includes(origin)) return callback(null, true);
+    try {
+      if (new URL(origin).hostname.endsWith(TUNNEL_SUFFIX)) {
+        return callback(null, true);
+      }
+    } catch {
+      // fall through to deny
+    }
+    return callback(new Error(`Origin ${origin} is not allowed by CORS.`));
+  };
   io = new Server(httpServer, {
-    // The browser app is a different origin (Vite on 5173).
-    cors: { origin: config.clientOrigins, credentials: true },
+    cors: { origin: socketCorsOrigin, credentials: true },
   });
 
   io.use(authenticateSocket);

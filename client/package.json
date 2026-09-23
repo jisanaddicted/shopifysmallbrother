@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:tunnel": "node scripts/dev-tunnel.mjs",
     "build": "vite build",
     "preview": "vite preview --port 4173"
   },
