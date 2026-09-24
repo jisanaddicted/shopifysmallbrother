@@ -14,7 +14,7 @@ import {
   joinOrderRoom,
   leaveOrderRoom,
 } from '../services/socket';
-import { SOCKET_EVENTS } from '../utils/constants';
+import { SOCKET_EVENTS, getGuestToken } from '../utils/constants';
 import { useAuth } from './AuthContext';
 
 const SocketContext = createContext(null);
@@ -34,15 +34,11 @@ export function SocketProvider({ children }) {
   const socketRef = useRef(null);
 
   // Connect while logged in, tear down on logout.
-  useEffect(() => {
-    if (!isAuthenticated || !token) {
-      disconnectSocket();
-      socketRef.current = null;
-      setConnected(false);
-      return undefined;
-    }
+  // Guests get live tracking too: the tracker passes its guestToken+orderId
+  // to joinOrder(), which connects a guest socket lazily (see below).
+  const guestAuthRef = useRef(null);
 
-    const socket = connectSocket(token);
+  const attachSocket = (socket) => {
     socketRef.current = socket;
 
     const handleConnect = () => {
@@ -102,6 +98,8 @@ export function SocketProvider({ children }) {
     socket.on(SOCKET_EVENTS.ORDER_NEW, handleNewOrder);
     socket.on(SOCKET_EVENTS.SERVER_ERROR, handleServerError);
 
+    if (socket.connected) handleConnect();
+
     return () => {
       socket.off('connect', handleConnect);
       socket.off('disconnect', handleDisconnect);
@@ -111,9 +109,42 @@ export function SocketProvider({ children }) {
       socket.off(SOCKET_EVENTS.ORDER_NEW, handleNewOrder);
       socket.off(SOCKET_EVENTS.SERVER_ERROR, handleServerError);
     };
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated || !token) {
+      // No account: keep any guest socket a tracker opened (see joinOrder).
+      if (!guestAuthRef.current) {
+        disconnectSocket();
+        socketRef.current = null;
+        setConnected(false);
+      }
+      return undefined;
+    }
+
+    // Signing in replaces any guest socket with the account one.
+    guestAuthRef.current = null;
+    const socket = connectSocket({ token });
+    return attachSocket(socket);
   }, [isAuthenticated, token]);
 
-  const joinOrder = useCallback((orderId) => joinOrderRoom(orderId), []);
+  const joinOrder = useCallback(
+    (orderId, { guestToken } = {}) => {
+      if (!orderId) return;
+      // Guests (no JWT): connect scoped to this one order using the token
+      // checkout returned (or the stored one), then join its room.
+      if (!token) {
+        const scoped = guestToken || getGuestToken(orderId) || null;
+        if (scoped) {
+          guestAuthRef.current = { orderId, guestToken: scoped };
+          const socket = connectSocket({ guestToken: scoped, orderId });
+          if (socketRef.current !== socket) attachSocket(socket);
+        }
+      }
+      joinOrderRoom(orderId);
+    },
+    [token],
+  );
   const leaveOrder = useCallback((orderId) => leaveOrderRoom(orderId), []);
 
   // The rider console calls this once the order is visible / claimed.

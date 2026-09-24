@@ -8,15 +8,30 @@ import { SOCKET_EVENTS, SOCKET_URL } from '../utils/constants';
  */
 let socket = null;
 
-/** Create (or reuse) the connection. `token` authenticates the handshake. */
-export function connectSocket(token) {
-  if (socket?.connected) return socket;
+/** Create (or reuse) the connection. `auth` authenticates the handshake:
+ *  - signed-in: { token } (JWT)
+ *  - guest tracker: { guestToken, orderId } (scoped to one order, no account)
+ *  Kept backwards compatible: connectSocket(tokenString) still means { token }.
+ */
+export function connectSocket(auth) {
+  const nextAuth =
+    typeof auth === 'string' || auth == null ? { token: auth } : auth;
+
+  const sameAuth =
+    socket &&
+    socket.auth?.token === nextAuth.token &&
+    socket.auth?.guestToken === nextAuth.guestToken &&
+    socket.auth?.orderId === nextAuth.orderId;
+  if (socket && (socket.connected || sameAuth)) {
+    if (sameAuth) return socket;
+    if (socket.connected) return socket;
+  }
 
   if (socket) socket.disconnect();
 
   socket = io(SOCKET_URL, {
     autoConnect: true,
-    auth: { token },
+    auth: { ...nextAuth },
     withCredentials: true,
     reconnection: true,
     reconnectionAttempts: 10,

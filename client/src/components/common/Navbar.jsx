@@ -28,6 +28,12 @@ export default function Navbar() {
         </Link>
 
         <nav className="navbar__links">
+          {!isAuthenticated && (
+            <>
+              <NavLink to={ROUTES.STORE}>Store</NavLink>
+              <NavLink to={ROUTES.CHECKOUT}>Checkout</NavLink>
+            </>
+          )}
           {isCustomer && (
             <>
               <NavLink to={ROUTES.STORE}>Store</NavLink>
@@ -50,7 +56,7 @@ export default function Navbar() {
         </nav>
 
         <div className="navbar__actions">
-          {isCustomer && (
+          {isAuthenticated || itemCount > 0 ? (
             <button
               type="button"
               className="btn btn-ghost btn-sm"
@@ -59,7 +65,7 @@ export default function Navbar() {
               Cart
               {itemCount > 0 && <span className="badge">{itemCount}</span>}
             </button>
-          )}
+          ) : null}
 
           {isAuthenticated ? (
             <>

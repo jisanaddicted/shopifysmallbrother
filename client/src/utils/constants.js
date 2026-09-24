@@ -42,6 +42,39 @@ export const SOCKET_URL = resolveSocketUrl(import.meta.env.VITE_SOCKET_URL);
 export const DEFAULT_CURRENCY = import.meta.env.VITE_DEFAULT_CURRENCY || 'USD';
 export const DEFAULT_LOCALE = import.meta.env.VITE_DEFAULT_LOCALE || 'en-US';
 
+// --- Guest orders ------------------------------------------------------------
+// A shopper without an account gets a secret token per order at checkout
+// (backend returns `guestToken` once). It unlocks ONLY that order's tracker
+// (GET /orders/:id?guestToken=…) — no account, no order history.
+const guestTokenKey = (orderId) => `da.guestToken.${orderId}`;
+
+export function saveGuestToken(orderId, token) {
+  if (!orderId || !token) return;
+  try {
+    localStorage.setItem(guestTokenKey(orderId), token);
+  } catch {
+    // private mode — the tracker link still works without the stored token
+  }
+}
+
+export function getGuestToken(orderId) {
+  if (!orderId) return null;
+  try {
+    return localStorage.getItem(guestTokenKey(orderId)) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearGuestToken(orderId) {
+  if (!orderId) return;
+  try {
+    localStorage.removeItem(guestTokenKey(orderId));
+  } catch {
+    // ignore
+  }
+}
+
 // --- localStorage keys -----------------------------------------------------
 export const STORAGE_KEYS = {
   TOKEN: 'da.token',

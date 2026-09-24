@@ -2,9 +2,15 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import AddressPickerMap from '../../components/maps/AddressPickerMap';
 import OrderSummary from '../../components/store/OrderSummary';
+import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import orderService from '../../services/orderService';
-import { ROUTES, STORAGE_KEYS, orderTrackerPath } from '../../utils/constants';
+import {
+  ROUTES,
+  STORAGE_KEYS,
+  orderTrackerPath,
+  saveGuestToken,
+} from '../../utils/constants';
 
 const EMPTY_ADDRESS = {
   label: 'Home',
@@ -13,6 +19,8 @@ const EMPTY_ADDRESS = {
   phone: '',
   notes: '',
 };
+
+const EMPTY_GUEST = { name: '', email: '' };
 
 function readStoredAddress() {
   try {
@@ -25,9 +33,13 @@ function readStoredAddress() {
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const { items, clearCart } = useCart();
 
   const [address, setAddress] = useState(readStoredAddress);
+  // Guests have no account, so checkout asks for a name (+ optional email)
+  // instead of forcing a signup.
+  const [guest, setGuest] = useState(EMPTY_GUEST);
   const [point, setPoint] = useState(null);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
@@ -40,6 +52,9 @@ export default function Checkout() {
   const handleChange = (event) =>
     setAddress((prev) => ({ ...prev, [event.target.name]: event.target.value }));
 
+  const handleGuestChange = (event) =>
+    setGuest((prev) => ({ ...prev, [event.target.name]: event.target.value }));
+
   const handlePlaceOrder = async () => {
     setError('');
 
@@ -49,6 +64,10 @@ export default function Checkout() {
     }
     if (!address.line1.trim() || !address.phone.trim()) {
       setError('Please add a street address and a phone number.');
+      return;
+    }
+    if (!isAuthenticated && !guest.name.trim()) {
+      setError('Please tell us your name so the rider knows who to ask for.');
       return;
     }
     if (!point?.lat && !(address.lat && address.lng)) {
@@ -61,7 +80,7 @@ export default function Checkout() {
     setPlacing(true);
 
     try {
-      const order = await orderService.createOrder({
+      const { order, guestToken } = await orderService.createOrder({
         items: items.map((line) => ({
           productId: line._id,
           name: line.name,
@@ -77,9 +96,14 @@ export default function Checkout() {
         },
         location: { lat: dropOff.lat, lng: dropOff.lng },
         paymentMethod: 'cod',
+        // Signed-in buyers order as themselves; guests attach a contact.
+        ...(!isAuthenticated
+          ? { guest: { name: guest.name.trim(), email: guest.email.trim() } }
+          : {}),
       });
 
       const orderId = order?._id || order?.id;
+      if (guestToken && orderId) saveGuestToken(orderId, guestToken);
       clearCart();
 
       if (orderId) {
@@ -122,6 +146,41 @@ export default function Checkout() {
       <div className="checkout">
         <section className="panel">
           <h2 className="panel__title">Delivery details</h2>
+
+          {!isAuthenticated ? (
+            <>
+              <p className="muted small">
+                No account needed — just tell the rider who to ask for.{' '}
+                <Link className="link-btn" to={ROUTES.LOGIN}>
+                  Prefer to sign in?
+                </Link>
+              </p>
+              <div className="field-row">
+                <label className="field">
+                  <span>Your name</span>
+                  <input
+                    type="text"
+                    name="name"
+                    value={guest.name}
+                    onChange={handleGuestChange}
+                    placeholder="Jane Doe"
+                    required
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Email (optional)</span>
+                  <input
+                    type="email"
+                    name="email"
+                    value={guest.email}
+                    onChange={handleGuestChange}
+                    placeholder="jane@example.com"
+                  />
+                </label>
+              </div>
+            </>
+          ) : null}
 
           <div className="field-row">
             <label className="field">

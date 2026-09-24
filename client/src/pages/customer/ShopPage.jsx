@@ -150,22 +150,22 @@ export default function ShopPage() {
       </div>
 
       {!isAuthenticated ? (
-        <p className="alert alert--warn">
-          Browsing freely —{' '}
+        <p className="alert alert--info">
+          Browse freely and check out without an account. Have an account?{' '}
           <Link
             to={store?.slug ? `/s/${store.slug}/login` : ROUTES.LOGIN}
             state={authLinkState}
           >
-            sign in
+            Sign in
           </Link>{' '}
           or{' '}
           <Link
             to={store?.slug ? `/s/${store.slug}/register` : ROUTES.REGISTER}
             state={authLinkState}
           >
-            create an account
+            create one
           </Link>{' '}
-          when you are ready to order.
+          only if you want order history.
         </p>
       ) : null}
 

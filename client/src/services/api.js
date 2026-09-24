@@ -57,7 +57,10 @@ api.interceptors.response.use(
       'Something went wrong, please try again.';
 
     // Token missing/expired/invalid -> wipe the session and bounce to login.
-    if (status === 401) {
+    // BUT only when the request actually SENT a token: guest checkout/tracker
+    // requests carry none, and their legitimate 401s (e.g. tracker opened
+    // without its guestToken) must not log a signed-in user out.
+    if (status === 401 && error.config?.headers?.Authorization) {
       localStorage.removeItem(STORAGE_KEYS.TOKEN);
       localStorage.removeItem(STORAGE_KEYS.USER);
       if (!window.location.pathname.startsWith('/login')) {

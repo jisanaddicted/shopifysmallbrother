@@ -13,19 +13,19 @@ import { ROLES } from './constants.js';
  * `boundStoreIds` is only consulted for riders; other roles ignore it.
  */
 export function canAccessOrder(order, user, boundStoreIds = [], memberStoreIds = []) {
-  if (!order || !user) return false;
-  if (user.role === ROLES.ADMIN) return true;
+  if (!order) return false;
+  if (user?.role === ROLES.ADMIN) return true;
 
-  const userId = String(user._id);
+  const userId = user ? String(user._id) : null;
 
-  if (String(order.customer?._id || order.customer) === userId) return true;
-  if (order.rider && String(order.rider?._id || order.rider) === userId) {
+  if (userId && String(order.customer?._id || order.customer) === userId) return true;
+  if (userId && order.rider && String(order.rider?._id || order.rider) === userId) {
     return true;
   }
 
   // Unclaimed pool order: visible to riders of the owning store (or to any
   // rider when the order has no store at all - the general catalogue).
-  if (user.role === ROLES.RIDER && !order.rider) {
+  if (user?.role === ROLES.RIDER && !order.rider) {
     const storeId = order.store?._id || order.store;
     if (!storeId) return true;
     if (boundStoreIds.map(String).includes(String(storeId))) return true;

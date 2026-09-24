@@ -1,8 +1,34 @@
+import crypto from 'node:crypto';
 import User from '../models/User.js';
 import { bearerFromHeader, verifyToken } from '../utils/jwt.js';
 import { storesForUser } from '../utils/storeAccess.js';
 import { ROLES } from '../utils/constants.js';
 import { HttpError } from './errorHandler.js';
+
+/**
+ * A guest order's secret access token. The raw token is returned ONCE at
+ * order creation (the client stores it in localStorage); only its SHA-256
+ * hash is persisted, so a database leak does not hand out order access.
+ */
+export function hashGuestToken(raw) {
+  return crypto.createHash('sha256').update(String(raw), 'utf8').digest('hex');
+}
+
+export function issueGuestToken() {
+  const raw = crypto.randomBytes(32).toString('hex');
+  return { raw, hash: hashGuestToken(raw) };
+}
+
+function tokenFromRequest(req) {
+  return (
+    bearerFromHeader(req.headers.authorization) ||
+    req.query.token ||
+    req.headers['x-guest-token'] ||
+    req.body?.guestToken ||
+    req.query.guestToken ||
+    null
+  );
+}
 
 /**
  * Reads the token from `Authorization: Bearer <token>` (falling back to a
@@ -13,8 +39,7 @@ import { HttpError } from './errorHandler.js';
  * working immediately instead of when the token expires.
  */
 export function requireAuth(req, res, next) {
-  const token =
-    bearerFromHeader(req.headers.authorization) || req.query.token || null;
+  const token = tokenFromRequest(req);
 
   if (!token) {
     return next(new HttpError(401, 'You need to sign in to do that.'));
@@ -38,6 +63,46 @@ export function requireAuth(req, res, next) {
       return next();
     })
     .catch(next);
+}
+
+/**
+ * Like requireAuth, but a missing/invalid token is NOT an error: the request
+ * continues as a guest (`req.user === null`). Guest-capable handlers
+ * (guest checkout: POST /orders, GET /orders/:id with ?guestToken=) then
+ * decide what a guest may do. Everything else still rejects guests itself.
+ */
+export function optionalAuth(req, res, next) {
+  const token = tokenFromRequest(req);
+
+  if (!token) {
+    req.user = null;
+    req.token = null;
+    return next();
+  }
+
+  let payload;
+  try {
+    payload = verifyToken(token);
+  } catch {
+    // A guest order token is not a JWT — leave it for the handler (it checks
+    // the order's guestTokenHash itself). A bad JWT is also left alone here
+    // so public handlers can still serve guests; protected handlers re-check.
+    req.user = null;
+    req.token = null;
+    return next();
+  }
+
+  return User.findById(payload.sub)
+    .then((user) => {
+      req.user = user || null;
+      req.token = user ? token : null;
+      return next();
+    })
+    .catch(() => {
+      req.user = null;
+      req.token = null;
+      return next();
+    });
 }
 
 /** Guards a route to one or more roles: requireRole(ROLES.ADMIN). */
@@ -110,4 +175,4 @@ export function requireProductManager(req, res, next) {
   return requireStoreStaff(req, res, next);
 }
 
-export default { requireAuth, requireRole, requireStoreStaff, requireProductManager };
+export default { requireAuth, optionalAuth, requireRole, requireStoreStaff, requireProductManager };

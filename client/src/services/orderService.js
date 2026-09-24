@@ -1,4 +1,5 @@
 import api from './api';
+import { getGuestToken } from '../utils/constants';
 // The rider's delivery pool + claim live in storeService (they are bound to
 // store membership). Re-exported here so `orderService.claimOrder(...)` works
 // for callers that only import this service.
@@ -11,30 +12,48 @@ export { getOrderPool, claimOrder };
 // ---------------------------------------------------------------------------
 
 /**
- * POST /orders
+ * POST /orders — works with AND without an account.
  * payload = {
  *   items: [{ productId, quantity }],
  *   address: { label, line1, city, phone, notes },
  *   location: { lat, lng },
- *   paymentMethod: 'cod'
+ *   paymentMethod: 'cod',
+ *   guest: { name, email }            <- only for guests (no token stored)
  * }
+ * Resolves to { order, guestToken? } — guests get a secret token that unlocks
+ * their tracker; callers should persist it via saveGuestToken().
  */
 export const createOrder = (payload) =>
-  api.post('/orders', payload).then((res) => res.data.order || res.data);
+  api.post('/orders', payload).then((res) => ({
+    order: res.data.order || res.data,
+    guestToken: res.data.guestToken || null,
+  }));
 
 /** GET /orders/mine - the logged-in customer's order history. */
 export const getMyOrders = () =>
   api.get('/orders/mine').then((res) => res.data.orders || res.data || []);
 
-/** GET /orders/:id - used by the tracker (customer) and the rider console. */
-export const getOrderById = (orderId) =>
-  api.get(`/orders/${orderId}`).then((res) => res.data.order || res.data);
-
-/** PATCH /orders/:id/cancel - customer cancels before pickup. */
-export const cancelOrder = (orderId, reason = '') =>
-  api
-    .patch(`/orders/${orderId}/cancel`, { reason })
+/**
+ * GET /orders/:id - used by the tracker (customer) and the rider console.
+ * Guests pass no JWT; the stored guestToken is attached as ?guestToken=.
+ */
+export const getOrderById = (orderId, { guestToken } = {}) => {
+  const token = guestToken || getGuestToken(orderId) || null;
+  return api
+    .get(`/orders/${orderId}`, { params: token ? { guestToken: token } : {} })
     .then((res) => res.data.order || res.data);
+};
+
+/** PATCH /orders/:id/cancel - customer (or guest with token) cancels before pickup. */
+export const cancelOrder = (orderId, reason = '', { guestToken } = {}) => {
+  const token = guestToken || getGuestToken(orderId) || null;
+  return api
+    .patch(`/orders/${orderId}/cancel`, {
+      reason,
+      ...(token ? { guestToken: token } : {}),
+    })
+    .then((res) => res.data.order || res.data);
+};
 
 // ---------------------------------------------------------------------------
 // Rider endpoints

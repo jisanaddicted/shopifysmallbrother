@@ -92,31 +92,12 @@ export default function App() {
           />
 
           {/* Customer */}
-          <Route
-            path={ROUTES.STORE}
-            element={
-              <ProtectedRoute allowedRoles={[ROLES.CUSTOMER]}>
-                <Storefront />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path={ROUTES.CHECKOUT}
-            element={
-              <ProtectedRoute allowedRoles={[ROLES.CUSTOMER]}>
-                <Checkout />
-              </ProtectedRoute>
-            }
-          />
-          {/* Both the customer and the assigned rider may open the tracker. */}
-          <Route
-            path={ROUTES.ORDER_TRACKER}
-            element={
-              <ProtectedRoute>
-                <OrderTracker />
-              </ProtectedRoute>
-            }
-          />
+          <Route path={ROUTES.STORE} element={<Storefront />} />
+          {/* Checkout + tracker are public: guests order with name+phone and
+              watch their order with the token from checkout. The pages
+              themselves handle signed-in vs guest. */}
+          <Route path={ROUTES.CHECKOUT} element={<Checkout />} />
+          <Route path={ROUTES.ORDER_TRACKER} element={<OrderTracker />} />
 
           {/* Rider */}
           <Route

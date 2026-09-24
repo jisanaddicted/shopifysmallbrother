@@ -66,9 +66,16 @@ const orderSchema = new mongoose.Schema(
     customer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      default: null,
       index: true,
     },
+    // Guest checkout: no account, so the order carries the contact itself.
+    // A null customer + a guestTokenHash means "whoever holds the raw token".
+    guest: {
+      name: { type: String, trim: true, default: '' },
+      email: { type: String, trim: true, lowercase: true, default: '' },
+    },
+    guestTokenHash: { type: String, default: null, index: true, select: false },
     rider: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

@@ -1,9 +1,11 @@
+import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import Store from '../models/Store.js';
 import User from '../models/User.js';
 import { HttpError } from '../middleware/errorHandler.js';
+import { hashGuestToken, issueGuestToken } from '../middleware/auth.js';
 import {
   CANCELLABLE_STATUSES,
   ORDER_STATUS,
@@ -40,13 +42,30 @@ const toFiniteNumber = (value) => {
 };
 
 /** Loads an order by id, or throws the right 400/404/403. */
-async function loadOrderFor(orderId, user) {
+async function loadOrderFor(orderId, user, guestTokenRaw = null) {
   if (!mongoose.isValidObjectId(orderId)) {
     throw new HttpError(400, 'That order id is not valid.');
   }
 
-  const order = await Order.findById(orderId).populate(ORDER_POPULATE);
+  const order = await Order.findById(orderId)
+    .select('+guestTokenHash')
+    .populate(ORDER_POPULATE);
   if (!order) throw new HttpError(404, 'That order does not exist.');
+
+  // Guest access: whoever holds the raw token from checkout may view/cancel
+  // this one order — only while it is still theirs (customer === null).
+  if (!user && guestTokenRaw && !order.customer && order.guestTokenHash) {
+    const expected = Buffer.from(order.guestTokenHash, 'utf8');
+    const actual = Buffer.from(hashGuestToken(guestTokenRaw), 'utf8');
+    if (
+      expected.length === actual.length &&
+      crypto.timingSafeEqual(expected, actual)
+    ) {
+      return order;
+    }
+  }
+
+  if (!user) throw new HttpError(401, 'You need to sign in to do that.');
 
   // A rider's bound stores unlock view access to that store's unclaimed
   // orders (the pool). For everyone else the stores they run - as owner or as
@@ -83,15 +102,25 @@ async function applyStatus(order, status, { note = '', by = null } = {}) {
  *   items: [{ productId, name, price, quantity }],
  *   address: { label, line1, city, phone, notes },
  *   location: { lat, lng },
- *   paymentMethod: 'cod'
+ *   paymentMethod: 'cod',
+ *   guest: { name, email }            <- guest checkout (no account)
  * }
+ *
+ * Signed-in customers (role customer/admin) order as themselves. Guests order
+ * with just name + phone (+ optional email) and get back a `guestToken` that
+ * unlocks GET /orders/:id?guestToken=… and the live tracker — no signup.
  *
  * Prices are recalculated from the catalogue so a tampered cart can't set its
  * own total. The numbers sent by the client are only a fallback for products
  * that were deleted after the basket was filled.
  */
 export const createOrder = asyncHandler(async (req, res) => {
-  const { items, address, location, paymentMethod } = req.body || {};
+  const { items, address, location, paymentMethod, guest } = req.body || {};
+
+  const signedIn = Boolean(req.user);
+  if (signedIn && ![ROLES.CUSTOMER, ROLES.ADMIN].includes(req.user.role)) {
+    throw new HttpError(403, 'Only customers can place orders.');
+  }
 
   if (!Array.isArray(items) || items.length === 0) {
     throw new HttpError(400, 'Your cart is empty.');
@@ -184,8 +213,28 @@ export const createOrder = asyncHandler(async (req, res) => {
     );
   }
 
+  const guestName = String(guest?.name || '').trim();
+  const guestEmail = String(guest?.email || '').trim().toLowerCase();
+  let guestTokenForResponse = null;
+  if (!signedIn && !guestName) {
+    throw new HttpError(400, 'Please tell us your name so the rider knows who to ask for.');
+  }
+  if (!signedIn && guestEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+    throw new HttpError(400, 'That email address does not look valid.');
+  }
+
   const order = await Order.create({
-    customer: req.user._id,
+    customer: req.user?._id || null,
+    ...(signedIn
+      ? {}
+      : (() => {
+          const { raw, hash } = issueGuestToken();
+          guestTokenForResponse = raw;
+          return {
+            guest: { name: guestName, email: guestEmail },
+            guestTokenHash: hash,
+          };
+        })()),
     store: storeId,
     items: lines,
     ...priceOrder(lines),
@@ -194,7 +243,11 @@ export const createOrder = asyncHandler(async (req, res) => {
     paymentMethod: paymentMethod === 'card' ? 'card' : 'cod',
     status: ORDER_STATUS.PENDING,
     statusHistory: [
-      { status: ORDER_STATUS.PENDING, note: 'Order placed', by: req.user._id },
+      {
+        status: ORDER_STATUS.PENDING,
+        note: signedIn ? 'Order placed' : `Guest order placed by ${guestName}`,
+        by: req.user?._id || null,
+      },
     ],
   });
 
@@ -212,10 +265,13 @@ export const createOrder = asyncHandler(async (req, res) => {
 
   await order.populate(ORDER_POPULATE);
 
-  // Ordering from a store also makes this account one of its customers. This is
-  // what links shoppers who signed up elsewhere (or were already signed in) to
-  // the store they actually buy from.
-  await ensureStoreCustomer(storeId, req.user, STORE_CUSTOMER_SOURCE.ORDER);
+  // Guests have no account to link — only signed-in buyers become customers.
+  if (signedIn) {
+    // Ordering from a store also makes this account one of its customers. This is
+    // what links shoppers who signed up elsewhere (or were already signed in) to
+    // the store they actually buy from.
+    await ensureStoreCustomer(storeId, req.user, STORE_CUSTOMER_SOURCE.ORDER);
+  }
 
   // Live notification: every rider with an active binding to this store is
   // pinged immediately and can accept (claim) the delivery from their console.
@@ -229,7 +285,12 @@ export const createOrder = asyncHandler(async (req, res) => {
     });
   }
 
-  res.status(201).json({ order });
+  res.status(201).json({
+    order,
+    // Returned ONCE — the client stores it in localStorage; it unlocks the
+    // tracker (GET /orders/:id?guestToken=…) without an account.
+    ...(guestTokenForResponse ? { guestToken: guestTokenForResponse } : {}),
+  });
 });
 
 /** GET /api/orders/mine -> { orders } */
@@ -241,22 +302,37 @@ export const listMyOrders = asyncHandler(async (req, res) => {
   res.json({ orders });
 });
 
-/** GET /api/orders/:id -> { order } */
+/** GET /api/orders/:id -> { order } (guests: ?guestToken=… from checkout) */
 export const getOrder = asyncHandler(async (req, res) => {
-  const order = await loadOrderFor(req.params.id, req.user);
+  const guestToken =
+    req.query.guestToken || req.headers['x-guest-token'] || null;
+  const order = await loadOrderFor(req.params.id, req.user, guestToken);
   res.json({ order });
 });
 
-/** PATCH /api/orders/:id/cancel -> { order } */
+/** PATCH /api/orders/:id/cancel -> { order } (guests: body/query guestToken) */
 export const cancelOrder = asyncHandler(async (req, res) => {
-  const order = await loadOrderFor(req.params.id, req.user);
+  const guestToken =
+    req.body?.guestToken ||
+    req.query.guestToken ||
+    req.headers['x-guest-token'] ||
+    null;
+  const order = await loadOrderFor(req.params.id, req.user, guestToken);
+
+  const isGuestOrder = !order.customer;
+  const isGuestCaller = !req.user && isGuestOrder;
 
   // A rider may not cancel, and an admin cancels through the status endpoint.
-  if (
-    req.user.role !== ROLES.ADMIN &&
-    String(order.customer?._id) !== String(req.user._id)
-  ) {
-    throw new HttpError(403, 'Only the customer can cancel this order.');
+  // Guests cancel their own order with the token; signed-in customers cancel
+  // theirs; admins cancel anything.
+  if (!isGuestCaller) {
+    if (!req.user) throw new HttpError(401, 'You need to sign in to do that.');
+    if (
+      req.user.role !== ROLES.ADMIN &&
+      String(order.customer?._id || order.customer) !== String(req.user._id)
+    ) {
+      throw new HttpError(403, 'Only the customer can cancel this order.');
+    }
   }
 
   if (!CANCELLABLE_STATUSES.includes(order.status)) {
@@ -270,7 +346,7 @@ export const cancelOrder = asyncHandler(async (req, res) => {
 
   const updated = await applyStatus(order, ORDER_STATUS.CANCELLED, {
     note: order.cancelReason || 'Cancelled by the customer',
-    by: req.user._id,
+    by: req.user?._id || null,
   });
 
   res.json({ order: updated });
