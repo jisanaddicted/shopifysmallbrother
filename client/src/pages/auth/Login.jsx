@@ -13,7 +13,7 @@ const DEMO_ACCOUNTS = [
 ];
 
 export default function Login() {
-  const { login, isAuthenticated, user, loading } = useAuth();
+  const { login, isAuthenticated, user, loading, customerHomeRoute } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -21,9 +21,18 @@ export default function Login() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // The store page this sign-in came from, if any. Sent to the API so the
+  // store becomes one of the account's stores (and so a customer created
+  // elsewhere is recognised here).
+  const storeSlug = location.state?.storeSlug || '';
+  const storeName = location.state?.storeName || '';
+  const storePath = location.state?.storePath || '';
+
   // If ProtectedRoute sent us here, go back where the user was heading.
   const redirectTo =
     location.state?.from?.pathname ||
+    storePath ||
+    customerHomeRoute ||
     HOME_ROUTE_BY_ROLE[user?.role] ||
     ROUTES.HOME;
 
@@ -45,7 +54,7 @@ export default function Login() {
     setSubmitting(true);
 
     try {
-      await login(form.email.trim(), form.password);
+      await login(form.email.trim(), form.password, storeSlug);
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err.message || 'Could not sign you in.');
@@ -59,8 +68,16 @@ export default function Login() {
       <form className="card auth-card" onSubmit={handleSubmit}>
         <h1 className="auth-card__title">Welcome back</h1>
         <p className="muted">
-          Sign in to shop, deliver or dispatch orders.
+          Sign in to deliver or dispatch orders. Shopping here? Customers sign
+          in at their store&rsquo;s own page.
         </p>
+
+        {storeName ? (
+          <p className="alert alert--ok">
+            Signing in to <strong>{storeName}</strong>. This store will be saved
+            to your account.
+          </p>
+        ) : null}
 
         {error ? <p className="alert alert--danger">{error}</p> : null}
 
@@ -114,7 +131,18 @@ export default function Login() {
         </div>
 
         <p className="auth-card__footer">
-          New here? <Link to={ROUTES.REGISTER}>Create an account</Link>
+          New here?{' '}
+          <Link
+            to={ROUTES.REGISTER}
+            state={{
+              storeSlug,
+              storeName,
+              storePath,
+              from: location.state?.from,
+            }}
+          >
+            Create a staff account
+          </Link>
         </p>
       </form>
     </div>

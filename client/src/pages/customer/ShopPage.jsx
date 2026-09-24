@@ -36,6 +36,19 @@ export default function ShopPage() {
   const [accountOpen, setAccountOpen] = useState(false);
   const searchRef = useRef(null);
 
+  /* Which store this page is, so the sign-in / sign-up links below create the
+     customer account *at this store* (the API keys off `storeSlug`). */
+  const authLinkState = {
+    from: location,
+    ...(slug || store?.slug
+      ? {
+          storeSlug: store?.slug || slug,
+          storeName: store?.name || '',
+          storePath: location.pathname,
+        }
+      : {}),
+  };
+
   /* Derive unique categories from the store's products. */
   const categories = useMemo(() => {
     const seen = new Set();
@@ -138,8 +151,21 @@ export default function ShopPage() {
 
       {!isAuthenticated ? (
         <p className="alert alert--warn">
-          Browsing freely — <Link to={ROUTES.LOGIN}>sign in</Link> when you are
-          ready to order.
+          Browsing freely —{' '}
+          <Link
+            to={store?.slug ? `/s/${store.slug}/login` : ROUTES.LOGIN}
+            state={authLinkState}
+          >
+            sign in
+          </Link>{' '}
+          or{' '}
+          <Link
+            to={store?.slug ? `/s/${store.slug}/register` : ROUTES.REGISTER}
+            state={authLinkState}
+          >
+            create an account
+          </Link>{' '}
+          when you are ready to order.
         </p>
       ) : null}
 

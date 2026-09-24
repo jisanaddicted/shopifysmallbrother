@@ -9,6 +9,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "seed": "node src/seed.js",
+    "backfill:customers": "node scripts/backfillStoreCustomers.mjs",
     "test:smoke": "node scripts/smokeTest.mjs"
   },
   "dependencies": {

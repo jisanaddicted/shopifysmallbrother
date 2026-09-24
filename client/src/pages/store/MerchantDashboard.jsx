@@ -7,11 +7,17 @@ import storeService from '../../services/storeService';
 import {
   ORDER_STATUS,
   ORDER_STATUS_TONE,
+  STORE_CUSTOMER_SOURCE_LABELS,
+  STORE_CUSTOMER_STATUS,
   STORE_RIDER_STATUS,
   STORE_RIDER_STATUS_LABELS,
   shopPath,
 } from '../../utils/constants';
-import { formatCurrency, formatStatus } from '../../utils/formatters';
+import {
+  formatCurrency,
+  formatDateTime,
+  formatStatus,
+} from '../../utils/formatters';
 
 const BLANK_FORM = {
   name: '',
@@ -43,6 +49,11 @@ export default function MerchantDashboard() {
   const [myStores, setMyStores] = useState([]);
   const [riders, setRiders] = useState([]);
   const [members, setMembers] = useState([]);
+  // Customers who signed up at / signed in at / ordered from this store.
+  // Each entry: { customer, status, source, joinedAt, lastSeenAt }.
+  const [customers, setCustomers] = useState([]);
+  const [customersMeta, setCustomersMeta] = useState({ total: 0, newThisWeek: 0 });
+  const [customersError, setCustomersError] = useState('');
   const [orders, setOrders] = useState([]);
   const [form, setForm] = useState(BLANK_FORM);
   const [loading, setLoading] = useState(true);
@@ -85,6 +96,31 @@ export default function MerchantDashboard() {
       setInvites(requests.filter((request) => request.role === 'admin'));
     } catch {
       setInvites([]);
+    }
+  }, []);
+
+  // The store's customers - who signed up at, signed in at, or ordered from
+  // the public page. Loaded alongside the roster; a failure here must never
+  // take the whole dashboard down, so it keeps its own error state.
+  const loadCustomers = useCallback(async (storeId) => {
+    if (!storeId) {
+      setCustomers([]);
+      setCustomersMeta({ total: 0, newThisWeek: 0 });
+      setCustomersError('');
+      return;
+    }
+
+    try {
+      const data = await storeService.listStoreCustomers(storeId);
+      setCustomers(Array.isArray(data?.customers) ? data.customers : []);
+      setCustomersMeta({
+        total: data?.total ?? 0,
+        newThisWeek: data?.newThisWeek ?? 0,
+      });
+      setCustomersError('');
+    } catch (err) {
+      setCustomers([]);
+      setCustomersError(err.message || 'Could not load customers.');
     }
   }, []);
 
@@ -141,6 +177,9 @@ export default function MerchantDashboard() {
           }
         }
         setOrders(orderList);
+        // The store's customers, for the "Customers" panel below. Uses the
+        // ACTIVE store, so switching stores re-scopes the list.
+        loadCustomers(storeIdRef.current);
 
         setForm({
           name: nextStore?.name || '',
@@ -159,7 +198,7 @@ export default function MerchantDashboard() {
         setLoading(false);
       }
     },
-    [loadInvites, loadRoster],
+    [loadInvites, loadRoster, loadCustomers],
   );
 
   // Switch the whole dashboard (orders, roster, storefront form) to another
@@ -523,7 +562,74 @@ export default function MerchantDashboard() {
           </strong>
           <span className="stat__label">Riders delivering</span>
         </div>
+        <div className="stat">
+          <strong>{customersMeta.total}</strong>
+          <span className="stat__label">
+            Customers
+            {customersMeta.newThisWeek > 0
+              ? ` (+${customersMeta.newThisWeek} this week)`
+              : ''}
+          </span>
+        </div>
       </div>
+
+      {/* ---- Customers: every account that signed up at this store's page -- */}
+      <section className="panel">
+        <div className="panel__header">
+          <h2 className="panel__title">Customers</h2>
+          <span className="muted small">
+            Accounts created at <code>/s/{store.slug}</code>
+          </span>
+        </div>
+
+        {customersError ? (
+          <p className="alert alert--warn">{customersError}</p>
+        ) : null}
+
+        {!customersError && customers.length === 0 ? (
+          <p className="muted">
+            No customers yet. Shoppers who sign up at{' '}
+            <Link to={shopPath(store.slug)}>/s/{store.slug}</Link> will be
+            listed here automatically.
+          </p>
+        ) : null}
+
+        {customers.length > 0 ? (
+          <ul className="rider-list">
+            {customers.map((entry) => {
+              const person = entry.customer || {};
+              const key = person._id || person.id || entry._id;
+              const blocked = entry.status === STORE_CUSTOMER_STATUS.BLOCKED;
+
+              return (
+                <li key={key}>
+                  <div className="rider-list__item">
+                    <span className="rider-list__id">
+                      {person.name || 'Customer'}
+                    </span>
+                    <span className="muted small">
+                      {person.email || ''}
+                      {entry.source
+                        ? ` · ${STORE_CUSTOMER_SOURCE_LABELS[entry.source] || entry.source}`
+                        : ''}
+                      {entry.joinedAt
+                        ? ` · joined ${formatDateTime(entry.joinedAt)}`
+                        : ''}
+                    </span>
+                    <div className="button-row">
+                      <span
+                        className={`badge badge--${blocked ? 'danger' : 'success'}`}
+                      >
+                        {blocked ? 'Blocked' : 'Active'}
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+      </section>
 
       {/* ---- Pending store-admin invitations ----------------------------- */}
       {invites.length > 0 ? (

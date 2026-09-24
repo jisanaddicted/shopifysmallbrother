@@ -1,10 +1,14 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 /**
  * Store header for the public storefront (`/s/<slug>`).
  * Left: store logo (image when the store has one, otherwise initial + name).
  * Right: cart icon button (opens the cart drawer) + account icon link.
+ *
+ * The account link carries the store's identity in its state, so a guest who
+ * taps it lands on /login (and from there /register) *as a customer of this
+ * store* - the API links the account the moment they sign up or sign in.
  */
 
 function initialsOf(name) {
@@ -21,8 +25,21 @@ function initialsOf(name) {
 
 export default function StoreHeader({ store, itemCount, user, onCartClick }) {
   const [logoBroken, setLogoBroken] = useState(false);
+  const location = useLocation();
   const name = store?.name || 'Store';
   const logo = !logoBroken ? store?.logo || store?.logoUrl || store?.image : null;
+
+  // The store context /login and /register need to link the account here.
+  const authState = {
+    from: location,
+    ...(store?.slug
+      ? {
+          storeSlug: store.slug,
+          storeName: store.name || '',
+          storePath: store.publicPath || `/s/${store.slug}`,
+        }
+      : {}),
+  };
 
   return (
     <header className="store-header">
@@ -59,10 +76,20 @@ export default function StoreHeader({ store, itemCount, user, onCartClick }) {
           ) : null}
         </button>
 
+        {/* The account button is the storefront's way in: signed-in users get
+            their profile, guests go to THIS store's own sign-up/sign-in pages
+            (/s/<slug>/...), never the generic staff ones. */}
         <Link
-          to={user ? '/profile' : '/login'}
+          to={
+            user
+              ? '/profile'
+              : store?.slug
+                ? `/s/${store.slug}/login`
+                : '/login'
+          }
+          state={authState}
           className="store-header__icon-btn"
-          aria-label={user ? 'My account' : 'Log in to your account'}
+          aria-label={user ? 'My account' : 'Log in or create an account'}
           title={user?.name || user?.email || 'Account'}
         >
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

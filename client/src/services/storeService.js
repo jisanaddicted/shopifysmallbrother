@@ -105,6 +105,16 @@ export const lookupUser = (username) =>
 export const listStoreRiders = (storeId) =>
   api.get(`/stores/${storeId}/riders`).then((res) => res.data.riders || []);
 
+/**
+ * GET /stores/:id/customers -> { customers, total, newThisWeek }
+ *
+ * Every account that signed up at, signed in at, or ordered from this store's
+ * public page. Each entry is `{ customer, status, source, joinedAt,
+ * lastSeenAt }`.
+ */
+export const listStoreCustomers = (storeId) =>
+  api.get(`/stores/${storeId}/customers`).then((res) => res.data);
+
 /** POST /stores/:id/riders { username, role } - invites a rider or store admin. */
 export const inviteRider = (storeId, username, role = 'rider') =>
   api
@@ -167,6 +177,7 @@ export default {
   searchRiders,
   lookupUser,
   listStoreRiders,
+  listStoreCustomers,
   inviteRider,
   removeStoreRider,
   listStores,

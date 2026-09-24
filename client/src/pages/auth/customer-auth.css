@@ -1,0 +1,165 @@
+/* ===========================================================================
+   Customer auth pages — the store-branded sign in / sign up screens shown at
+   /s/<slug>/login and /s/<slug>/register. Self-contained on purpose: these
+   pages carry their own class names (cust-auth__*) so changes here can never
+   disturb the staff-facing /login and /register forms.
+   =========================================================================== */
+
+.cust-auth {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  background:
+    radial-gradient(1200px 500px at 50% -200px, var(--brand-soft), transparent),
+    var(--page, #f6f7f9);
+}
+
+.cust-auth__card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 1.75rem 1.5rem 1.5rem;
+}
+
+/* --- Store identity: logo (or initials) + name --------------------------- */
+.cust-auth__store {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.cust-auth__logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--brand-soft);
+  border: 1px solid var(--line);
+}
+
+.cust-auth__initials {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.cust-auth__store-name {
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.cust-auth__store-sub {
+  margin: 0.1rem 0 0;
+}
+
+/* --- Headings ------------------------------------------------------------ */
+.cust-auth__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.4rem;
+  color: var(--ink);
+}
+
+.cust-auth__subtitle {
+  margin: 0 0 1.1rem;
+  color: var(--muted);
+}
+
+/* --- Form ---------------------------------------------------------------- */
+.cust-auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.cust-auth__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.cust-auth__label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.cust-auth__input {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-alt);
+  color: var(--ink);
+  font: inherit;
+}
+
+.cust-auth__input:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+  background: var(--surface);
+}
+
+.cust-auth__submit {
+  margin-top: 0.35rem;
+}
+
+/* Info note — e.g. "You're creating your account at Joe's Pizza." */
+.cust-auth__note {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-size: 0.9rem;
+}
+
+/* --- Footer: switch mode / go back to the store -------------------------- */
+.cust-auth__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 1.15rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  text-align: center;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.cust-auth__foot a {
+  color: var(--brand-dark);
+  font-weight: 600;
+}
+
+.cust-auth__foot a:hover {
+  text-decoration: none;
+}
+
+@media (max-width: 480px) {
+  .cust-auth {
+    padding: 0;
+    justify-content: flex-start;
+  }
+
+  .cust-auth__card {
+    max-width: none;
+    min-height: 100dvh;
+    border: none;
+    border-radius: 0;
+    padding-top: 2rem;
+  }
+}

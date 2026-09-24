@@ -47,6 +47,9 @@ export const STORAGE_KEYS = {
   TOKEN: 'da.token',
   USER: 'da.user',
   STORES: 'da.stores',
+  // The stores this account *shops at* - not the ones it runs. See
+  // STORE_CUSTOMER_STATUS below.
+  CUSTOMER_STORES: 'da.customerStores',
   CART: 'da.cart',
   ADDRESS: 'da.lastAddress',
 };
@@ -83,6 +86,28 @@ export const STORE_RIDER_STATUS_LABELS = {
   [STORE_RIDER_STATUS.ACTIVE]: 'Delivering',
   [STORE_RIDER_STATUS.DECLINED]: 'Declined',
   [STORE_RIDER_STATUS.REVOKED]: 'Removed',
+};
+
+// --- Store <-> customer binding -------------------------------------------
+// A shopper signs up (or signs in) on a store's public page, and that store
+// becomes "their" store. Signing up at /s/<slug> is what puts the account on
+// the store's customer list. Mirrors the backend constant.
+export const STORE_CUSTOMER_STATUS = {
+  ACTIVE: 'active',
+  BLOCKED: 'blocked',
+};
+
+// How the customer first arrived at the store. Set once, never overwritten.
+export const STORE_CUSTOMER_SOURCE = {
+  SIGNUP: 'signup',
+  LOGIN: 'login',
+  ORDER: 'order',
+};
+
+export const STORE_CUSTOMER_SOURCE_LABELS = {
+  [STORE_CUSTOMER_SOURCE.SIGNUP]: 'Signed up here',
+  [STORE_CUSTOMER_SOURCE.LOGIN]: 'Signed in here',
+  [STORE_CUSTOMER_SOURCE.ORDER]: 'Ordered here',
 };
 
 // --- Order lifecycle -------------------------------------------------------

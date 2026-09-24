@@ -13,6 +13,31 @@ import {
   storesForUser,
   STORE_ROLES,
 } from '../utils/storeAccess.js';
+import { customersForStore } from '../utils/storeCustomer.js';
+
+/**
+ * GET /api/stores/:id/customers -> { customers, total }
+ *
+ * Every account that signed up at, signed in at, or ordered from this store.
+ * Open to the owner, every store admin they appointed, and platform admins -
+ * exactly the same people who can already see the store's orders.
+ */
+export const listStoreCustomers = asyncHandler(async (req, res) => {
+  const { store } = await loadManageableStore(req.params.id, req.user);
+
+  const customers = await customersForStore(store._id);
+
+  res.json({
+    customers,
+    total: customers.length,
+    // Handy for a "N new this week" badge on the dashboard.
+    newThisWeek: customers.filter(
+      (entry) =>
+        entry.joinedAt &&
+        Date.now() - new Date(entry.joinedAt).getTime() < 7 * 24 * 60 * 60 * 1000,
+    ).length,
+  });
+});
 
 // The public shape of a rider, shared by the roster and the search results.
 const RIDER_FIELDS = 'name username email phone isAvailable location';

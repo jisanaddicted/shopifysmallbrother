@@ -57,6 +57,34 @@ export const STORE_MEMBER_ROLES = {
 
 export const STORE_MEMBER_ROLE_VALUES = Object.values(STORE_MEMBER_ROLES);
 
+// ---------------------------------------------------------------------------
+// Store <-> customer binding.
+//
+// A shopper who signs up from a store's public page (/s/<slug>) creates their
+// account *at that store*, and this is what records the relationship. It is
+// also created when they sign in from a store page or order from one, so an
+// account can be a customer of several stores.
+//
+// Mirror of client/src/utils/constants.js - keep the two in sync.
+// ---------------------------------------------------------------------------
+export const STORE_CUSTOMER_STATUS = {
+  ACTIVE: 'active',
+  // A store can stop a customer from ordering again. A later login does not
+  // lift this - only the store (or an admin) can.
+  BLOCKED: 'blocked',
+};
+
+export const STORE_CUSTOMER_STATUS_VALUES = Object.values(STORE_CUSTOMER_STATUS);
+
+// How the customer first joined the store. Stored once, never overwritten.
+export const STORE_CUSTOMER_SOURCE = {
+  SIGNUP: 'signup',
+  LOGIN: 'login',
+  ORDER: 'order',
+};
+
+export const STORE_CUSTOMER_SOURCE_VALUES = Object.values(STORE_CUSTOMER_SOURCE);
+
 export const ORDER_STATUS = {
   PENDING: 'pending',
   CONFIRMED: 'confirmed',

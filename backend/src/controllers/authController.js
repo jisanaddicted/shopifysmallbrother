@@ -5,10 +5,16 @@ import {
   ROLES,
   ROLES_REQUIRING_USERNAME,
   SELF_SIGNUP_ROLES,
+  STORE_CUSTOMER_SOURCE,
 } from '../utils/constants.js';
 import { signToken } from '../utils/jwt.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { storesForUser } from '../utils/storeAccess.js';
+import {
+  customerStoresFor,
+  ensureStoreCustomer,
+  storeBySlug,
+} from '../utils/storeCustomer.js';
 import {
   isValidUsername,
   normaliseUsername,
@@ -26,7 +32,8 @@ const normaliseEmail = (value) => String(value || '').trim().toLowerCase();
  * Responds with the same shape as login: { token, user }.
  */
 export const register = asyncHandler(async (req, res) => {
-  const { name, email, phone, password, storeName } = req.body || {};
+  const { name, email, phone, password, storeName, storeSlug } =
+    req.body || {};
 
   const cleanName = String(name || '').trim();
   const cleanEmail = normaliseEmail(email);
@@ -100,16 +107,51 @@ export const register = asyncHandler(async (req, res) => {
     });
   }
 
+  // A customer who signed up from a store's public page (/s/<slug>) creates an
+  // account *belonging to that store*, so the relationship is recorded here.
+  // Staff accounts are never linked as customers.
+  // A customer account belongs to a store: it can only be created from a
+  // store's own signup page (/s/<slug>/register), which sends `storeSlug`.
+  // Plain /register stays for staff (rider / store / store admin).
+  let shoppingStore = null;
+  if (role === ROLES.CUSTOMER) {
+    shoppingStore = await storeBySlug(storeSlug);
+
+    if (!shoppingStore) {
+      throw new HttpError(
+        400,
+        'Customer accounts are created at a store. Please sign up from your store\u2019s page.',
+      );
+    }
+
+
+    await ensureStoreCustomer(
+      shoppingStore,
+      user,
+      STORE_CUSTOMER_SOURCE.SIGNUP,
+    );
+  }
+
+
   // A store admin sees the stores they were appointed to run, so the response
   // carries the full list; `store` stays the primary one for the older client
   // code paths.
   const entries = await storesForUser(user);
+  // Full entries [{ store, status, source, ... }] - the client reads
+  // entry.store.slug for "my stores" and the association display.
+  const customerStores = await customerStoresFor(user);
+
+  // Where this account lands: a merchant's own store, or the storefront they
+  // signed up from. Staff never inherit someone else's store, so the merchant
+  // dashboard keeps opening on the store they actually run.
+  const primaryStore = entries[0]?.store || store || shoppingStore || null;
 
   res.status(201).json({
     token: signToken(user),
     user,
-    store: store || entries[0]?.store || null,
+    store: primaryStore,
     stores: entries,
+    customerStores,
   });
 });
 
@@ -120,7 +162,7 @@ export const register = asyncHandler(async (req, res) => {
  * Responds { token, user } - the shape client/src/services/authService.js reads.
  */
 export const login = asyncHandler(async (req, res) => {
-  const { password } = req.body || {};
+  const { password, storeSlug } = req.body || {};
 
   // The login form sends one field, and it may be either an email address or a
   // username (riders and stores use their username).
@@ -143,17 +185,40 @@ export const login = asyncHandler(async (req, res) => {
     throw new HttpError(401, 'Invalid email or password.');
   }
 
+  // A customer account belongs to its store, so a customer can only sign in
+  // from a store's own page (/s/<slug>/login). A customer trying the plain
+  // /login door is pointed back to their store instead. Staff accounts never
+  // carry this relationship, so a store owner signing in on someone else's
+  // storefront is left completely untouched.
+  let shoppingStore = null;
+  if (user.role === ROLES.CUSTOMER) {
+    shoppingStore = await storeBySlug(storeSlug);
+
+    if (!shoppingStore) {
+      throw new HttpError(
+        403,
+        'Customer sign-in happens at your store\u2019s page. Please open your store\u2019s link to sign in.',
+      );
+    }
+
+    await ensureStoreCustomer(shoppingStore, user, STORE_CUSTOMER_SOURCE.LOGIN);
+  }
+
   // Which stores does this account run? For a merchant, the store it signed
   // up; for a store admin, the store(s) an owner appointed it to. The client
   // needs the list to land an admin - who keeps their original role - on the
   // store dashboard instead of the customer storefront.
   const entries = await storesForUser(user);
+  const customerStores = await customerStoresFor(user);
 
   res.json({
     token: signToken(user),
     user,
-    store: entries[0]?.store || null,
+    // A staff account lands on its own store; a customer gets the storefront
+    // they signed in from, so logging in at /s/<slug> stays in that store.
+    store: entries[0]?.store || shoppingStore || null,
     stores: entries,
+    customerStores,
   });
 });
 
@@ -191,11 +256,15 @@ export const usernameAvailable = asyncHandler(async (req, res) => {
  */
 export const me = asyncHandler(async (req, res) => {
   const entries = await storesForUser(req.user);
+  // The stores this account shops at - rebuilt on every call, so a customer
+  // who signed up at a storefront sees it here right after registering.
+  const customerStores = await customerStoresFor(req.user);
 
   res.json({
     user: req.user,
     store: entries[0]?.store || null,
     stores: entries,
+    customerStores,
   });
 });
 

@@ -4,6 +4,7 @@ import {
   getPublicStore,
   inviteRider,
   listMyMerchantStores,
+  listStoreCustomers,
   listStores,
   listStoreRiders,
   removeStoreRider,
@@ -39,6 +40,10 @@ const manageRoster = requireRole(ROLES.STORE);
 router.get('/:id/riders', requireAuth, manageRoster, listStoreRiders);
 router.post('/:id/riders', requireAuth, manageRoster, inviteRider);
 router.delete('/:id/riders/:riderId', requireAuth, manageRoster, removeStoreRider);
+
+// --- Customers who signed up at this store's public page. Anybody who can
+// work the store's orders may see them, so this is NOT owner-only. -----------
+router.get('/:id/customers', requireAuth, requireStoreStaff, listStoreCustomers);
 
 // --- Public storefront: this is what /s/<slug> loads, no login required -----
 router.get('/:slug', getPublicStore);

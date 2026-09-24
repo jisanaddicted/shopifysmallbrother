@@ -2,6 +2,8 @@
 import Navbar from './components/common/Navbar';
 import DashboardLayout from './components/common/DashboardLayout';
 import ProtectedRoute from './components/common/ProtectedRoute';
+import CustomerLogin from './pages/auth/CustomerLogin';
+import CustomerRegister from './pages/auth/CustomerRegister';
 import CartDrawer from './components/store/CartDrawer';
 import { useAuth } from './context/AuthContext';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -73,6 +75,11 @@ export default function App() {
           <Route path={ROUTES.HOME} element={<HomeRedirect />} />
           <Route path={ROUTES.LOGIN} element={<Login />} />
           <Route path={ROUTES.REGISTER} element={<Register />} />
+
+          {/* Store-branded customer auth: the slug IS the store context, so
+              signup/login at a store can only happen from its own URL. */}
+          <Route path="/s/:slug/login" element={<CustomerLogin />} />
+          <Route path="/s/:slug/register" element={<CustomerRegister />} />
 
           {/* Any signed-in user: their own profile (riders see their username). */}
           <Route

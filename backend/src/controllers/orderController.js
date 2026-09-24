@@ -9,6 +9,7 @@ import {
   ORDER_STATUS,
   ORDER_STATUS_VALUES,
   ROLES,
+  STORE_CUSTOMER_SOURCE,
 } from '../utils/constants.js';
 import { priceOrder, riderAllowedStatuses } from '../utils/pricing.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -21,6 +22,7 @@ import {
   STORE_ROLES,
 } from '../utils/storeAccess.js';
 import { emitOrderStatusUpdated, notifyStoreMembers } from '../sockets/index.js';
+import { ensureStoreCustomer } from '../utils/storeCustomer.js';
 
 // The tracker needs the rider's name/phone and the customer's details, and
 // the store so the page can show which merchant the order is from.
@@ -209,6 +211,11 @@ export const createOrder = asyncHandler(async (req, res) => {
   );
 
   await order.populate(ORDER_POPULATE);
+
+  // Ordering from a store also makes this account one of its customers. This is
+  // what links shoppers who signed up elsewhere (or were already signed in) to
+  // the store they actually buy from.
+  await ensureStoreCustomer(storeId, req.user, STORE_CUSTOMER_SOURCE.ORDER);
 
   // Live notification: every rider with an active binding to this store is
   // pinged immediately and can accept (claim) the delivery from their console.

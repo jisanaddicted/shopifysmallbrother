@@ -17,18 +17,25 @@ const INITIAL_FORM = {
   storeName: '',
   password: '',
   confirmPassword: '',
-  role: ROLES.CUSTOMER,
+  role: ROLES.RIDER,
 };
 
 // Mirrors isValidUsername() on the server.
 const USERNAME_PATTERN = /^[a-z][a-z0-9._-]{2,19}$/;
 
 export default function Register() {
-  const { register, isAuthenticated, user, loading } = useAuth();
+  const { register, isAuthenticated, user, loading, customerHomeRoute } =
+    useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [form, setForm] = useState(INITIAL_FORM);
+  // Arriving from a store page, this is that store's customer - never a
+  // merchant or rider, so the role starts as (and stays) customer.
+  const [form, setForm] = useState(() =>
+    location.state?.storeSlug
+      ? { ...INITIAL_FORM, role: ROLES.CUSTOMER }
+      : INITIAL_FORM,
+  );
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [usernameState, setUsernameState] = useState({
@@ -37,17 +44,31 @@ export default function Register() {
     reason: '',
   });
 
+  // A shopper who came from a store page (/s/<slug>) signs up *at that store*.
+  // The slug goes to the API, which links the new account to the store, and
+  // the name is only used to tell them so.
+  const storeSlug = location.state?.storeSlug || '';
+  const originStoreName = location.state?.storeName || '';
+  const originStorePath =
+    location.state?.storePath || (storeSlug ? `/s/${storeSlug}` : '');
+
   // The storefront's account sheet sends shoppers here with `from` set, so a
   // brand-new customer lands back in the store they were browsing. A merchant,
   // rider or admin still goes to their own home - not back into a shop.
   const from = location.state?.from;
-  const backToStore =
-    user?.role === ROLES.CUSTOMER && from?.pathname
-      ? `${from.pathname}${from.search || ''}`
-      : '';
+  let backToStore = '';
+  if (user?.role === ROLES.CUSTOMER) {
+    // The store they just signed up at wins over the page they came from.
+    backToStore =
+      originStorePath ||
+      (from?.pathname ? `${from.pathname}${from.search || ''}` : '');
+  }
 
   const redirectTo =
-    backToStore || HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.HOME;
+    backToStore ||
+    customerHomeRoute ||
+    HOME_ROUTE_BY_ROLE[user?.role] ||
+    ROUTES.HOME;
 
   // Stores and riders MUST pick a username. A customer may too (optional):
   // a store owner can appoint any account as a store admin, and a handle is
@@ -146,6 +167,8 @@ export default function Register() {
         ...(needsUsername ? { username } : {}),
         // A merchant needs a store name; fall back to their own name.
         ...(isStore ? { storeName: storeName.trim() || payload.name.trim() } : {}),
+        // Signing up from a store page makes this store the account's store.
+        ...(storeSlug ? { storeSlug } : {}),
       });
 
       navigate(redirectTo, { replace: true });
@@ -161,6 +184,14 @@ export default function Register() {
       <form className="card auth-card" onSubmit={handleSubmit}>
         <h1 className="auth-card__title">Create your account</h1>
         <p className="muted">Order food and groceries in minutes.</p>
+
+        {originStoreName ? (
+          <p className="alert alert--ok">
+            You are creating a customer account for{' '}
+            <strong>{originStoreName}</strong>. You will land back in their store
+            once you are done.
+          </p>
+        ) : null}
 
         {error ? <p className="alert alert--danger">{error}</p> : null}
 
@@ -247,19 +278,34 @@ export default function Register() {
           />
         </label>
 
-        <label className="field">
-          <span>I am a</span>
-          <select name="role" value={form.role} onChange={handleChange}>
-            <option value={ROLES.CUSTOMER}>Customer — I want to order</option>
-            <option value={ROLES.RIDER}>Rider — I want to deliver</option>
-            <option value={ROLES.STORE}>
-              Store — I want to sell and dispatch
-            </option>
-            <option value={ROLES.STORE_ADMIN}>
-              Store admin — I manage a store's products &amp; orders
-            </option>
-          </select>
-        </label>
+        {/* Coming from a store page, the account is a customer account for
+            that store - so the role menu is not offered at all. Plain
+            /register is for staff only: a customer belongs to a store and
+            signs up at that store's own page (/s/<slug>/register). */}
+        {storeSlug ? (
+          <p className="muted small">
+            Signing up as a customer of {originStoreName || 'this store'}.
+          </p>
+        ) : (
+          <>
+            <p className="muted small">
+              This page is for staff accounts. Shopping here? Please sign up
+              from your store&rsquo;s own page.
+            </p>
+            <label className="field">
+              <span>I am a</span>
+              <select name="role" value={form.role} onChange={handleChange}>
+                <option value={ROLES.RIDER}>Rider — I want to deliver</option>
+                <option value={ROLES.STORE}>
+                  Store — I want to sell and dispatch
+                </option>
+                <option value={ROLES.STORE_ADMIN}>
+                  Store admin — I manage a store's products &amp; orders
+                </option>
+              </select>
+            </label>
+          </>
+        )}
 
         {isStore ? (
           <label className="field">

@@ -7,6 +7,7 @@ import {
   ROLES,
   ROUTES,
   orderTrackerPath,
+  shopPath,
 } from '../../utils/constants';
 import {
   formatCurrency,
@@ -19,10 +20,11 @@ import {
  * Bottom sheet behind the storefront's mobile ACCOUNT tab (/s/<slug>).
  *
  * Two faces, decided by who is looking:
- *   - Guest (no account yet): "Create account" / "Log in". The store's own
- *     account details are never shown here - this is the shopper's panel.
- *   - Signed in: that account's own name, email and phone, plus the orders it
- *     placed, a link to the full profile and a way out (log out).
+ *   - Guest (no account yet): "Create account" / "Log in". Both carry this
+ *     store with them, so signing up here creates a customer account *for this
+ *     store* and signing in ties the account to it.
+ *   - Signed in: that account's own name, email and phone, the stores it shops
+ *     at, its orders, a link to the full profile and a way out (log out).
  *
  * Only customers/admin may read GET /orders/mine (the same allow-list the API
  * enforces), so staff accounts get a pointer to their own workspace instead.
@@ -48,37 +50,51 @@ function shortOrderId(id) {
   return `#${String(id).slice(-6).toUpperCase()}`;
 }
 
-/** No account yet: the two ways in. Never shows anyone's stored details. */
-function GuestBody({ from }) {
+/** No account yet: the two ways in, both carrying the store they came from. */
+function GuestBody({ from, storeSlug, storeName, storePath }) {
+  // Handed to the auth pages so the new account belongs to this store and
+  // lands back here afterwards.
+  const storeState = storeSlug
+    ? { storeSlug, storeName: storeName || '', storePath, from }
+    : { from };
+
   return (
     <div className="account-sheet__guest">
       <h2>You are browsing as a guest</h2>
       <p className="muted small">
-        Ordering and live delivery tracking need a customer account. Creating
-        one takes a few seconds.
+        {storeName
+          ? `Create a ${storeName} account to order and track delivery, or log in if you already have one.`
+          : 'Ordering and live delivery tracking need a customer account. Creating one takes a few seconds.'}
       </p>
 
       <div className="account-sheet__cta-row">
         <Link
           className="btn btn-primary btn-block"
-          to={ROUTES.REGISTER}
-          state={{ from }}
+          to={store?.slug ? `/s/${store.slug}/register` : ROUTES.REGISTER}
+          state={storeState}
         >
           Create account
         </Link>
         <Link
           className="btn btn-outline btn-block"
-          to={ROUTES.LOGIN}
-          state={{ from }}
+          to={store?.slug ? `/s/${store.slug}/login` : ROUTES.LOGIN}
+          state={storeState}
         >
           Log in
         </Link>
       </div>
+
+      {storeName ? (
+        <p className="muted small account-sheet__notice">
+          Your account is saved under {storeName}, so you will always find your
+          orders here.
+        </p>
+      ) : null}
     </div>
   );
 }
 
-/** Signed in: this account's own details and its own orders. */
+/** Signed in: this account's own details, its stores and its orders. */
 function SignedInBody({
   user,
   label,
@@ -90,6 +106,8 @@ function SignedInBody({
   onRetry,
   onClose,
   onLogout,
+  shoppingStores = [],
+  currentStoreSlug = '',
 }) {
   return (
     <>
@@ -114,6 +132,47 @@ function SignedInBody({
 
       {canSeeOrders ? (
         <>
+          {shoppingStores.length > 0 ? (
+            <>
+              <div className="account-sheet__section-head">
+                <h3>My stores</h3>
+                <span className="muted small">
+                  {shoppingStores.length === 1
+                    ? '1 store'
+                    : `${shoppingStores.length} stores`}
+                </span>
+              </div>
+
+              <ul className="account-sheet__stores">
+                {shoppingStores.map((shop) => (
+                  <li key={shop._id || shop.id || shop.slug}>
+                    <Link
+                      to={shopPath(shop.slug)}
+                      className={`account-sheet__store${
+                        shop.slug === currentStoreSlug ? ' is-current' : ''
+                      }`}
+                      onClick={onClose}
+                    >
+                      <span className="account-sheet__store-name">
+                        {shop.name}
+                      </span>
+                      <span className="muted small">
+                        {shop.slug === currentStoreSlug
+                          ? 'You are here'
+                          : 'Open store'}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="muted small account-sheet__notice">
+              You have not joined a store yet. Order from a store page and it
+              will be saved here.
+            </p>
+          )}
+
           <div className="account-sheet__section-head">
             <h3>My orders</h3>
             {loading ? <span className="muted small">Loading…</span> : null}
@@ -214,8 +273,17 @@ export default function CustomerAccountSheet({ open, onClose, store }) {
     storeRole,
     homeRoute,
     logout,
+    // The stores this account shops at - a shopper who signed up here has this
+    // one in the list.
+    shoppingStores,
   } = useAuth();
   const location = useLocation();
+
+  // The store being browsed, handed to the auth pages so a signup/sign-in here
+  // is recorded against it. `store` is the document ShopPage already loaded.
+  const storeSlug = store?.slug || '';
+  const storeName = store?.name || '';
+  const storePath = storeSlug ? shopPath(storeSlug) : '';
 
   // GET /orders/mine is customer/admin only - mirror that here instead of
   // firing a request the API will reject for riders and store staff.
@@ -325,9 +393,16 @@ export default function CustomerAccountSheet({ open, onClose, store }) {
             onRetry={loadOrders}
             onClose={onClose}
             onLogout={handleLogout}
+            shoppingStores={shoppingStores}
+            currentStoreSlug={storeSlug}
           />
         ) : (
-          <GuestBody from={location} />
+          <GuestBody
+            from={location}
+            storeSlug={storeSlug}
+            storeName={storeName}
+            storePath={storePath}
+          />
         )}
       </div>
     </div>
