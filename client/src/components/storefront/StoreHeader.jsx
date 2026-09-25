@@ -76,13 +76,16 @@ export default function StoreHeader({ store, itemCount, user, onCartClick }) {
           ) : null}
         </button>
 
-        {/* The account button is the storefront's way in: signed-in users get
-            their profile, guests go to THIS store's own sign-up/sign-in pages
-            (/s/<slug>/...), never the generic staff ones. */}
+        {/* The account button is the storefront's way in: signed-in customers
+            stay inside their store (/s/<slug>/profile), guests go to THIS
+            store's own sign-up/sign-in pages (/s/<slug>/...), never the
+            generic staff ones. */}
         <Link
           to={
             user
-              ? '/profile'
+              ? store?.slug
+                ? `/s/${store.slug}/profile`
+                : '/profile'
               : store?.slug
                 ? `/s/${store.slug}/login`
                 : '/login'

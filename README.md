@@ -10,7 +10,7 @@ javascriptpractice/
 ├── client/     React 18 + Vite + React Router (the browser app)
 └── backend/    Express 4 + MongoDB (Mongoose) + socket.io (REST + live tracking)
 ```
-
+<!--  -->
 ## Roles — the one table that matters
 
 Platform roles live in `ROLES`, mirrored in `client/src/utils/constants.js`

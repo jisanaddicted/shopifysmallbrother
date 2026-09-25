@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import orderService from '../../services/orderService';
 import {
   ORDER_STATUS_TONE,
   ROLES,
   ROUTES,
+  lastStoreVisit,
   orderTrackerPath,
   shopPath,
 } from '../../utils/constants';
@@ -246,7 +247,11 @@ function SignedInBody({
         )}
         <Link
           className="btn btn-outline btn-block"
-          to={ROUTES.PROFILE}
+          to={
+            role === ROLES.CUSTOMER && currentStoreSlug
+              ? `/s/${currentStoreSlug}/profile`
+              : ROUTES.PROFILE
+          }
           onClick={onClose}
         >
           View full profile
@@ -272,12 +277,14 @@ export default function CustomerAccountSheet({ open, onClose, store }) {
     runsStore,
     storeRole,
     homeRoute,
+    customerHomeRoute,
     logout,
     // The stores this account shops at - a shopper who signed up here has this
     // one in the list.
     shoppingStores,
   } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // The store being browsed, handed to the auth pages so a signup/sign-in here
   // is recorded against it. `store` is the document ShopPage already loaded.
@@ -343,9 +350,23 @@ export default function CustomerAccountSheet({ open, onClose, store }) {
   if (!open) return null;
 
   const handleLogout = () => {
+    // Auth-door rule shared with the navbar: customers NEVER land on the
+    // staff portal (/login). They go to the login page OF THE STORE they
+    // logged out from (/s/<slug>/login): this storefront first, else the
+    // last visited store, else the catalogue fallback. Everyone else keeps
+    // the portal login.
+    const loggingOutAsCustomer = role === ROLES.CUSTOMER && !runsStore;
+    const logoutSlug = storeSlug || lastStoreVisit() || '';
+    const target = loggingOutAsCustomer
+      ? logoutSlug
+        ? `/s/${logoutSlug}/login`
+        : customerHomeRoute || ROUTES.STORE
+      : ROUTES.LOGIN;
+
     logout();
     setOrders([]);
     onClose();
+    navigate(target, { replace: true });
   };
 
   return (

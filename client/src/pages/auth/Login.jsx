@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES } from '../../utils/constants';
+import {
+  HOME_ROUTE_BY_ROLE,
+  ROLES,
+  ROUTES,
+  lastStoreVisit,
+} from '../../utils/constants';
 import PortalAuth from './PortalAuth';
 import './portal-auth.css';
 
@@ -15,7 +20,16 @@ const DEMO_ACCOUNTS = [
 ];
 
 export default function Login() {
-  const { login, isAuthenticated, user, loading, customerHomeRoute } = useAuth();
+  const {
+    login,
+    isAuthenticated,
+    isCustomer,
+    runsStore,
+    user,
+    loading,
+    customerHomeRoute,
+    shoppingStores,
+  } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -38,11 +52,23 @@ export default function Login() {
     HOME_ROUTE_BY_ROLE[user?.role] ||
     ROUTES.HOME;
 
+  // Auth-door guard: /login is the STAFF portal. A signed-in customer (plain
+  // shopper, not an appointed store admin) must never see it — bounce them
+  // to THEIR store's login page (/s/<slug>/login) instead. Runs before the
+  // effect below so there is no staff-portal flash.
+  const signedInAsCustomer =
+    isAuthenticated && !loading && (isCustomer || user?.role === ROLES.CUSTOMER) && !runsStore;
+  const customerStoreSlug =
+    shoppingStores?.[0]?.slug || lastStoreVisit() || '';
+  const customerStoreTarget = customerStoreSlug
+    ? `/s/${customerStoreSlug}/login`
+    : customerHomeRoute || ROUTES.STORE;
+
   useEffect(() => {
-    if (isAuthenticated && !loading) {
+    if (isAuthenticated && !loading && !signedInAsCustomer) {
       navigate(redirectTo, { replace: true });
     }
-  }, [isAuthenticated, loading, redirectTo, navigate]);
+  }, [isAuthenticated, loading, signedInAsCustomer, redirectTo, navigate]);
 
   const handleChange = (event) =>
     setForm((prev) => ({ ...prev, [event.target.name]: event.target.value }));
@@ -64,6 +90,11 @@ export default function Login() {
       setSubmitting(false);
     }
   };
+
+  // Customer bounced out of the staff portal before it ever renders.
+  if (signedInAsCustomer) {
+    return <Navigate to={customerStoreTarget} replace />;
+  }
 
   return (
     <PortalAuth mode="login">

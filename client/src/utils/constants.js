@@ -218,6 +218,13 @@ export const SOCKET_EVENTS = {
 };
 
 // --- Client routes ---------------------------------------------------------
+// --- Customer routes, scoped to the store they belong to -------------------
+// Keeps the store slug in the URL after login: /s/<slug> -> /s/<slug>/profile
+// instead of dropping to a global /profile. Public catalogue URLs keep their
+// old shapes so shared links never break.
+export const customerPath = (slug, suffix = '') =>
+  slug ? `/s/${slug}${suffix ? `/${suffix}` : ''}` : `/${suffix || ''}`;
+
 export const ROUTES = {
   HOME: '/',
   LOGIN: '/login',
@@ -232,6 +239,10 @@ export const ROUTES = {
   ADMIN_STORES: '/admin/stores',
   ADMIN_THEME: '/admin/theme',
   PROFILE: '/profile',
+  // A customer's own profile INSIDE their store: /s/<slug>/profile (see
+  // customerPath). The bare /profile stays for staff + deep links and
+  // redirects customers to their scoped page.
+  STORE_PROFILE: '/s/:slug/profile',
   // A store's public storefront: /s/<slug> (see shopPath below).
   SHOP: '/s/:slug',
 };

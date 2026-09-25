@@ -1,16 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Navigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import authService from '../../services/authService';
 import storeService from '../../services/storeService';
+import { customerPath, lastStoreVisit } from '../../utils/constants';
 import { initials } from '../../utils/formatters';
 
 /**
  * The signed-in user's own profile. The username is the headline: it is the
  * handle a store owner or admin types to find and invite this account, so
  * riders (and merchants) need to see it at a glance.
+ *
+ * When mounted under /s/:slug/profile the page stays inside the customer's
+ * store (slug from the URL); the bare /profile route is kept for staff and
+ * old links — customers landing there are bounced to their scoped page.
  */
 export default function ProfilePage() {
-  const { user, setUser, isRider } = useAuth();
+  const { user, setUser, isRider, isCustomer, customerHomeRoute, shoppingStores } = useAuth();
+  // Present only on the scoped route /s/:slug/profile — that slug is what
+  // keeps the customer inside their store after login.
+  const { slug: routeSlug } = useParams();
 
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -94,6 +103,14 @@ export default function ProfilePage() {
   const roleLabel = user?.role
     ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
     : '';
+
+  // A customer on the bare /profile URL (old bookmark, avatar link) belongs
+  // on their scoped page /s/<slug>/profile so the store slug never drops
+  // out of the URL after login. Staff keep the global page as-is.
+  if (isCustomer && !routeSlug) {
+    const slug = shoppingStores?.[0]?.slug || lastStoreVisit() || '';
+    return <Navigate to={slug ? customerPath(slug, 'profile') : customerHomeRoute || '/store'} replace />;
+  }
 
   return (
     <div className="page">

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
-import { HOME_ROUTE_BY_ROLE, ROUTES, lastStoreVisit, shopPath } from '../../utils/constants';
+import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES, lastStoreVisit, shopPath } from '../../utils/constants';
 import { initials } from '../../utils/formatters';
 import { getPublicStore } from '../../services/storeService';
 
@@ -53,14 +53,20 @@ export default function Navbar() {
   const brandStore = homeStore || visitedStore || null;
 
   const handleLogout = () => {
-    // Shoppers belong back on the storefront: first choice THE store they
-    // were visiting (remembered on every /s/<slug> page), else the store
-    // tied to their account, else the general catalogue. Staff
-    // (rider/store/admin) go to their console's login page. Capture the
-    // target BEFORE logout() clears the session state it is derived from.
-    const visited = lastStoreVisit();
-    const target = isCustomer
-      ? (visited ? shopPath(visited) : customerHomeRoute) || ROUTES.STORE
+    // Auth-door rule: customers NEVER land on the staff portal (/login).
+    // Ending a customer session takes them to the login page OF THE STORE
+    // they logged out from: /s/<slug>/login — last visited storefront
+    // first, else the store on their account. Only when no store slug is
+    // known at all do we fall back to the catalogue. Staff
+    // (rider/store/admin) keep the portal /login.
+    // The role + target are captured BEFORE logout() clears the session.
+    const loggingOutAsCustomer =
+      isCustomer || user?.role === ROLES.CUSTOMER;
+    const logoutSlug = lastStoreVisit() || shoppingStores?.[0]?.slug || '';
+    const target = loggingOutAsCustomer
+      ? logoutSlug
+        ? `/s/${logoutSlug}/login`
+        : customerHomeRoute || ROUTES.STORE
       : ROUTES.LOGIN;
 
     logout();
@@ -152,7 +158,11 @@ export default function Navbar() {
             <>
               <Link
                 className="navbar__user"
-                to={ROUTES.PROFILE}
+                to={
+                  isCustomer && brandStore?.slug
+                    ? `/s/${brandStore.slug}/profile`
+                    : ROUTES.PROFILE
+                }
                 title={
                   user?.username
                     ? `@${user.username} — view profile`

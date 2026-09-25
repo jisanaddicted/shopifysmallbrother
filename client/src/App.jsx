@@ -99,7 +99,18 @@ export default function App() {
           <Route path="/s/:slug/login" element={<CustomerLogin />} />
           <Route path="/s/:slug/register" element={<CustomerRegister />} />
 
-          {/* Any signed-in user: their own profile (riders see their username). */}
+          {/* Any signed-in user: their own profile (riders see their username).
+              Customers get a store-scoped page (/s/:slug/profile) so the
+              slug stays in the URL after login; the bare /profile stays for
+              staff and bounces customers forward. */}
+          <Route
+            path={ROUTES.STORE_PROFILE}
+            element={
+              <ProtectedRoute>
+                <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path={ROUTES.PROFILE}
             element={
