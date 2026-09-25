@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { HOME_ROUTE_BY_ROLE, ROUTES, lastStoreVisit, shopPath } from '../../utils/constants';
 import { initials } from '../../utils/formatters';
+import { getPublicStore } from '../../services/storeService';
 
 export default function Navbar() {
   const {
@@ -14,9 +16,41 @@ export default function Navbar() {
     isAdmin,
     logout,
     customerHomeRoute,
+    shoppingStores,
   } = useAuth();
   const { itemCount, toggleCart } = useCart();
   const navigate = useNavigate();
+
+  // The store this customer signed up at (from the DB via the session:
+  // customerStores[].store carries logo + image + slug + name). Newest
+  // relationship first, so [0] is "their" store.
+  const homeStore = isCustomer && shoppingStores?.length ? shoppingStores[0] : null;
+
+  // Fallback for older sessions with no customerStores yet: fetch the last
+  // visited storefront's logo from the database by its slug.
+  const [visitedStore, setVisitedStore] = useState(null);
+  useEffect(() => {
+    if (homeStore || !isCustomer) {
+      setVisitedStore(null);
+      return undefined;
+    }
+    const slug = lastStoreVisit();
+    if (!slug) return undefined;
+    let cancelled = false;
+    getPublicStore(slug)
+      .then((data) => {
+        if (!cancelled) setVisitedStore(data?.store || null);
+      })
+      .catch(() => {
+        if (!cancelled) setVisitedStore(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [homeStore, isCustomer, user?.email]);
+
+  // The store whose logo + URL the brand shows for a customer.
+  const brandStore = homeStore || visitedStore || null;
 
   const handleLogout = () => {
     // Shoppers belong back on the storefront: first choice THE store they
@@ -35,15 +69,44 @@ export default function Navbar() {
 
   const brandTarget = HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.HOME;
 
+  // A signed-in customer sees THEIR store in the brand slot: the store's
+  // logo image (logo, else image) from the database, linking to that
+  // store's own URL (/s/<slug>). Everyone else keeps the default brand.
+  const brandLogo = brandStore?.logo || brandStore?.image || '';
+  const brandStorePath = brandStore?.slug ? shopPath(brandStore.slug) : '';
+
   return (
     <header className="navbar">
       <div className="navbar__inner">
-        <Link to={brandTarget} className="navbar__brand">
-          <span className="navbar__logo" aria-hidden="true">
-            →
-          </span>
-          DeliveryApp
-        </Link>
+        {isCustomer && brandStore ? (
+          <Link
+            to={brandStorePath || brandTarget}
+            className="navbar__brand navbar__brand--store"
+            title={`${brandStore.name || 'Store'} — open storefront`}
+          >
+            {brandLogo ? (
+              <img
+                className="navbar__store-logo"
+                src={brandLogo}
+                alt={`${brandStore.name || 'Store'} logo`}
+              />
+            ) : (
+              <span className="navbar__logo" aria-hidden="true">
+                {initials(brandStore.name || 'S')}
+              </span>
+            )}
+            <span className="navbar__brand-name">
+              {brandStore.name || 'Store'}
+            </span>
+          </Link>
+        ) : (
+          <Link to={brandTarget} className="navbar__brand">
+            <span className="navbar__logo" aria-hidden="true">
+              →
+            </span>
+            DeliveryApp
+          </Link>
+        )}
 
         <nav className="navbar__links">
           {!isAuthenticated && (

@@ -190,6 +190,28 @@ ol {
   color: var(--ink);
 }
 
+.navbar__brand:hover {
+  text-decoration: none;
+}
+
+/* Customer brand: their store's logo + name linking to /s/<slug>. */
+.navbar__store-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  object-fit: cover;
+  background: var(--brand-soft);
+  border: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.navbar__brand-name {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .navbar__logo {
   display: grid;
   place-items: center;
