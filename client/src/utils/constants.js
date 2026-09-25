@@ -83,6 +83,9 @@ export const STORAGE_KEYS = {
   // The stores this account *shops at* - not the ones it runs. See
   // STORE_CUSTOMER_STATUS below.
   CUSTOMER_STORES: 'da.customerStores',
+  // The last storefront (/s/<slug>) visited on this device - logout reads it
+  // back so a shopper lands on THE store they were visiting, not /login.
+  LAST_STORE: 'da.lastStore',
   CART: 'da.cart',
   ADDRESS: 'da.lastAddress',
 };
@@ -238,6 +241,26 @@ export const orderTrackerPath = (orderId) => `/track/${orderId}`;
 
 // Build a store's public URL: shopPath('joes-pizza') -> /s/joes-pizza
 export const shopPath = (slug) => `/s/${slug}`;
+
+// Every /s/<slug> page records its slug here, so the app always knows which
+// storefront the shopper is (or was last) looking at. Navbar logout reads it
+// back to send customers to that store instead of the staff login page.
+export function rememberStoreVisit(slug) {
+  if (!slug) return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.LAST_STORE, slug);
+  } catch {
+    // private mode - logout then falls back to the account's home store
+  }
+}
+
+export function lastStoreVisit() {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.LAST_STORE) || null;
+  } catch {
+    return null;
+  }
+}
 
 // Where each role lands after a successful login.
 export const HOME_ROUTE_BY_ROLE = {

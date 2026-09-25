@@ -60,10 +60,23 @@ export function createApp() {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const distDir = path.resolve(here, '../../client/dist');
     if (fs.existsSync(path.join(distDir, 'index.html'))) {
-      app.use(express.static(distDir));
+      // index.html names the hashed JS bundle, so it must NEVER be served
+      // from cache: a stale copy pins visitors to an old build after every
+      // deploy (e.g. seeing the pre-fix logout behaviour). Hashed assets
+      // keep their normal caching - only the entry document revalidates.
+      app.use(
+        express.static(distDir, {
+          setHeaders: (res, filePath) => {
+            if (filePath.endsWith('index.html')) {
+              res.setHeader('Cache-Control', 'no-store');
+            }
+          },
+        }),
+      );
       // SPA fallback: anything not /api/* serves index.html (react-router).
       app.get(/^\/(?!api\/).*/, (req, res, next) => {
         if (req.method !== 'GET') return next();
+        res.setHeader('Cache-Control', 'no-store');
         res.sendFile(path.join(distDir, 'index.html'));
       });
     }

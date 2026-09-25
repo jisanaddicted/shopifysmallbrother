@@ -8,6 +8,8 @@ import {
   ROLES_REQUIRING_USERNAME,
   ROUTES,
 } from '../../utils/constants';
+import PortalAuth from './PortalAuth';
+import './portal-auth.css';
 
 const INITIAL_FORM = {
   name: '',
@@ -179,11 +181,24 @@ export default function Register() {
     }
   };
 
+  // Portal roles shown as big selectable cards on the signup form.
+  // Admin accounts are never self-created (seeder / existing admin only),
+  // so the picker offers the three self-signup staff roles.
+  const PORTAL_ROLES = [
+    { value: ROLES.STORE, label: 'Store owner', hint: 'Sell & dispatch' },
+    { value: ROLES.RIDER, label: 'Rider', hint: 'Deliver orders' },
+    { value: ROLES.STORE_ADMIN, label: 'Store admin', hint: 'Manage a store' },
+  ];
+
+  const pickRole = (role) =>
+    setForm((prev) => ({ ...prev, role }));
+
   return (
-    <div className="auth-page">
+    <PortalAuth mode="register">
+      <div className="auth-page">
       <form className="card auth-card" onSubmit={handleSubmit}>
         <h1 className="auth-card__title">Create your account</h1>
-        <p className="muted">Order food and groceries in minutes.</p>
+        <p className="muted">Join the Ronex Mart portal as staff.</p>
 
         {originStoreName ? (
           <p className="alert alert--ok">
@@ -288,13 +303,36 @@ export default function Register() {
           </p>
         ) : (
           <>
-            <p className="muted small">
-              This page is for staff accounts. Shopping here? Please sign up
-              from your store&rsquo;s own page.
-            </p>
-            <label className="field">
+            <div className="field">
               <span>I am a</span>
-              <select name="role" value={form.role} onChange={handleChange}>
+              <div className="portal__role-pick" role="radiogroup" aria-label="Choose your role">
+                {PORTAL_ROLES.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={form.role === option.value}
+                    className={
+                      form.role === option.value
+                        ? 'portal__role-btn is-active'
+                        : 'portal__role-btn'
+                    }
+                    onClick={() => pickRole(option.value)}
+                  >
+                    <strong>{option.label}</strong>
+                    <small>{option.hint}</small>
+                  </button>
+                ))}
+              </div>
+              {/* Keep the native select for assistive tech / form semantics. */}
+              <select
+                name="role"
+                value={form.role}
+                onChange={handleChange}
+                aria-label="Choose your role"
+                style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+                tabIndex={-1}
+              >
                 <option value={ROLES.RIDER}>Rider — I want to deliver</option>
                 <option value={ROLES.STORE}>
                   Store — I want to sell and dispatch
@@ -303,7 +341,14 @@ export default function Register() {
                   Store admin — I manage a store's products &amp; orders
                 </option>
               </select>
-            </label>
+              <span className="muted small block portal__role-note">
+                {form.role === ROLES.STORE
+                  ? 'Store owners get a public page at /s/<your-store-name>.'
+                  : form.role === ROLES.RIDER
+                    ? 'Riders deliver orders and get found by username.'
+                    : 'Store admins are appointed by an owner after signing up.'}
+              </span>
+            </div>
           </>
         )}
 
@@ -364,6 +409,7 @@ export default function Register() {
           Already registered? <Link to={ROUTES.LOGIN}>Sign in</Link>
         </p>
       </form>
-    </div>
+      </div>
+    </PortalAuth>
   );
 }

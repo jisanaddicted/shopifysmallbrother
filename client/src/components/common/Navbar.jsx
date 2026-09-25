@@ -1,18 +1,36 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
-import { HOME_ROUTE_BY_ROLE, ROUTES } from '../../utils/constants';
+import { HOME_ROUTE_BY_ROLE, ROUTES, lastStoreVisit, shopPath } from '../../utils/constants';
 import { initials } from '../../utils/formatters';
 
 export default function Navbar() {
-  const { user, isAuthenticated, isCustomer, isRider, isStore, isAdmin, logout } =
-    useAuth();
+  const {
+    user,
+    isAuthenticated,
+    isCustomer,
+    isRider,
+    isStore,
+    isAdmin,
+    logout,
+    customerHomeRoute,
+  } = useAuth();
   const { itemCount, toggleCart } = useCart();
   const navigate = useNavigate();
 
   const handleLogout = () => {
+    // Shoppers belong back on the storefront: first choice THE store they
+    // were visiting (remembered on every /s/<slug> page), else the store
+    // tied to their account, else the general catalogue. Staff
+    // (rider/store/admin) go to their console's login page. Capture the
+    // target BEFORE logout() clears the session state it is derived from.
+    const visited = lastStoreVisit();
+    const target = isCustomer
+      ? (visited ? shopPath(visited) : customerHomeRoute) || ROUTES.STORE
+      : ROUTES.LOGIN;
+
     logout();
-    navigate(ROUTES.LOGIN, { replace: true });
+    navigate(target, { replace: true });
   };
 
   const brandTarget = HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.HOME;

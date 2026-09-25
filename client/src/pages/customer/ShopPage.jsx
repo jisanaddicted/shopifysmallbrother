@@ -10,7 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import storeService from '../../services/storeService';
 import menuService from '../../services/menuService';
-import { ROUTES } from '../../utils/constants';
+import { ROUTES, rememberStoreVisit } from '../../utils/constants';
 
 /**
  * A store's public page: /s/<slug>
@@ -64,6 +64,12 @@ export default function ShopPage() {
     const cat = params.get('category');
     if (cat && cat !== category) setCategory(cat);
   }, [location.search, category]);
+
+  /* Remember which storefront this is: signing out later - even from
+     /profile - brings the shopper back to THE store they were visiting. */
+  useEffect(() => {
+    rememberStoreVisit(slug);
+  }, [slug]);
 
   const loadStore = useCallback(async () => {
     setLoading(true);

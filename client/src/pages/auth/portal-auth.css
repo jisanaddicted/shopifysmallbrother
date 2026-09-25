@@ -1,0 +1,259 @@
+/* ==========================================================================
+   Staff portal auth — split-screen entry (/login + /register).
+   Left  = brand panel ("Ronex Mart — Supershop Online Portal").
+   Right = login / signup form. No navbar is rendered on these routes.
+   Self-contained (portal__*) so customer pages are never affected.
+   ========================================================================== */
+
+.portal {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: var(--surface);
+}
+
+/* ---- Left: brand panel ------------------------------------------------- */
+.portal__brand {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: 3rem clamp(2rem, 5vw, 4.5rem);
+  color: #f8fafc;
+  background:
+    radial-gradient(900px 480px at 15% 10%, rgba(96, 165, 250, 0.45), transparent 60%),
+    radial-gradient(700px 500px at 85% 90%, rgba(34, 211, 238, 0.35), transparent 60%),
+    linear-gradient(135deg, #0b1e4b 0%, #1d4ed8 55%, #0ea5e9 100%);
+}
+
+.portal__brand::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.22) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+  pointer-events: none;
+}
+
+.portal__brand-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 30rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.portal__eyebrow {
+  margin: 0;
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.portal__title {
+  margin: 0;
+  font-size: clamp(2.4rem, 4.5vw, 3.6rem);
+  line-height: 1.02;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.portal__title-sub {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: clamp(1.05rem, 2vw, 1.4rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #dbeafe;
+}
+
+.portal__desc {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.portal__roles {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.portal__roles li {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+}
+
+.portal__roles strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.portal__roles span span,
+.portal__roles li div span {
+  display: block;
+  font-size: 0.86rem;
+  color: #dbeafe;
+}
+
+.portal__role-dot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.portal__role-dot--store { background: #fbbf24; }
+.portal__role-dot--rider { background: #34d399; }
+.portal__role-dot--admin { background: #f472b6; }
+
+.portal__hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.86rem;
+  color: #cbd5e1;
+}
+
+/* ---- Right: form side --------------------------------------------------- */
+.portal__form-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.5rem;
+  background:
+    radial-gradient(800px 380px at 50% -160px, var(--brand-soft), transparent),
+    var(--surface);
+}
+
+.portal__form-wrap {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.portal__tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-alt);
+}
+
+.portal__tab {
+  text-align: center;
+  padding: 0.6rem 0.5rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+
+.portal__tab:hover {
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.portal__tab.is-active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+/* The existing staff forms live inside the shell: stretch them full-width and
+   drop the old centered-page padding (the shell already centers content). */
+.portal__form-wrap .auth-page {
+  display: block;
+  padding: 0;
+}
+
+.portal__form-wrap .auth-card {
+  width: 100%;
+}
+
+.portal__role-pick {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.portal__role-btn {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 0.6rem 0.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink-soft);
+}
+
+.portal__role-btn strong {
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+
+.portal__role-btn small {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.portal__role-btn:hover {
+  border-color: var(--brand);
+}
+
+.portal__role-btn.is-active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  box-shadow: var(--shadow-sm);
+}
+
+.portal__role-note {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+/* ---- Responsive: stack brand on top on small screens -------------------- */
+@media (max-width: 900px) {
+  .portal {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .portal__brand {
+    padding: 2.25rem 1.5rem;
+  }
+
+  .portal__brand-inner {
+    max-width: 34rem;
+  }
+
+  .portal__form-side {
+    padding: 1.75rem 1rem 3rem;
+    align-items: flex-start;
+  }
+}

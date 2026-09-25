@@ -3,6 +3,7 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { getPublicStore } from '../../services/storeService';
 import { initials } from '../../utils/formatters';
+import { rememberStoreVisit } from '../../utils/constants';
 import './customer-auth.css';
 
 /**
@@ -32,6 +33,9 @@ export default function CustomerRegister() {
 
   // Brand the card with the store's logo + name.
   useEffect(() => {
+    // This door IS the store's page - record it so signing out sends the
+    // shopper back here rather than to the staff login page.
+    rememberStoreVisit(slug);
     let cancelled = false;
     setStore(null);
     setStoreError('');

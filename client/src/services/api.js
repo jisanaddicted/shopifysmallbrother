@@ -60,10 +60,18 @@ api.interceptors.response.use(
     // BUT only when the request actually SENT a token: guest checkout/tracker
     // requests carry none, and their legitimate 401s (e.g. tracker opened
     // without its guestToken) must not log a signed-in user out.
+    // ALSO only while a session token still exists: logout() already wiped
+    // the keys, so an in-flight request failing just after a deliberate
+    // logout must not hard-redirect over the logout navigation (a customer
+    // signing out would otherwise get yanked to /login).
     if (status === 401 && error.config?.headers?.Authorization) {
+      const hadSession = Boolean(localStorage.getItem(STORAGE_KEYS.TOKEN));
       localStorage.removeItem(STORAGE_KEYS.TOKEN);
       localStorage.removeItem(STORAGE_KEYS.USER);
-      if (!window.location.pathname.startsWith('/login')) {
+      if (
+        hadSession &&
+        !window.location.pathname.startsWith('/login')
+      ) {
         window.location.assign('/login');
       }
     }

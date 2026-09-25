@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES } from '../../utils/constants';
+import PortalAuth from './PortalAuth';
+import './portal-auth.css';
 
 // Handy shortcuts while your backend users don't exist yet.
 // Press a chip to fill the form, then edit the values if needed.
 const DEMO_ACCOUNTS = [
-  { role: ROLES.CUSTOMER, email: 'customer@example.com', password: 'password123' },
-  { role: ROLES.RIDER, email: 'rider@example.com', password: 'password123' },
-  { role: ROLES.STORE, email: 'store@example.com', password: 'password123' },
-  { role: ROLES.ADMIN, email: 'admin@example.com', password: 'password123' },
+  { role: ROLES.RIDER, label: 'Rider', email: 'rider@example.com', password: 'password123' },
+  { role: ROLES.STORE, label: 'Store owner', email: 'store@example.com', password: 'password123' },
+  { role: ROLES.STORE_ADMIN, label: 'Store admin', email: 'storeadmin@example.com', password: 'password123' },
+  { role: ROLES.ADMIN, label: 'Admin', email: 'admin@example.com', password: 'password123' },
 ];
 
 export default function Login() {
@@ -64,87 +66,90 @@ export default function Login() {
   };
 
   return (
-    <div className="auth-page">
-      <form className="card auth-card" onSubmit={handleSubmit}>
-        <h1 className="auth-card__title">Welcome back</h1>
-        <p className="muted">
-          Sign in to deliver or dispatch orders. Shopping here? Customers sign
-          in at their store&rsquo;s own page.
-        </p>
-
-        {storeName ? (
-          <p className="alert alert--ok">
-            Signing in to <strong>{storeName}</strong>. This store will be saved
-            to your account.
+    <PortalAuth mode="login">
+      <div className="auth-page">
+        <form className="card auth-card" onSubmit={handleSubmit}>
+          <h1 className="auth-card__title">Welcome back</h1>
+          <p className="muted">
+            Sign in as a store owner, rider, store admin or admin to open your
+            workspace.
           </p>
-        ) : null}
 
-        {error ? <p className="alert alert--danger">{error}</p> : null}
+          {storeName ? (
+            <p className="alert alert--ok">
+              Signing in to <strong>{storeName}</strong>. This store will be saved
+              to your account.
+            </p>
+          ) : null}
 
-        <label className="field">
-          <span>Email or username</span>
-          <input
-            type="text"
-            name="email"
-            value={form.email}
-            onChange={handleChange}
-            placeholder="you@example.com or sam.rider"
-            autoComplete="username"
-            required
-          />
-        </label>
+          {error ? <p className="alert alert--danger">{error}</p> : null}
 
-        <label className="field">
-          <span>Password</span>
-          <input
-            type="password"
-            name="password"
-            value={form.password}
-            onChange={handleChange}
-            placeholder="••••••••"
-            autoComplete="current-password"
-            minLength={6}
-            required
-          />
-        </label>
+          <label className="field">
+            <span>Email or username</span>
+            <input
+              type="text"
+              name="email"
+              value={form.email}
+              onChange={handleChange}
+              placeholder="you@example.com or sam.rider"
+              autoComplete="username"
+              required
+            />
+          </label>
 
-        <button
-          type="submit"
-          className="btn btn-primary btn-block"
-          disabled={submitting}
-        >
-          {submitting ? 'Signing in…' : 'Sign in'}
-        </button>
+          <label className="field">
+            <span>Password</span>
+            <input
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              minLength={6}
+              required
+            />
+          </label>
 
-        <div className="demo-accounts">
-          <p className="muted">Demo accounts:</p>
-          {DEMO_ACCOUNTS.map((account) => (
-            <button
-              key={account.role}
-              type="button"
-              className="chip chip--button"
-              onClick={() => fillDemo(account)}
-            >
-              {account.role}
-            </button>
-          ))}
-        </div>
-
-        <p className="auth-card__footer">
-          New here?{' '}
-          <Link
-            to={ROUTES.REGISTER}
-            state={{
-              storeSlug,
-              storeName,
-              storePath,
-              from: location.state?.from,
-            }}
+          <button
+            type="submit"
+            className="btn btn-primary btn-block"
+            disabled={submitting}
           >
-            Create a staff account
-          </Link>
-        </p>
-      </form>
-    </div>
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </button>
+
+          <div className="demo-accounts">
+            <p className="muted">Demo accounts:</p>
+            {DEMO_ACCOUNTS.map((account) => (
+              <button
+                key={account.role}
+                type="button"
+                className="chip chip--button"
+                onClick={() => fillDemo(account)}
+                title={`${account.label}: ${account.email}`}
+              >
+                {account.label}
+              </button>
+            ))}
+          </div>
+
+          <p className="auth-card__footer">
+            New here?{' '}
+            <Link
+              to={ROUTES.REGISTER}
+              state={{
+                storeSlug,
+                storeName,
+                storePath,
+                from: location.state?.from,
+              }}
+            >
+              Create a staff account
+            </Link>
+          </p>
+        </form>
+      </div>
+    </PortalAuth>
   );
 }

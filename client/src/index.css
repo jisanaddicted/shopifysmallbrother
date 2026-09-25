@@ -99,6 +99,14 @@ ol {
   padding: 1.5rem 1rem 4rem;
 }
 
+/* Staff portal entry (/login + /register): full-bleed split screen, the page
+   brings its own background so the container adds nothing. */
+.app-main--portal {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
 .page {
   display: flex;
   flex-direction: column;

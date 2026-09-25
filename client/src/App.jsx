@@ -25,6 +25,8 @@ import { ROLES, ROUTES } from './utils/constants';
 function HomeRedirect() {
   const { isAuthenticated, user, runsStore, homeRoute } = useAuth();
 
+  // Signed out -> the staff portal login (the app entry point: Ronex Mart
+  // login/signup with no navbar). Signed in -> their role home.
   const target = isAuthenticated ? homeRoute : ROUTES.LOGIN;
 
   // Keeps `user`/`runsStore` referenced so the redirect re-runs when the
@@ -61,16 +63,32 @@ function NotFound() {
 export default function App() {
   const location = useLocation();
   const pathname = location.pathname || '';
+  // Portal entry (/login + /register) has NO navbar: split-screen brand panel
+  // + form IS the chrome. Dashboards and storefronts keep hiding it too.
   const hideTopNavbar =
+    pathname === ROUTES.LOGIN ||
+    pathname === ROUTES.REGISTER ||
     pathname.startsWith('/merchant') ||
     pathname.startsWith('/admin') ||
     pathname.startsWith('/s/');
+
+  // The portal is full-bleed (its own background), so drop the centered
+  // .app-main container there just like the dashboards do.
+  const isPortal = pathname === ROUTES.LOGIN || pathname === ROUTES.REGISTER;
 
   return (
     <>
       {hideTopNavbar ? null : <Navbar />}
 
-      <main className={hideTopNavbar ? 'app-main app-main--dash' : 'app-main'}>
+      <main
+        className={
+          isPortal
+            ? 'app-main app-main--portal'
+            : hideTopNavbar
+              ? 'app-main app-main--dash'
+              : 'app-main'
+        }
+      >
         <Routes>
           <Route path={ROUTES.HOME} element={<HomeRedirect />} />
           <Route path={ROUTES.LOGIN} element={<Login />} />
