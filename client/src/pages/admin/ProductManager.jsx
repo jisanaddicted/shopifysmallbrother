@@ -2,13 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
 import productService from '../../services/productService';
-import { formatCurrency, truncate } from '../../utils/formatters';
+import { formatCurrency, formatLocation, truncate } from '../../utils/formatters';
 
 const EMPTY_FORM = {
   name: '',
   price: '',
   category: '',
   stock: '',
+  rack: '',
+  shelf: '',
   image: '',
   description: '',
 };
@@ -33,6 +35,25 @@ export default function ProductManager() {
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  // "Where is it?" box: filters the loaded catalogue by name, category,
+  // description, rack or shelf, so a picker can type A3 and get straight to
+  // that rack. Client-side because every store this account runs is already
+  // loaded - typing must not cost a round trip per keystroke.
+  const [query, setQuery] = useState('');
+
+  // One client-side pass over the products already loaded for the stores this
+  // account runs, matching the same fields as GET /products?search=. This list
+  // is the merchant's own working view, not the public storefront.
+  const visibleProducts = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return products;
+
+    return products.filter((product) =>
+      [product.name, product.category, product.description, product.rack, product.shelf].some(
+        (value) => String(value ?? '').toLowerCase().includes(term),
+      ),
+    );
+  }, [products, query]);
 
   // Default the target store: the primary one from the session.
   useEffect(() => {
@@ -86,6 +107,8 @@ export default function ProductManager() {
       price: String(product.price ?? ''),
       category: product.category || '',
       stock: String(product.stock ?? ''),
+      rack: product.rack || '',
+      shelf: product.shelf || '',
       image: product.image || '',
       description: product.description || '',
     });
@@ -108,6 +131,8 @@ export default function ProductManager() {
       price: Number(form.price) || 0,
       category: form.category.trim(),
       stock: form.stock === '' ? 0 : Number(form.stock),
+      rack: form.rack.trim(),
+      shelf: form.shelf.trim(),
       image: form.image.trim(),
       description: form.description.trim(),
     };
@@ -271,6 +296,37 @@ export default function ProductManager() {
             />
           </label>
 
+          <div className="field-row">
+            <label className="field">
+              <span>Rack</span>
+              <input
+                type="text"
+                name="rack"
+                maxLength={20}
+                value={form.rack}
+                onChange={handleChange}
+                placeholder="A3"
+              />
+            </label>
+
+            <label className="field">
+              <span>Shelf</span>
+              <input
+                type="text"
+                name="shelf"
+                maxLength={20}
+                value={form.shelf}
+                onChange={handleChange}
+                placeholder="2"
+              />
+            </label>
+          </div>
+
+          <p className="muted small">
+            Where the item sits in the shop, so staff can find it on a big
+            order. Both parts are optional.
+          </p>
+
           <label className="field">
             <span>Image URL</span>
             <input
@@ -311,11 +367,30 @@ export default function ProductManager() {
         </form>
 
         <div className="table-wrap">
+          <div className="table-toolbar">
+            <label className="field">
+              <span>Find a product</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Name, category, rack or shelf — e.g. A3"
+              />
+            </label>
+
+            <span className="muted small">
+              {query.trim()
+                ? `${visibleProducts.length} of ${products.length} shown`
+                : `${products.length} product(s)`}
+            </span>
+          </div>
+
           <table className="table">
             <thead>
               <tr>
                 <th>Product</th>
                 <th>Category</th>
+                <th>Location</th>
                 <th>Price</th>
                 <th>Stock</th>
                 <th />
@@ -323,7 +398,7 @@ export default function ProductManager() {
             </thead>
 
             <tbody>
-              {products.map((product) => {
+              {visibleProducts.map((product) => {
                 const id = product._id || product.id;
 
                 return (
@@ -348,6 +423,7 @@ export default function ProductManager() {
                     </td>
 
                     <td>{product.category || '—'}</td>
+                    <td className="muted">{formatLocation(product)}</td>
                     <td>{formatCurrency(product.price)}</td>
                     <td>{product.stock ?? '—'}</td>
 
@@ -375,9 +451,11 @@ export default function ProductManager() {
             </tbody>
           </table>
 
-          {products.length === 0 ? (
+          {visibleProducts.length === 0 ? (
             <p className="empty">
-              No products yet — add your first one on the left.
+              {query.trim()
+                ? `Nothing matches “${query.trim()}”.`
+                : 'No products yet — add your first one on the left.'}
             </p>
           ) : null}
         </div>

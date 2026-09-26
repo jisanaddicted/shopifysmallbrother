@@ -16,6 +16,12 @@ const productSchema = new mongoose.Schema(
       default: 0,
     },
     category: { type: String, trim: true, default: '', index: true },
+    // Where the item physically sits in the shop, so staff can find it in a
+    // big store: the rack/aisle and the shelf (bin) on it. Both optional and
+    // free text - "A3" + "2" and "Chilled" + "Bottom shelf" are both valid
+    // answers, and a takeaway menu never needs either.
+    rack: { type: String, trim: true, maxlength: 20, default: '', index: true },
+    shelf: { type: String, trim: true, maxlength: 20, default: '' },
     // Which merchant this belongs to. Null means a "global" product that only
     // appears on the general /store catalogue, not on any store page.
     store: {
@@ -38,6 +44,17 @@ const productSchema = new mongoose.Schema(
     toObject: { virtuals: true, versionKey: false },
   },
 );
+
+/**
+ * "Rack A3 · Shelf 2" - where to find this product, in one line. Empty when
+ * the merchant has not recorded a location, so the UI can just print it.
+ */
+productSchema.virtual('location').get(function getLocation() {
+  const parts = [];
+  if (this.rack) parts.push(`Rack ${this.rack}`);
+  if (this.shelf) parts.push(`Shelf ${this.shelf}`);
+  return parts.join(' · ');
+});
 
 productSchema.virtual('id').get(function getId() {
   return this._id?.toString();

@@ -207,7 +207,7 @@ no-response network failure into *"Cannot reach the API server at
 | `GET` | `/auth/username-available` | anyone | is a handle free? |
 | `GET` | `/auth/me` | signed in | re-validate token, refresh `stores` + `customerStores` |
 | `PATCH` | `/auth/me` | signed in | edit own name / phone / availability |
-| `GET` | `/products` | anyone | catalogue (`search`, `category`, `page`) |
+| `GET` | `/products` | anyone | catalogue (`search`, `category`, `page`); `search` also matches `rack`/`shelf` |
 | `GET` | `/products/:id` | anyone | one product |
 | `POST` | `/products` | admin / store staff | create (controller checks the product's store is one the caller runs) |
 | `PUT` | `/products/:id` | admin / store staff | update |
@@ -286,6 +286,14 @@ join an order room you own, are delivering, or administer.
 - **Duplicate constants:** `ROLES`, `SOCKET_EVENTS`, order statuses and
   pricing exist in both halves. Changing one means editing
   `client/src/utils/constants.js` *and* `backend/src/utils/constants.js`.
+- **Rack / shelf is how you find a product in a big shop.** A product carries
+  an optional `rack` + `shelf` ("A3" + "2"), both free text, and a `location`
+  virtual that joins them into one line ("Rack A3 · Shelf 2"). They are set in
+  the inventory form (`ProductManager.jsx`), listed in its **Location** column
+  and matched by its *Find a product* box; `GET /products?search=` also matches
+  both, so typing a rack number finds what sits in it. Nothing depends on them —
+  a takeaway menu leaves both blank. `formatLocation()` in
+  `client/src/utils/formatters.js` prints the em dash when they are unset.
 - `backend/.env` is git-ignored; only `.env.example` is committed.
 
 ## File map for AI editors

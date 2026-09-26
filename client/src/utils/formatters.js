@@ -100,6 +100,22 @@ export function formatStatus(status) {
   return ORDER_STATUS_LABELS[status] || String(status).replace(/_/g, ' ');
 }
 
+/**
+ * "Rack A3 · Shelf 2" from a product's location fields, or an em dash when
+ * the merchant has not recorded one. Accepts the whole product or the two
+ * halves on their own.
+ */
+export function formatLocation(product) {
+  const rack = String(product?.rack ?? '').trim();
+  const shelf = String(product?.shelf ?? '').trim();
+
+  const parts = [];
+  if (rack) parts.push(`Rack ${rack}`);
+  if (shelf) parts.push(`Shelf ${shelf}`);
+
+  return parts.length ? parts.join(' · ') : '—';
+}
+
 /** Cut long text and add an ellipsis. */
 export function truncate(text, max = 80) {
   const value = String(text ?? '');

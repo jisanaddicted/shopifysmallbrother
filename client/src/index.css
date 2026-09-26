@@ -1007,6 +1007,21 @@ ol {
   box-shadow: var(--shadow-sm);
 }
 
+/* Filter row above a table (the "find a product" box in the inventory). */
+.table-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.table-toolbar .field {
+  flex: 1 1 18rem;
+  max-width: 24rem;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

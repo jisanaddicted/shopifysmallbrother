@@ -189,22 +189,53 @@ async function main() {
   const storeId = order?.store?._id || order?.store || null;
   let riderUserId = null;
 
-  if (storeId) {
+  // Only a store's own owner manages its roster: a platform admin never assigns
+  // people to stores. The order above landed on whichever product was cheapest
+  // across the whole catalogue, so resolve the owner of *that* store rather than
+  // assuming Joe's Pizza.
+  const ownerTokens = {};
+  for (const email of ['store@example.com', 'grocer@example.com']) {
+    const ownerLogin = await api('POST', '/auth/login', {
+      body: { email, password: 'password123' },
+    });
+    const slug = ownerLogin.data?.store?.slug;
+    if (ownerLogin.data?.token && slug) ownerTokens[slug] = ownerLogin.data.token;
+  }
+  const ownerToken = ownerTokens[order?.store?.slug] || null;
+  check(
+    'the store that took the order has an owner who can sign in',
+    Boolean(ownerToken),
+    String(order?.store?.slug),
+  );
+
+  if (storeId && ownerToken) {
     const riderMe = await api('GET', '/auth/me', { token: sessions.rider });
     riderUserId = riderMe.data?.user?._id || riderMe.data?.user?.id;
 
+    // The rule that replaced the old admin-driven step: a platform admin owns no
+    // store, so they are turned away from somebody else's roster.
+    const adminInvite = await api('POST', `/stores/${storeId}/riders`, {
+      token: sessions.admin,
+      body: { username: 'sam.rider' },
+    });
+    check(
+      'a platform admin cannot invite a rider to a store',
+      adminInvite.status === 403,
+      `got ${why(adminInvite)}`,
+    );
+
     // Clear any binding left by an earlier run so this stays repeatable.
     await api('DELETE', `/stores/${storeId}/riders/${riderUserId}`, {
-      token: sessions.admin,
+      token: ownerToken,
     });
 
     const invite = await api('POST', `/stores/${storeId}/riders`, {
-      token: sessions.admin,
+      token: ownerToken,
       body: { username: 'sam.rider' },
     });
     const requestId = invite.data?.invitation?._id || invite.data?.invitation?.id;
     check(
-      'an admin can invite a rider by username',
+      'the store owner can invite a rider by username',
       (invite.status === 200 || invite.status === 201) && Boolean(requestId),
       `got ${why(invite)}`,
     );
@@ -289,9 +320,10 @@ async function main() {
     check('an involved rider can read the order', riderRead.status === 200, `got ${why(riderRead)}`);
 
     // Unbind again: the later journeys expect this rider NOT to be bound to
-    // whatever store the catalogue order happened to come from.
+    // whatever store the catalogue order happened to come from. Only the store
+    // owner may do this, so it uses the same session as the invite above.
     await api('DELETE', `/stores/${storeId}/riders/${riderUserId}`, {
-      token: sessions.admin,
+      token: ownerToken,
     });
   }
 
@@ -322,7 +354,7 @@ async function main() {
     `got ${saLogin.status}/${saLogin.data?.user?.username}`,
   );
 
-  if (saToken && storeId) {
+  if (saToken && storeId && ownerToken) {
     const card = await api('GET', '/users/lookup?username=sam.rider', {
       token: saToken,
     });
@@ -337,21 +369,23 @@ async function main() {
       JSON.stringify(card.data?.user?.stats || null).slice(0, 140),
     );
 
-    // Re-run friendly: drop any membership left over from an earlier run.
+    // Re-run friendly: drop any membership left over from an earlier run. The
+    // roster belongs to the owner alone, so this uses the owner session resolved
+    // above rather than the platform admin.
     const saMe = await api('GET', '/auth/me', { token: saToken });
     const saUserId = saMe.data?.user?._id || saMe.data?.user?.id;
     await api('DELETE', `/stores/${storeId}/riders/${saUserId}`, {
-      token: sessions.admin,
+      token: ownerToken,
     });
 
     const inviteAdmin = await api('POST', `/stores/${storeId}/riders`, {
-      token: sessions.admin,
+      token: ownerToken,
       body: { username: 'sara.admin', role: 'admin' },
     });
     const adminReqId =
       inviteAdmin.data?.invitation?._id || inviteAdmin.data?.invitation?.id;
     check(
-      'an admin can invite a store admin by username',
+      'the store owner can appoint a store admin by username',
       (inviteAdmin.status === 200 || inviteAdmin.status === 201) &&
         Boolean(adminReqId),
       `got ${inviteAdmin.status} ${JSON.stringify(inviteAdmin.data?.message || null)}`,
@@ -592,10 +626,35 @@ async function main() {
   // --- A merchant manages only their own products -------------------------
   const createdProduct = await api('POST', '/products', {
     token: sessions.merchant,
-    body: { name: `Test Item ${stamp}`, price: 3, category: 'Test', stock: 5 },
+    body: {
+      name: `Test Item ${stamp}`,
+      price: 3,
+      category: 'Test',
+      stock: 5,
+      rack: 'B2',
+      shelf: '4',
+    },
   });
   check('a merchant can add a product', createdProduct.status === 201, `got ${createdProduct.status}`);
   check('the new product is attached to the merchant store', String(createdProduct.data?.product?.store) === String(pizzaStore._id), String(createdProduct.data?.product?.store));
+
+  // Where the item sits in the shop: stored as sent, and printed back as one
+  // line so a picker can read it off the screen.
+  const newProduct = createdProduct.data?.product;
+  check(
+    'a product keeps its rack and shelf',
+    newProduct?.rack === 'B2' && newProduct?.shelf === '4',
+    `rack=${newProduct?.rack} shelf=${newProduct?.shelf}`,
+  );
+  check('a product reports one location line', newProduct?.location === 'Rack B2 · Shelf 4', String(newProduct?.location));
+
+  // "Where is it?" - the catalogue search must match the rack, not just names.
+  const rackSearch = await api('GET', `/products?store=${pizzaStore._id}&search=B2`);
+  check(
+    'a product can be found by its rack number',
+    (rackSearch.data?.products || []).some((p) => String(p._id) === String(newProduct?._id)),
+    `${(rackSearch.data?.products || []).length} hit(s)`,
+  );
 
   const stealAttempt = await api('DELETE', `/products/${grocerProducts[0]._id}`, { token: sessions.merchant });
   check('a merchant cannot delete another store product', stealAttempt.status === 403, `got ${stealAttempt.status}`);

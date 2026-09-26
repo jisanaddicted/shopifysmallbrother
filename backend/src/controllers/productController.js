@@ -87,6 +87,8 @@ function readProductPayload(body = {}) {
     name: String(body.name || '').trim(),
     price: toNumber(body.price, 0),
     category: String(body.category || '').trim(),
+    rack: String(body.rack || '').trim(),
+    shelf: String(body.shelf || '').trim(),
     stock: body.stock === '' || body.stock === undefined ? 0 : toNumber(body.stock, 0),
     image: String(body.image || '').trim(),
     description: String(body.description || '').trim(),
@@ -119,9 +121,17 @@ export const listProducts = asyncHandler(async (req, res) => {
   }
 
   if (search && String(search).trim()) {
-    // Case-insensitive partial match across the fields the storefront searches.
+    // Case-insensitive partial match across the fields the storefront searches
+    // - plus rack and shelf, so typing "A3" finds what sits in rack A3 without
+    // anybody having to remember the product name.
     const term = new RegExp(escapeRegExp(String(search).trim()), 'i');
-    filter.$or = [{ name: term }, { description: term }, { category: term }];
+    filter.$or = [
+      { name: term },
+      { description: term },
+      { category: term },
+      { rack: term },
+      { shelf: term },
+    ];
   }
 
   const [products, total] = await Promise.all([

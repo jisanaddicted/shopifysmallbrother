@@ -151,6 +151,8 @@ export const DEMO_PRODUCTS = [
     category: 'Drinks',
     storeSlug: 'green-grocer',
     stock: 45,
+    rack: 'D2',
+    shelf: '3',
     image: 'https://picsum.photos/seed/smoothie/400/300',
     description: 'Ripe mangoes blended with yoghurt and honey.',
   },
@@ -160,6 +162,8 @@ export const DEMO_PRODUCTS = [
     category: 'Bakery',
     storeSlug: 'green-grocer',
     stock: 25,
+    rack: 'B1',
+    shelf: '1',
     image: 'https://picsum.photos/seed/sourdough/400/300',
     description: 'Naturally leavened, baked fresh every morning.',
   },
@@ -169,6 +173,8 @@ export const DEMO_PRODUCTS = [
     category: 'Bakery',
     storeSlug: 'green-grocer',
     stock: 50,
+    rack: 'B1',
+    shelf: '2',
     image: 'https://picsum.photos/seed/croissant/400/300',
     description: 'Buttery layers with a dark chocolate centre.',
   },
@@ -178,6 +184,8 @@ export const DEMO_PRODUCTS = [
     category: 'Groceries',
     storeSlug: 'green-grocer',
     stock: 20,
+    rack: 'A1',
+    shelf: 'Bottom',
     image: 'https://picsum.photos/seed/vegbox/400/300',
     description: 'Seven seasonal vegetables picked by local farms.',
   },
@@ -190,7 +198,10 @@ export const DEMO_PRODUCTS = [
  *    the login chips never break)
  *  - stores are matched by slug, so their public URL stays stable
  *  - products are matched by name and only attached to their demo store when
- *    they do not already belong to one, so your own edits survive
+ *    they do not already belong to one, so your own edits survive. The demo
+ *    rack/shelf is only filled in on a product that has neither, so a location
+ *    the merchant typed by hand is never overwritten, while an older database
+ *    still grows the demo shelf positions
  *  - memberships are matched by (store, user) and flipped back to `active`,
  *    so the demo store admin always has a dashboard to log into
  */
@@ -198,7 +209,7 @@ export async function seedDemoData() {
   const summary = {
     users: { created: [], updated: [] },
     stores: { created: [], updated: [] },
-    products: { created: 0, linked: 0 },
+    products: { created: 0, linked: 0, located: 0 },
     memberships: { created: [], updated: [] },
   };
 
@@ -273,6 +284,16 @@ export async function seedDemoData() {
         await existing.save();
         summary.products.linked += 1;
       }
+
+      // Same idea for the demo rack/shelf: only fill in a product that has
+      // neither, so an older database grows the shelf locations while a
+      // location the merchant typed by hand is never overwritten.
+      if (spec.rack && !existing.rack && !existing.shelf) {
+        existing.rack = spec.rack;
+        existing.shelf = spec.shelf;
+        await existing.save();
+        summary.products.located += 1;
+      }
       continue;
     }
 
@@ -341,6 +362,7 @@ if (invokedDirectly) {
     console.log(`[seed] stores refreshed: ${summary.stores.updated.join(', ') || 'none'}`);
     console.log(`[seed] products created: ${summary.products.created}`);
     console.log(`[seed] products attached to a store: ${summary.products.linked}`);
+    console.log(`[seed] products given a demo rack/shelf: ${summary.products.located}`);
     console.log(
       `[seed] team memberships created: ${summary.memberships.created.join(', ') || 'none'}`,
     );
