@@ -1168,11 +1168,49 @@ ol {
   font-weight: 700;
 }
 
+.picklist__img {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 9px;
+  background: var(--surface-alt);
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+}
+
+.picklist__img--empty {
+  font-size: 1.1rem;
+}
+
+/* How many of this item the customer ordered - the count a picker must not
+   misread, so the number leads and the word sits under it. */
 .picklist__qty {
   flex: 0 0 auto;
-  min-width: 2.4rem;
-  font-weight: 700;
-  color: var(--ink-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.2rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  line-height: 1.1;
+  text-align: center;
+}
+
+.picklist__qty strong {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.picklist__qty em {
+  font-style: normal;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.8;
 }
 
 .picklist__name {

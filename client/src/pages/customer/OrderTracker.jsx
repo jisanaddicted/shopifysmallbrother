@@ -92,8 +92,11 @@ export default function OrderTracker({ variant = 'customer' }) {
   const pickList = useMemo(() => {
     const rows = (order?.items || []).map((item) => ({
       name: item.name,
-      quantity: item.quantity,
+      quantity: Number(item.quantity) || 0,
       category: item.product?.category || '',
+      // The thumbnail also comes from the live product, so it is dropped along
+      // with the location if the product is deleted - the receipt line stands.
+      image: item.product?.image || '',
       rack: String(item.product?.rack ?? '').trim(),
       shelf: String(item.product?.shelf ?? '').trim(),
       known: Boolean(item.product),
@@ -119,6 +122,10 @@ export default function OrderTracker({ variant = 'customer' }) {
 
   // Anything a picker cannot walk to: no rack, or a product that is gone.
   const unlocated = pickList.filter((row) => !row.rack && !row.shelf);
+
+  // Units across every line, so the header answers "how much am I picking?"
+  // without the reader having to add the column up themselves.
+  const totalUnits = pickList.reduce((sum, row) => sum + row.quantity, 0);
 
   if (loading) {
     return (
@@ -199,7 +206,8 @@ export default function OrderTracker({ variant = 'customer' }) {
           <div className="panel__header">
             <h2 className="panel__title">Pick list</h2>
             <span className="muted small">
-              {pickList.length} line{pickList.length === 1 ? '' : 's'} · walk
+              {pickList.length} line{pickList.length === 1 ? '' : 's'} ·{' '}
+              {totalUnits} item{totalUnits === 1 ? '' : 's'} to collect · walk
               the racks in this order
             </span>
           </div>
@@ -216,7 +224,24 @@ export default function OrderTracker({ variant = 'customer' }) {
                     key={`${row.name}-${row.rack}-${row.shelf}`}
                     className={`picklist__row ${located ? '' : 'picklist__row--unlocated'}`}
                   >
-                    <span className="picklist__qty">× {row.quantity}</span>
+                    {/* The photo, so the picker recognises the item and not just
+                        its name. Falls back to the same bag glyph the catalogue
+                        card uses when a product has no image. */}
+                    {row.image ? (
+                      <img
+                        className="picklist__img"
+                        src={row.image}
+                        alt=""
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span
+                        className="picklist__img picklist__img--empty"
+                        aria-hidden="true"
+                      >
+                        🛍️
+                      </span>
+                    )}
 
                     <span className="picklist__name">
                       <strong>{row.name}</strong>
@@ -226,6 +251,16 @@ export default function OrderTracker({ variant = 'customer' }) {
                       {!row.known ? (
                         <em className="muted small"> — removed from the catalogue</em>
                       ) : null}
+                    </span>
+
+                    {/* How many to put in the bag. Stated in words as well as a
+                        number so a glance is never ambiguous. */}
+                    <span
+                      className="picklist__qty"
+                      title={`${row.quantity} ordered`}
+                    >
+                      <strong>{row.quantity}</strong>
+                      <em>ordered</em>
                     </span>
 
                     {located ? (

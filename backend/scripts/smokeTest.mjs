@@ -572,7 +572,10 @@ async function main() {
   // --- An order placed on a store page belongs to that store --------------
   const storeIdOf = (order) => String(order?.store?._id || order?.store || '');
 
-  const pizzaItem = pizzaProducts[0];
+  // Same hazard as above: a leftover zero-stock fixture could sit first in the
+  // store page, and ordering it would fail before the rider checks ever run.
+  const pizzaItem =
+    pizzaProducts.find((p) => Number(p.stock) >= 1) || pizzaProducts[0];
   const storeOrder = await api('POST', '/orders', {
     token: sessions.customer,
     body: {
@@ -690,6 +693,18 @@ async function main() {
     'the receipt keeps the name and price it was bought at',
     pickLine?.name === newProduct.name && Number(pickLine?.price) === Number(newProduct.price),
     `${pickLine?.name} @ ${pickLine?.price}`,
+  );
+  // The pick list shows a photo so the picker recognises the item, and the
+  // count they must put in the bag.
+  check(
+    'the order line carries the product photo for the pick list',
+    pickLine?.product?.image === newProduct.image,
+    String(pickLine?.product?.image),
+  );
+  check(
+    'the order line carries the ordered quantity',
+    Number(pickLine?.quantity) === 1,
+    String(pickLine?.quantity),
   );
 
   // Re-shelve it. "Where is it?" is a question about now, so the order has to
