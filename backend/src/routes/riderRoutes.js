@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  leaveStore,
   listMyRequests,
   listMyStores,
   respondToRequest,
@@ -24,5 +25,10 @@ router.get('/lookup', requireRole(ROLES.STORE, ROLES.ADMIN), searchRiders);
 router.get('/requests', listMyRequests);
 router.patch('/requests/:id', respondToRequest);
 router.get('/stores', requireRole(ROLES.RIDER), listMyStores);
+// The admin panel's "Remove store" button - drop this account's own
+// store-admin membership. No role gate: an appointed store admin usually
+// keeps their own platform role (often `customer`). Owners get a 403 from
+// the controller - you cannot leave a store you signed up.
+router.delete('/stores/:storeId', leaveStore);
 
 export default router;

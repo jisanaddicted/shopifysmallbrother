@@ -151,6 +151,10 @@ export const respondToRequest = (requestId, action) =>
 export const listMyStores = () =>
   api.get('/riders/stores').then((res) => res.data.stores || []);
 
+/** DELETE /riders/stores/:storeId - drop this account's store-admin membership ("Remove store"). */
+export const leaveStore = (storeId) =>
+  api.delete(`/riders/stores/${storeId}`).then((res) => res.data);
+
 /** GET /orders/pool - unclaimed deliveries from this rider's stores. */
 export const getOrderPool = () =>
   api.get('/orders/pool').then((res) => res.data.orders || []);
@@ -183,6 +187,7 @@ export default {
   listStores,
   listMyRequests,
   respondToRequest,
+  leaveStore,
   listMyStores,
   getOrderPool,
   claimOrder,

@@ -42,6 +42,16 @@ export const DEMO_USERS = [
     role: ROLES.STORE,
   },
   {
+    name: 'Nina Grocer',
+    email: 'grocer@example.com',
+    // Green Grocer's own merchant. The platform admin (ada.admin) never owns
+    // a store - it only runs stores that invited it - so the second demo shop
+    // gets a dedicated owner account.
+    username: 'nina.grocer',
+    phone: '+1 555 010 0600',
+    role: ROLES.STORE,
+  },
+  {
     name: 'Sara Admin',
     email: 'storeadmin@example.com',
     // A store admin: an ordinary account (note the `customer` role) that a
@@ -88,9 +98,11 @@ export const DEMO_STORES = [
   {
     name: 'Green Grocer',
     slug: 'green-grocer',
-    ownerEmail: 'admin@example.com',
+    // Owned by its own demo merchant - never by the platform admin, which
+    // only ever runs stores through invitations (see AdminInvitations).
+    ownerEmail: 'grocer@example.com',
     description: 'Fresh bread, pastries and a weekly veg box.',
-    phone: '+1 555 010 0300',
+    phone: '+1 555 010 0600',
     address: { line1: '5 Riverside Road', city: 'Kathmandu' },
   },
 ];

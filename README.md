@@ -126,15 +126,18 @@ when `AUTO_SEED=true`) and the demo chips on the portal login page
 | `customer@example.com` | — | `customer` | shops at Joe's Pizza |
 | `rider@example.com` | `sam.rider` | `rider` | `/rider` console |
 | `store@example.com` | `joe.merchant` | `store` | owns Joe's Pizza (`/s/joes-pizza`) |
+| `grocer@example.com` | `nina.grocer` | `store` | owns Green Grocer (`/s/green-grocer`) |
 | `storeadmin@example.com` | `sara.admin` | `customer` (!) | accepted store-admin membership at Joe's Pizza → opens `/merchant` |
-| `admin@example.com` | `ada.admin` | `admin` | `/admin` panel; also owns Green Grocer (`/s/green-grocer`) |
+| `admin@example.com` | `ada.admin` | `admin` | `/admin` panel; runs stores only through invitations — **never owns one** |
 
 `sara.admin` is the pattern to copy: a store admin is NOT a special role, it
 is an ordinary account + an accepted `StoreRider{ role: 'admin', status:
 'active' }` row (seeded via `DEMO_MEMBERSHIPS`). The platform admin joins a
 store exactly the same way — a store owner invites `ada.admin` by username,
 the admin accepts under `/admin/invitations` — and the whole panel (Dispatch,
-Products, Theme) is scoped to those stores only.
+Products, Theme) is scoped to those stores only. Each row under **Stores you
+run** has a **Remove store** button (`DELETE /riders/stores/:storeId`) that
+revokes the membership again; the store can re-invite the account later.
 
 ## Session shape (what login/register return)
 

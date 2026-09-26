@@ -9,10 +9,12 @@ import storeService from '../../services/storeService';
  * A store owner invites this account by username ("Invite as store admin"
  * from their dashboard). Every pending invitation lands here; accepting links
  * the store to the account, after which Dispatch, Products and Theme only
- * show that store's data. Declining leaves the account untouched.
+ * show that store's data. Declining leaves the account untouched. Each store
+ * under "Stores you run" carries a Remove store button that drops the
+ * membership again (the store can always invite this account later).
  *
- * The session is re-read after an acceptance so the new store shows up in
- * the sidebar and product lists without a fresh sign-in.
+ * The session is re-read after an acceptance or a removal so the sidebar and
+ * product lists stay correct without a fresh sign-in.
  */
 export default function AdminInvitations() {
   const { user, stores, refreshSession } = useAuth();
@@ -45,6 +47,30 @@ export default function AdminInvitations() {
   useEffect(() => {
     load(true);
   }, [load]);
+
+  // "Remove store" - drop this account's membership at that store. The
+  // session re-read is what actually empties the list: Dispatch, Products and
+  // Theme all scope themselves through the same `stores` list.
+  const removeStore = async (entry) => {
+    const storeId = entry.store?._id || entry.store?.id;
+    if (!storeId) return;
+
+    setBusy(true);
+    setError('');
+    setNotice('');
+
+    try {
+      await storeService.leaveStore(storeId);
+      await refreshSession();
+      setNotice(
+        `${entry.store?.name || 'That store'} was removed — you no longer run it.`,
+      );
+    } catch (err) {
+      setError(err.message || 'Could not remove that store.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const respond = async (requestId, action) => {
     setBusy(true);
@@ -175,14 +201,27 @@ export default function AdminInvitations() {
             {stores.map((entry) => (
               <li key={entry.store?._id || entry.store?.id}>
                 <div className="rider-list__item">
-                  <span className="rider-list__id">
-                    {entry.store?.name || 'A store'}
-                  </span>
-                  <span className="muted small">
-                    {entry.role === 'owner'
-                      ? 'You own this store'
-                      : 'You were appointed as a store admin'}
-                  </span>
+                  <div className="rider-list__row">
+                    <div className="rider-list__main">
+                      <span className="rider-list__id">
+                        {entry.store?.name || 'A store'}
+                      </span>
+                      <span className="muted small">
+                        {entry.role === 'owner'
+                          ? 'You own this store'
+                          : 'You were appointed as a store admin'}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm btn-danger"
+                      disabled={busy}
+                      onClick={() => removeStore(entry)}
+                    >
+                      Remove store
+                    </button>
+                  </div>
                 </div>
               </li>
             ))}

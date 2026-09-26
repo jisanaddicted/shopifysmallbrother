@@ -1170,6 +1170,23 @@ ol {
   margin-left: 0;
 }
 
+/* One line of "stores you run": name + meta on the left, the action button
+   pinned to the right (admin Invitations panel). */
+.rider-list__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.rider-list__row .rider-list__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+  min-width: 0;
+}
+
 .rider-list__id {
   font-weight: 700;
   font-size: 0.9rem;

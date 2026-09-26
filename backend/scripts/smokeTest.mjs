@@ -627,14 +627,15 @@ async function main() {
       `${(boardBefore.data?.orders || []).length} order(s)`,
     );
 
-    if (grocerOrderId) {
-      check(
-        'the admin still sees orders of a store they own',
-        (boardBefore.data?.orders || []).some(
-          (entry) => (entry._id || entry.id) === grocerOrderId,
-        ),
-      );
-    }
+    // The platform admin never owns a store (Green Grocer belongs to its own
+    // demo merchant) - everything in the panel comes from invitations.
+    check(
+      'the admin owns no store of their own',
+      !(adminMe.data?.stores || []).some((entry) => entry.role === 'owner'),
+      `${(adminMe.data?.stores || [])
+        .map((entry) => entry.store?.slug || entry.store?.name)
+        .join(', ') || '(none)'}`,
+    );
 
     const adminReadBefore = await api('GET', `/orders/${storeOrderId}`, {
       token: sessions.admin,
@@ -753,10 +754,84 @@ async function main() {
       (storesAfter.data?.stores || []).some(
         (entry) => String(entry._id) === String(pizzaStore._id),
       ) &&
-        (storesAfter.data?.stores || []).some(
+        // ...and only those: stores the admin does not run (Green Grocer,
+        // owned by another merchant) never show up.
+        !(storesAfter.data?.stores || []).some(
           (entry) => entry.slug === 'green-grocer',
         ),
       `${(storesAfter.data?.stores || []).map((entry) => entry.slug).join(', ')}`,
+    );
+
+    // --- Remove store: the panel button drops the membership again ----------
+    const ownerLeave = await api('DELETE', `/riders/stores/${pizzaStore._id}`, {
+      token: sessions.merchant,
+    });
+    check(
+      'the store owner cannot walk away from their own store',
+      ownerLeave.status === 403,
+      `got ${why(ownerLeave)}`,
+    );
+
+    const riderLeave = await api('DELETE', `/riders/stores/${pizzaStore._id}`, {
+      token: sessions.rider,
+    });
+    check(
+      "a rider's delivery binding is untouched by the admin remove endpoint",
+      riderLeave.status === 404,
+      `got ${why(riderLeave)}`,
+    );
+
+    const badLeave = await api('DELETE', '/riders/stores/not-an-id', {
+      token: sessions.admin,
+    });
+    check('an invalid store id is rejected', badLeave.status === 400, `got ${why(badLeave)}`);
+
+    const leave = await api('DELETE', `/riders/stores/${pizzaStore._id}`, {
+      token: sessions.admin,
+    });
+    check(
+      'the admin can remove an invited store from their panel',
+      leave.status === 200 && leave.data?.removed === true,
+      `got ${why(leave)}`,
+    );
+
+    const leftMe = await api('GET', '/auth/me', { token: sessions.admin });
+    check(
+      'the removed store leaves the admin session',
+      !(leftMe.data?.stores || []).some(
+        (entry) =>
+          entry.store?.slug === 'joes-pizza' ||
+          String(entry.store?._id) === String(pizzaStore._id),
+      ),
+      `${(leftMe.data?.stores || []).map((entry) => entry.store?.slug).join(', ')}`,
+    );
+
+    const boardLeft = await api('GET', '/orders', { token: sessions.admin });
+    check(
+      'the dispatch board closes for a removed store',
+      (boardLeft.data?.orders || []).every(
+        (entry) => String(entry.store?._id || entry.store) !== String(pizzaStore._id),
+      ),
+    );
+
+    const storeListLeft = await api('GET', '/stores', { token: sessions.admin });
+    check(
+      'the theme picker no longer offers the removed store',
+      !(storeListLeft.data?.stores || []).some(
+        (entry) => String(entry._id) === String(pizzaStore._id),
+      ),
+    );
+
+    // Removal is reversible: the store can simply invite this account again
+    // (the revoked row is re-opened, same as re-inviting after a decline).
+    const inviteAgain = await api('POST', `/stores/${pizzaStore._id}/riders`, {
+      token: sessions.merchant,
+      body: { username: 'ada.admin', role: 'admin' },
+    });
+    check(
+      'the store can invite the admin again after a removal',
+      inviteAgain.status === 200 || inviteAgain.status === 201,
+      `got ${why(inviteAgain)}`,
     );
   }
 

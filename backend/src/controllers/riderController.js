@@ -1,6 +1,11 @@
+import mongoose from 'mongoose';
+import Store from '../models/Store.js';
 import StoreRider from '../models/StoreRider.js';
 import { HttpError } from '../middleware/errorHandler.js';
-import { STORE_RIDER_STATUS } from '../utils/constants.js';
+import {
+  STORE_MEMBER_ROLES,
+  STORE_RIDER_STATUS,
+} from '../utils/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 // Store details a rider needs in order to decide.
@@ -65,6 +70,47 @@ export const respondToRequest = asyncHandler(async (req, res) => {
   res.json({ invitation: link });
 });
 
+/**
+ * DELETE /api/riders/stores/:storeId  (self)
+ *
+ * The "Remove store" button in the admin panel: this account drops its own
+ * store-admin membership, so the store disappears from its session - Dispatch,
+ * Products and Theme are all scoped through that same list. Marked `revoked`
+ * rather than deleted (same as the owner-side revoke) so the store can simply
+ * invite this account again later.
+ */
+export const leaveStore = asyncHandler(async (req, res) => {
+  const { storeId } = req.params;
+
+  if (!mongoose.isValidObjectId(storeId)) {
+    throw new HttpError(400, 'That store id is not valid.');
+  }
+
+  const store = await Store.findById(storeId);
+  if (!store) throw new HttpError(404, 'That store does not exist.');
+
+  // Ownership is not a membership row. A platform admin never owns a store -
+  // it only runs invited ones - so this guard exists for the general case
+  // (a store owner trying to walk away from their own shop).
+  if (String(store.owner) === String(req.user._id)) {
+    throw new HttpError(403, 'You own this store, so it cannot be removed.');
+  }
+
+  const link = await StoreRider.findOne({
+    store: store._id,
+    rider: req.user._id,
+    role: STORE_MEMBER_ROLES.ADMIN,
+  });
+
+  if (!link) throw new HttpError(404, 'You do not run that store.');
+
+  link.status = STORE_RIDER_STATUS.REVOKED;
+  link.respondedAt = new Date();
+  await link.save();
+
+  res.json({ removed: true, storeId: String(store._id) });
+});
+
 /** GET /api/riders/stores (rider) - the stores this rider delivers for. */
 export const listMyStores = asyncHandler(async (req, res) => {
   const links = await StoreRider.find({
@@ -79,4 +125,4 @@ export const listMyStores = asyncHandler(async (req, res) => {
   });
 });
 
-export default { listMyRequests, respondToRequest, listMyStores };
+export default { listMyRequests, respondToRequest, leaveStore, listMyStores };
