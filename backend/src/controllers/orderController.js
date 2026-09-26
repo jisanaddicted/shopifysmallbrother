@@ -604,7 +604,12 @@ export const listStoreOrders = asyncHandler(async (req, res) => {
 // Admin
 // ---------------------------------------------------------------------------
 
-/** GET /api/orders?status=&page=&limit= -> { orders } */
+/** GET /api/orders?status=&page=&limit= -> { orders }
+ *
+ * The admin board only ever shows orders of stores this account runs (owned,
+ * or an accepted store-admin invitation) - the same scoping as everything
+ * else in the panel. An admin who runs no store simply sees an empty board.
+ */
 export const listAllOrders = asyncHandler(async (req, res) => {
   const { status } = req.query;
   const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
@@ -613,7 +618,8 @@ export const listAllOrders = asyncHandler(async (req, res) => {
     Math.max(1, Number.parseInt(req.query.limit, 10) || 100),
   );
 
-  const filter = {};
+  const storeIds = await managedStoreIds(req.user);
+  const filter = { store: { $in: storeIds } };
   if (status && status !== 'all' && ORDER_STATUS_VALUES.includes(status)) {
     filter.status = status;
   }

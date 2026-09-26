@@ -242,7 +242,9 @@ export const ROUTES = {
   MERCHANT_RIDERS: '/merchant/riders',
   MERCHANT_THEME: '/merchant/theme',  ADMIN_DASHBOARD: '/admin',
   ADMIN_PRODUCTS: '/admin/products',
-  ADMIN_STORES: '/admin/stores',
+  // Store->admin invitations: the admin accepts/declines stores that asked
+  // them to help run them (replaces the old admin-only Stores tab).
+  ADMIN_INVITATIONS: '/admin/invitations',
   ADMIN_THEME: '/admin/theme',
   PROFILE: '/profile',
   // A customer's own profile INSIDE their store: /s/<slug>/profile (see

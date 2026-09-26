@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import storeService from '../../services/storeService';
 import { HOME_ROUTE_BY_ROLE, ROUTES } from '../../utils/constants';
 import { initials } from '../../utils/formatters';
 
@@ -10,16 +11,43 @@ import { initials } from '../../utils/formatters';
  * admin get a persistent left rail instead of top links.
  *
  * variant="merchant" -> My store, Products, Rider tracker, Theme
- * variant="admin"    -> Dispatch, Products, Stores, Theme
+ * variant="admin"    -> Dispatch, Products, Invitations, Theme
+ *
+ * The admin rail shows a count badge on Invitations while a store is waiting
+ * for an answer (refreshed on every navigation, so accepting from the page
+ * clears it).
  *
  * The profile avatar lives in the top-right corner of the content topbar
  * (not in the sidebar). On small screens the rail collapses behind a
  * hamburger in that same topbar.
  */
 export default function DashboardLayout({ variant = 'merchant' }) {
-  const { user, logout } = useAuth();
+  const { user, logout, stores } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
+  // Pending store invitations addressed to this admin account.
+  const [pendingInvites, setPendingInvites] = useState(0);
+
+  const isAdmin = variant === 'admin';
+
+  const loadPendingInvites = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const requests = await storeService.listMyRequests();
+      setPendingInvites(
+        requests.filter((request) => request.role === 'admin').length,
+      );
+    } catch {
+      // The badge is decoration - never block the shell on it.
+    }
+  }, [isAdmin]);
+
+  // Re-check on navigation AND whenever the session's store list changes -
+  // accepting an invitation refreshes it, which clears the badge right away.
+  useEffect(() => {
+    loadPendingInvites();
+  }, [loadPendingInvites, location.pathname, stores]);
 
   const handleLogout = () => {
     logout();
@@ -40,7 +68,14 @@ export default function DashboardLayout({ variant = 'merchant' }) {
     : [
         { to: ROUTES.ADMIN_DASHBOARD, label: 'Dispatch', icon: '🧭', end: true },
         { to: ROUTES.ADMIN_PRODUCTS, label: 'Products', icon: '📦', end: false },
-        { to: ROUTES.ADMIN_STORES, label: 'Stores', icon: '🏬', end: false },
+        // Stores invite this admin by username; the answer happens here.
+        {
+          to: ROUTES.ADMIN_INVITATIONS,
+          label: 'Invitations',
+          icon: '✉️',
+          end: false,
+          badge: pendingInvites,
+        },
         { to: ROUTES.ADMIN_THEME, label: 'Theme', icon: '🎨', end: false },
       ];
 
@@ -95,6 +130,15 @@ export default function DashboardLayout({ variant = 'merchant' }) {
             >
               <span aria-hidden="true">{link.icon}</span>
               {link.label}
+              {link.badge > 0 ? (
+                <span
+                  className="badge badge--warn"
+                  style={{ marginLeft: 'auto' }}
+                  title={`${link.badge} pending invitation(s)`}
+                >
+                  {link.badge}
+                </span>
+              ) : null}
             </NavLink>
           ))}
         </nav>

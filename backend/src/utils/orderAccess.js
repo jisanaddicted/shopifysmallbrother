@@ -5,7 +5,9 @@ import { ROLES } from './constants.js';
  * Who may see / act on an order:
  *   - the customer who placed it
  *   - the rider it is assigned to
- *   - any admin
+ *   - a member of the order's store: its owner or an accepted store admin -
+ *     including a platform admin, who qualifies only through the stores they
+ *     actually run (owned, or an accepted invitation) and never platform-wide.
  *   - a rider bound (active invitation) to the order's store, while the order
  *     is still unclaimed - that is the "available deliveries" pool. Once
  *     another rider takes it, this rule stops applying (order.rider is set).
@@ -14,7 +16,6 @@ import { ROLES } from './constants.js';
  */
 export function canAccessOrder(order, user, boundStoreIds = [], memberStoreIds = []) {
   if (!order) return false;
-  if (user?.role === ROLES.ADMIN) return true;
 
   const userId = user ? String(user._id) : null;
 

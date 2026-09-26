@@ -191,13 +191,17 @@ export const updateMyStore = asyncHandler(async (req, res) => {
   res.json({ store });
 });
 
-/** GET /api/stores (admin) - every merchant on the platform. */
+/**
+ * GET /api/stores (admin) - every store this account runs.
+ *
+ * The panel is scoped to owned stores plus accepted invitations (see
+ * storesForUser), so this feeds the Theme editor's store picker with exactly
+ * the stores the admin may work on - nothing platform-wide anymore.
+ */
 export const listStores = asyncHandler(async (req, res) => {
-  const stores = await Store.find()
-    .sort({ createdAt: -1 })
-    .populate('owner', 'name email username');
+  const entries = await storesForUser(req.user);
 
-  res.json({ stores });
+  res.json({ stores: entries.map((entry) => entry.store) });
 });
 
 /**

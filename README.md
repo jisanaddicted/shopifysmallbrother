@@ -131,7 +131,10 @@ when `AUTO_SEED=true`) and the demo chips on the portal login page
 
 `sara.admin` is the pattern to copy: a store admin is NOT a special role, it
 is an ordinary account + an accepted `StoreRider{ role: 'admin', status:
-'active' }` row (seeded via `DEMO_MEMBERSHIPS`).
+'active' }` row (seeded via `DEMO_MEMBERSHIPS`). The platform admin joins a
+store exactly the same way — a store owner invites `ada.admin` by username,
+the admin accepts under `/admin/invitations` — and the whole panel (Dispatch,
+Products, Theme) is scoped to those stores only.
 
 ## Session shape (what login/register return)
 
@@ -177,8 +180,9 @@ is an ordinary account + an accepted `StoreRider{ role: 'admin', status:
 - Guards (`backend/src/middleware/auth.js`): `requireAuth` (Bearer token →
   fresh `req.user`, so role changes apply immediately), `optionalAuth` (guests
   continue as `req.user === null` for guest checkout), `requireRole(...)`,
-  `requireStoreStaff` (owner OR accepted store-admin membership OR platform
-  admin — never a plain role check), `requireProductManager`.
+  `requireStoreStaff` (owner OR accepted store-admin membership — a platform
+  admin only through the stores they run, never a plain role check),
+  `requireProductManager`.
 
 ## API
 
@@ -207,14 +211,12 @@ no-response network failure into *"Cannot reach the API server at
 | `DELETE` | `/products/:id` | admin / store staff | remove |
 | `POST` | `/orders` | customer or guest | place an order (server re-prices; guests get a one-time `guestToken`) |
 | `GET` | `/orders/mine` | customer | own order history |
-| `GET` | `/orders/:id` | customer / assigned rider / admin | one order (guests: `?guestToken=`) |
+| `GET` | `/orders/:id` | customer / assigned rider / store member (incl. admin of that store) | one order (guests: `?guestToken=`) |
 | `PATCH` | `/orders/:id/cancel` | customer | cancel before pickup |
 | `GET` | `/orders/rider/assigned` | rider | this rider's deliveries |
-| `PATCH` | `/orders/:id/status` | assigned rider / admin | advance the status (happy-path order enforced) |
+| `PATCH` | `/orders/:id/status` | assigned rider / store member (admin of that store) | advance the status (happy-path order enforced) |
 | `PATCH` | `/orders/:id/location` | assigned rider | GPS fallback ping |
-| `GET` | `/orders` | admin | dispatch board (`status`, `page`) |
-| `PATCH` | `/orders/:id/assign` | admin | assign / unassign a rider |
-| `GET` | `/admin/riders` | admin | riders for the dispatch dropdown |
+| `GET` | `/orders` | admin | dispatch board (`status`, `page`) — only orders of stores the admin runs |
 
 Stores / riders / menus / users live under `/stores`, `/riders`, `/menu`,
 `/users`, `/admin` — read `backend/src/routes/*.js` plus the matching
@@ -298,7 +300,7 @@ client/src/
   pages/customer/            Storefront.jsx, ShopPage.jsx, Checkout.jsx, OrderTracker.jsx
   pages/rider/RiderConsole.jsx
   pages/store/MerchantDashboard.jsx
-  pages/admin/               AdminDashboard.jsx, AdminStores.jsx, ProductManager.jsx
+  pages/admin/               AdminDashboard.jsx, AdminInvitations.jsx, ProductManager.jsx
 backend/src/
   controllers/authController.js  register/login/me/updateMe/usernameAvailable
   routes/authRoutes.js           POST /register + /login, GET /username-available + /me, PATCH /me
@@ -307,7 +309,7 @@ backend/src/
                                  Product.js, Order.js
   utils/constants.js             ROLES, SELF_SIGNUP_ROLES, statuses (mirror of client!)
   utils/jwt.js                   signToken { sub, role } / verifyToken / bearerFromHeader
-  utils/storeAccess.js           storesForUser, loadManageableStore (owner/admin/platform)
+  utils/storeAccess.js           storesForUser, loadManageableStore (owner / accepted admin)
   utils/storeCustomer.js         ensureStoreCustomer, customerStoresFor
   seed.js                        DEMO_USERS / DEMO_STORES / DEMO_MEMBERSHIPS / DEMO_PRODUCTS
 ```

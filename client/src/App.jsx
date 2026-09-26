@@ -7,7 +7,7 @@ import CustomerRegister from './pages/auth/CustomerRegister';
 import CartDrawer from './components/store/CartDrawer';
 import { useAuth } from './context/AuthContext';
 import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminStores from './pages/admin/AdminStores';
+import AdminInvitations from './pages/admin/AdminInvitations';
 import ProductManager from './pages/admin/ProductManager';
 
 import Login from './pages/auth/Login';
@@ -173,7 +173,7 @@ export default function App() {
               element={<AdminDashboard />}
             />
             <Route path={ROUTES.ADMIN_PRODUCTS} element={<ProductManager />} />
-            <Route path={ROUTES.ADMIN_STORES} element={<AdminStores />} />
+            <Route path={ROUTES.ADMIN_INVITATIONS} element={<AdminInvitations />} />
             <Route path={ROUTES.ADMIN_THEME} element={<ThemeBuilder />} />
           </Route>
 

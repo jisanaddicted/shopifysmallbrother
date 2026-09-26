@@ -14,10 +14,10 @@ const EMPTY_FORM = {
 };
 
 export default function ProductManager() {
-  const { user, stores, storeRole } = useAuth();
-  // Platform admins manage every catalogue; a store owner or an appointed
-  // store admin only ever sees and edits the store(s) they run.
-  const isPlatformAdmin = user?.role === 'admin';
+  const { stores, storeRole } = useAuth();
+  // Every catalogue editor - store owner, appointed store admin, or platform
+  // admin through an accepted invitation - only ever sees and edits the
+  // store(s) they run.
   const memberStores = useMemo(
     () => (stores || []).map((entry) => entry.store).filter(Boolean),
     [stores],
@@ -36,39 +36,34 @@ export default function ProductManager() {
 
   // Default the target store: the primary one from the session.
   useEffect(() => {
-    if (!isPlatformAdmin && memberStores.length && !storeId) {
+    if (memberStores.length && !storeId) {
       setStoreId(String(memberStores[0]._id || memberStores[0].id));
     }
-  }, [isPlatformAdmin, memberStores, storeId]);
+  }, [memberStores, storeId]);
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      if (isPlatformAdmin) {
-        const list = await productService.getProducts();
-        setProducts(Array.isArray(list) ? list : []);
-      } else {
-        // One call per store they run, merged newest-first. The backend also
-        // re-checks every write, so this list is only ever a convenience.
-        const lists = await Promise.all(
-          memberStores.map((store) =>
-            productService.getProducts({ store: store._id || store.id }),
-          ),
-        );
-        setProducts(
-          lists
-            .flat()
-            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-        );
-      }
+      // One call per store they run, merged newest-first. The backend also
+      // re-checks every write, so this list is only ever a convenience.
+      const lists = await Promise.all(
+        memberStores.map((store) =>
+          productService.getProducts({ store: store._id || store.id }),
+        ),
+      );
+      setProducts(
+        lists
+          .flat()
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+      );
     } catch (err) {
       setError(err.message || 'Could not load the inventory.');
     } finally {
       setLoading(false);
     }
-  }, [isPlatformAdmin, memberStores]);
+  }, [memberStores]);
 
   useEffect(() => {
     loadProducts();
@@ -119,7 +114,7 @@ export default function ProductManager() {
 
     // A member running several stores must say which one; the backend pins
     // the product for anybody with a single store.
-    if (!isPlatformAdmin && memberStores.length > 1 && storeId) {
+    if (memberStores.length > 1 && storeId) {
       payload.storeId = storeId;
     }
 
@@ -183,8 +178,8 @@ export default function ProductManager() {
         <div>
           <h1>Inventory</h1>
           <p className="muted">
-            {isPlatformAdmin
-              ? `${products.length} products across every store`
+            {memberStores.length === 0
+              ? 'No store is linked to this account yet — accept a store invitation to manage its catalogue.'
               : `${products.length} products in ${memberStores.length > 1 ? 'your stores' : memberStores[0]?.name || 'your store'}`}
             {storeRole === 'admin' ? ' · you were appointed as a store admin' : ''}
           </p>
@@ -208,7 +203,7 @@ export default function ProductManager() {
             {editingId ? 'Edit product' : 'Add a product'}
           </h2>
 
-          {!isPlatformAdmin && memberStores.length > 1 ? (
+          {memberStores.length > 1 ? (
             <label className="field">
               <span>Store</span>
               <select

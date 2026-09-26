@@ -129,7 +129,7 @@ export const removeStoreRider = (storeId, riderId) =>
 // Admin
 // ---------------------------------------------------------------------------
 
-/** GET /stores (admin) - every merchant on the platform. */
+/** GET /stores (admin) - the stores this account runs (scoped, not platform-wide). */
 export const listStores = () =>
   api.get('/stores').then((res) => res.data.stores || []);
 

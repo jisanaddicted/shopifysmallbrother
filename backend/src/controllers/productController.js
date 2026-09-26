@@ -2,7 +2,6 @@ import mongoose from 'mongoose';
 import Product from '../models/Product.js';
 import Store from '../models/Store.js';
 import { HttpError } from '../middleware/errorHandler.js';
-import { ROLES } from '../utils/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { slugify } from '../utils/slug.js';
 import { managedStoreIds, storesForUser } from '../utils/storeAccess.js';
@@ -26,26 +25,11 @@ async function storesFor(req) {
  *
  * Somebody who runs exactly one store does not have to say - it is pinned for
  * them. Somebody who runs several has to name one, and it must be a store they
- * actually run; that is what stops a store admin from planting a product in
- * another merchant's catalogue.
- *
- * A platform admin (canChooseAny) may leave it empty to create a "global"
- * product that only shows up on the general catalogue.
+ * actually run; that is what stops a member from planting a product in
+ * another merchant's catalogue. A platform admin resolves the same way now -
+ * naming a store they run, or letting the single-store default pin it.
  */
-async function pickTargetStore({ requestedId, stores, canChooseAny }) {
-  if (canChooseAny) {
-    if (!requestedId) return null;
-
-    if (!mongoose.isValidObjectId(requestedId)) {
-      throw new HttpError(400, 'That store id is not valid.');
-    }
-
-    const exists = await Store.exists({ _id: requestedId });
-    if (!exists) throw new HttpError(404, 'That store does not exist.');
-
-    return requestedId;
-  }
-
+async function pickTargetStore({ requestedId, stores }) {
   const allowed = stores.map((entry) => String(entry.store._id));
 
   if (requestedId) {
@@ -58,7 +42,10 @@ async function pickTargetStore({ requestedId, stores, canChooseAny }) {
   if (allowed.length === 1) return allowed[0];
 
   if (allowed.length === 0) {
-    throw new HttpError(400, 'Create your store before adding products.');
+    throw new HttpError(
+      400,
+      'No store is linked to your account. Accept a store invitation before adding products.',
+    );
   }
 
   throw new HttpError(
@@ -68,9 +55,10 @@ async function pickTargetStore({ requestedId, stores, canChooseAny }) {
 }
 
 /**
- * Loads a product the caller may edit. A platform admin may edit any product;
- * everybody else must run the store it belongs to - as its owner, or as an
- * accepted store admin for it.
+ * Loads a product the caller may edit. Everybody must run the store it belongs
+ * to - as its owner, or as an accepted store admin for it. A platform admin
+ * qualifies exactly the same way: through the stores they actually run, never
+ * platform-wide.
  */
 async function loadEditableProduct(productId, user) {
   if (!mongoose.isValidObjectId(productId)) {
@@ -79,8 +67,6 @@ async function loadEditableProduct(productId, user) {
 
   const product = await Product.findById(productId);
   if (!product) throw new HttpError(404, 'That product does not exist.');
-
-  if (user.role === ROLES.ADMIN) return product;
 
   const allowed = await managedStoreIds(user);
   if (!product.store || !allowed.map(String).includes(String(product.store))) {
@@ -163,42 +149,49 @@ export const getProduct = asyncHandler(async (req, res) => {
 });
 
 /**
- * POST /api/products (platform admin, store owner, or the store admins that
- * owner appointed) -> { product }
+ * POST /api/products (store owner, or the store admins that owner appointed;
+ * a platform admin through the stores they run) -> { product }
  *
- * A store member's product is always pinned to a store they run, so a crafted
- * request cannot drop inventory into somebody else's catalogue.
+ * A member's product is always pinned to a store they run, so a crafted
+ * request cannot drop inventory into somebody else's catalogue - the platform
+ * admin included.
  */
 export const createProduct = asyncHandler(async (req, res) => {
   const payload = readProductPayload(req.body);
 
   if (!payload.name) throw new HttpError(400, 'A product needs a name.');
 
-  const isPlatformAdmin = req.user.role === ROLES.ADMIN;
-
   payload.store = await pickTargetStore({
     requestedId: req.body?.storeId,
-    stores: isPlatformAdmin ? [] : await storesFor(req),
-    canChooseAny: isPlatformAdmin,
+    stores: await storesFor(req),
   });
 
   const product = await Product.create(payload);
   res.status(201).json({ product });
 });
 
-/** PUT /api/products/:id (platform admin, or a store member of its store) */
+/** PUT /api/products/:id (a member of its store, platform admin included) */
 export const updateProduct = asyncHandler(async (req, res) => {
   const product = await loadEditableProduct(req.params.id, req.user);
   const payload = readProductPayload(req.body);
 
   if (!payload.name) throw new HttpError(400, 'A product needs a name.');
 
-  // Only an admin may move a product to a different store.
-  if (req.user.role === ROLES.ADMIN && req.body?.storeId !== undefined) {
-    if (req.body.storeId && !mongoose.isValidObjectId(req.body.storeId)) {
+  // Moving a product between stores only works for stores the caller runs, so
+  // this can never plant a product in somebody else's catalogue - the platform
+  // admin included. A null/missing storeId is ignored: unhooking a product
+  // from every store is no longer a power anybody has.
+  if (req.body?.storeId) {
+    if (!mongoose.isValidObjectId(req.body.storeId)) {
       throw new HttpError(400, 'That store id is not valid.');
     }
-    product.store = req.body.storeId || null;
+
+    const allowed = await managedStoreIds(req.user);
+    if (!allowed.map(String).includes(String(req.body.storeId))) {
+      throw new HttpError(403, 'That store does not belong to you.');
+    }
+
+    product.store = req.body.storeId;
   }
 
   Object.assign(product, payload);

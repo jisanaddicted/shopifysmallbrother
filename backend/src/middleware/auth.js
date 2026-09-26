@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import User from '../models/User.js';
 import { bearerFromHeader, verifyToken } from '../utils/jwt.js';
 import { storesForUser } from '../utils/storeAccess.js';
-import { ROLES } from '../utils/constants.js';
 import { HttpError } from './errorHandler.js';
 
 /**
@@ -131,17 +130,13 @@ export function requireRole(...roles) {
  * The resolved memberships are attached to `req.stores` so the controller does
  * not have to ask the database the same question twice.
  *
- * Platform admins pass through - they supervise every store. A caller who runs
- * no store at all is rejected before anything is queried.
+ * A platform admin goes through the very same membership test: they only pass
+ * for stores they run (owned, or an accepted invitation). One who runs no
+ * store at all is rejected before anything is queried.
  */
 export function requireStoreStaff(req, res, next) {
   if (!req.user) {
     return next(new HttpError(401, 'You need to sign in to do that.'));
-  }
-
-  if (req.user.role === ROLES.ADMIN) {
-    req.stores = [];
-    return next();
   }
 
   return storesForUser(req.user)
@@ -163,15 +158,11 @@ export function requireStoreStaff(req, res, next) {
 
 /**
  * The catalogue editors: platform admins, store owners and the store admins
- * they appointed. The controller still checks that the product belongs to a
- * store the caller runs, so this is only the first of two gates.
+ * they appointed - all resolved through the stores they actually run. The
+ * controller still checks that the product belongs to a store in that list,
+ * so this is only the first of two gates.
  */
 export function requireProductManager(req, res, next) {
-  if (req.user?.role === ROLES.ADMIN) {
-    req.stores = [];
-    return next();
-  }
-
   return requireStoreStaff(req, res, next);
 }
 

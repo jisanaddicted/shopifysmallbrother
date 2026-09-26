@@ -3,7 +3,6 @@ import Store from '../models/Store.js';
 import StoreRider from '../models/StoreRider.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import {
-  ROLES,
   STORE_MEMBER_ROLES,
   STORE_RIDER_STATUS,
 } from './constants.js';
@@ -17,7 +16,10 @@ import {
  *   - a STORE ADMIN: somebody the owner invited by username and who accepted.
  *     They keep their own platform role (usually `customer`) and get access
  *     through their StoreRider row, never through their role.
- *   - a PLATFORM ADMIN (role `admin`), who supervises every store.
+ *   - a PLATFORM ADMIN (role `admin`), but ONLY for a store they own or were
+ *     themselves invited to run - there is no platform-wide pass anymore. The
+ *     invitation flow (store invites the admin by username, the admin accepts
+ *     in the panel) is what puts stores in front of an admin account.
  *
  * Roles are compared as strings throughout, so a store admin who happens to be
  * a `customer` or a `rider` is handled without a special case anywhere else.
@@ -100,6 +102,9 @@ export async function managedStoreIds(user) {
  * Loads a store the caller is allowed to manage, or throws the right
  * 400/403/404. Returns `{ store, role }` - `role` tells the caller whether
  * they own it (full control) or only help run it.
+ *
+ * A platform admin resolves through the same two tests as everybody else
+ * (owner, then accepted membership) - no platform-wide pass.
  */
 export async function loadManageableStore(storeId, user) {
   if (!mongoose.isValidObjectId(storeId)) {
@@ -108,10 +113,6 @@ export async function loadManageableStore(storeId, user) {
 
   const store = await Store.findById(storeId);
   if (!store) throw new HttpError(404, 'That store does not exist.');
-
-  if (user.role === ROLES.ADMIN) {
-    return { store, role: STORE_ROLES.PLATFORM };
-  }
 
   if (isStoreOwner(user, store)) {
     return { store, role: STORE_ROLES.OWNER };

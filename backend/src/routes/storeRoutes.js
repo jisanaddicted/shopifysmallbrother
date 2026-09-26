@@ -30,7 +30,8 @@ router.get('/mine', requireAuth, requireStoreStaff, getMyStore);
 router.get('/mine/all', requireAuth, requireStoreStaff, listMyMerchantStores);
 router.patch('/mine', requireAuth, requireStoreStaff, updateMyStore);
 
-// Every merchant on the platform (admin only).
+// Every store this account runs (admin: owned + accepted invitations; feeds
+// the Theme editor's store picker).
 router.get('/', requireAuth, requireRole(ROLES.ADMIN), listStores);
 
 // --- Rider roster: only the store owner manages their own team. A store admin

@@ -14,9 +14,9 @@ const router = Router();
 router.get('/', listProducts);
 router.get('/:id', getProduct);
 
-// The catalogue editors: platform admins (any product), store owners and the
-// store admins those owners appointed (their own store's products only - the
-// controller refuses anything that belongs to another store).
+// The catalogue editors: store owners, the store admins those owners
+// appointed, and platform admins - all resolved through the stores they run
+// (the controller refuses anything that belongs to another store).
 const manageProducts = requireProductManager;
 router.post('/', requireAuth, manageProducts, createProduct);
 router.put('/:id', requireAuth, manageProducts, updateProduct);

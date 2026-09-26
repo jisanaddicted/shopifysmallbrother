@@ -603,6 +603,163 @@ async function main() {
   const ownDelete = await api('DELETE', `/products/${createdProduct.data?.product?._id}`, { token: sessions.merchant });
   check('a merchant can delete their own product', ownDelete.status === 200, `got ${ownDelete.status}`);
 
+  // --- Store -> admin invitation: accept/decline + panel scoping -----------
+  // A store owner invites the platform admin by username; the admin answers
+  // from the panel (GET/PATCH /riders/requests). Until an invitation is
+  // accepted, the admin's dispatch board and store list must not contain that
+  // store's data at all - the panel is scoped to stores the admin runs.
+  if (sessions.admin && sessions.merchant && pizzaStore?._id && storeOrderId) {
+    const adminMe = await api('GET', '/auth/me', { token: sessions.admin });
+    const adminUserId = adminMe.data?.user?._id || adminMe.data?.user?.id;
+
+    // Re-run friendly: revoke the membership an earlier run may have left.
+    await api('DELETE', `/stores/${pizzaStore._id}/riders/${adminUserId}`, {
+      token: sessions.merchant,
+    });
+
+    const boardBefore = await api('GET', '/orders', { token: sessions.admin });
+    check(
+      'the admin board starts out without the invited store',
+      (boardBefore.data?.orders || []).every(
+        (entry) =>
+          String(entry.store?._id || entry.store) !== String(pizzaStore._id),
+      ),
+      `${(boardBefore.data?.orders || []).length} order(s)`,
+    );
+
+    if (grocerOrderId) {
+      check(
+        'the admin still sees orders of a store they own',
+        (boardBefore.data?.orders || []).some(
+          (entry) => (entry._id || entry.id) === grocerOrderId,
+        ),
+      );
+    }
+
+    const adminReadBefore = await api('GET', `/orders/${storeOrderId}`, {
+      token: sessions.admin,
+    });
+    check(
+      "the admin cannot open that store's order before accepting",
+      adminReadBefore.status === 403,
+      `got ${why(adminReadBefore)}`,
+    );
+
+    const inviteAdmin = await api('POST', `/stores/${pizzaStore._id}/riders`, {
+      token: sessions.merchant,
+      body: { username: 'ada.admin', role: 'admin' },
+    });
+    const adminInviteId =
+      inviteAdmin.data?.invitation?._id || inviteAdmin.data?.invitation?.id;
+    check(
+      'a store owner can invite the platform admin by username',
+      (inviteAdmin.status === 200 || inviteAdmin.status === 201) &&
+        Boolean(adminInviteId),
+      `got ${why(inviteAdmin)}`,
+    );
+
+    const adminRequests = await api('GET', '/riders/requests', {
+      token: sessions.admin,
+    });
+    check(
+      'the admin sees the pending store invitation in the panel',
+      (adminRequests.data?.requests || []).some(
+        (request) =>
+          (request._id || request.id) === adminInviteId &&
+          request.role === 'admin' &&
+          request.store?.slug === 'joes-pizza',
+      ),
+      `${(adminRequests.data?.requests || []).length} request(s)`,
+    );
+
+    const declined = await api('PATCH', `/riders/requests/${adminInviteId}`, {
+      token: sessions.admin,
+      body: { action: 'decline' },
+    });
+    check(
+      'the admin can decline the invitation',
+      declined.status === 200 &&
+        declined.data?.invitation?.status !== 'active',
+      `got ${why(declined)}`,
+    );
+
+    const boardStillClosed = await api('GET', '/orders', {
+      token: sessions.admin,
+    });
+    check(
+      'a declined invitation does not open the dispatch board',
+      (boardStillClosed.data?.orders || []).every(
+        (entry) =>
+          String(entry.store?._id || entry.store) !== String(pizzaStore._id),
+      ),
+    );
+
+    // Re-inviting re-opens the declined row, so the accept half can run.
+    const reinviteAdmin = await api(
+      'POST',
+      `/stores/${pizzaStore._id}/riders`,
+      { token: sessions.merchant, body: { username: 'ada.admin', role: 'admin' } },
+    );
+    check(
+      'the store can re-invite after a decline',
+      reinviteAdmin.status === 200 || reinviteAdmin.status === 201,
+      `got ${why(reinviteAdmin)}`,
+    );
+
+    const acceptedInvite = await api(
+      'PATCH',
+      `/riders/requests/${adminInviteId}`,
+      { token: sessions.admin, body: { action: 'accept' } },
+    );
+    check(
+      'the admin accepts the store invitation',
+      acceptedInvite.status === 200 &&
+        acceptedInvite.data?.invitation?.status === 'active',
+      `got ${why(acceptedInvite)}`,
+    );
+
+    const afterMe = await api('GET', '/auth/me', { token: sessions.admin });
+    check(
+      'the accepted store joins the admin session',
+      (afterMe.data?.stores || []).some(
+        (entry) =>
+          entry.store?.slug === 'joes-pizza' ||
+          String(entry.store?._id) === String(pizzaStore._id),
+      ),
+      `${(afterMe.data?.stores || []).length} store(s)`,
+    );
+
+    const boardAfter = await api('GET', '/orders', { token: sessions.admin });
+    check(
+      "the dispatch board now includes that store's orders",
+      (boardAfter.data?.orders || []).some(
+        (entry) => (entry._id || entry.id) === storeOrderId,
+      ),
+      `${(boardAfter.data?.orders || []).length} order(s)`,
+    );
+
+    const adminReadAfter = await api('GET', `/orders/${storeOrderId}`, {
+      token: sessions.admin,
+    });
+    check(
+      'the admin can open the accepted store order',
+      adminReadAfter.status === 200,
+      `got ${why(adminReadAfter)}`,
+    );
+
+    const storesAfter = await api('GET', '/stores', { token: sessions.admin });
+    check(
+      'the admin store list feeds the theme picker with accepted stores',
+      (storesAfter.data?.stores || []).some(
+        (entry) => String(entry._id) === String(pizzaStore._id),
+      ) &&
+        (storesAfter.data?.stores || []).some(
+          (entry) => entry.slug === 'green-grocer',
+        ),
+      `${(storesAfter.data?.stores || []).map((entry) => entry.slug).join(', ')}`,
+    );
+  }
+
   // --- Summary -------------------------------------------------------------
   console.log(`\n${passed} passed, ${failures.length} failed`);
 
