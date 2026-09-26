@@ -16,7 +16,19 @@ import {
   formatStatus,
 } from '../../utils/formatters';
 
-export default function OrderTracker() {
+/**
+ * The read-only view of a single order: live map, progress timeline, items,
+ * rider and drop-off address.
+ *
+ * variant="customer" (default) - what a buyer or a guest watches, reached at
+ *   /track/:orderId. Wide padding, and a way back to the shop.
+ * variant="admin" - the very same details opened from the admin panel's order
+ *   board at /admin/orders/:orderId. It renders *inside* <DashboardLayout>, so
+ *   the side rail stays put; only the padding, the wording and the "back"
+ *   target differ. Nothing is duplicated for the back office.
+ */
+export default function OrderTracker({ variant = 'customer' }) {
+  const isAdmin = variant === 'admin';
   const { orderId } = useParams();
   const { joinOrder, leaveOrder, getRiderLocation, statusUpdates, connected } =
     useSocket();
@@ -71,18 +83,68 @@ export default function OrderTracker() {
     }));
   }, [status]);
 
-  if (loading) return <LoadingSpinner fullPage label="Loading your order…" />;
+  // Picker's list for the back office: what to collect, in the order to walk
+  // the shop. The rack/shelf comes from the *live* product that the API
+  // populates onto each line (`items.product`), so a product re-shelved after
+  // checkout still points at its new home. Lines whose product has since been
+  // deleted come back without it - they sort last and are called out, because
+  // a shelf that does not exist is worse than no shelf at all.
+  const pickList = useMemo(() => {
+    const rows = (order?.items || []).map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      category: item.product?.category || '',
+      rack: String(item.product?.rack ?? '').trim(),
+      shelf: String(item.product?.shelf ?? '').trim(),
+      known: Boolean(item.product),
+    }));
+
+    return rows.sort((a, b) => {
+      if (!a.rack && b.rack) return 1;
+      if (a.rack && !b.rack) return -1;
+      if (!a.rack) return a.name.localeCompare(b.name);
+
+      // A1 before A2 before A10 - plain string compare would put A10 second.
+      const rackOrder = a.rack.localeCompare(b.rack, undefined, { numeric: true });
+      if (rackOrder !== 0) return rackOrder;
+
+      const shelfOrder = a.shelf.localeCompare(b.shelf, undefined, {
+        numeric: true,
+      });
+      if (shelfOrder !== 0) return shelfOrder;
+
+      return a.name.localeCompare(b.name);
+    });
+  }, [order]);
+
+  // Anything a picker cannot walk to: no rack, or a product that is gone.
+  const unlocated = pickList.filter((row) => !row.rack && !row.shelf);
+
+  if (loading) {
+    return (
+      <LoadingSpinner
+        fullPage
+        label={isAdmin ? 'Loading the order…' : 'Loading your order…'}
+      />
+    );
+  }
+
+  // Where "back" goes: the admin goes back to the dispatch board, a customer
+  // back to the shop they ordered from.
+  const backTo = isAdmin ? ROUTES.ADMIN_DASHBOARD : ROUTES.STORE;
+  const backLabel = isAdmin ? 'Back to orders' : 'Back to store';
+  const pageClass = isAdmin ? 'page' : 'page page--customer';
 
   if (error) {
     return (
-      <div className="page page--customer">
+      <div className={pageClass}>
         <p className="alert alert--danger">{error}</p>
         <div className="button-row">
           <button type="button" className="btn btn-outline" onClick={loadOrder}>
             Try again
           </button>
-          <Link className="btn btn-ghost" to={ROUTES.STORE}>
-            Back to store
+          <Link className="btn btn-ghost" to={backTo}>
+            {backLabel}
           </Link>
         </div>
       </div>
@@ -90,7 +152,7 @@ export default function OrderTracker() {
   }
 
   return (
-    <div className="page page--customer">
+    <div className={pageClass}>
       <header className="page__header">
         <div>
           <h1>Order #{String(orderId).slice(-6).toUpperCase()}</h1>
@@ -105,6 +167,14 @@ export default function OrderTracker() {
         </div>
 
         <div className="button-row">
+          {/* The admin reads this inside the side rail, so it needs a way back
+              to the board; a customer already has the navbar above them. */}
+          {isAdmin ? (
+            <Link className="btn btn-outline btn-sm" to={backTo}>
+              ← {backLabel}
+            </Link>
+          ) : null}
+
           <span className={`live-dot ${connected ? 'live-dot--on' : ''}`}>
             {connected ? 'Live' : 'Offline'}
           </span>
@@ -121,8 +191,67 @@ export default function OrderTracker() {
       <DeliveryMap
         customerLocation={customerLocation}
         riderLocation={riderLocation}
-        riderLabel={order?.rider?.name || 'Your rider'}
+        riderLabel={order?.rider?.name || (isAdmin ? 'Rider' : 'Your rider')}
       />
+
+      {isAdmin ? (
+        <section className="panel picklist">
+          <div className="panel__header">
+            <h2 className="panel__title">Pick list</h2>
+            <span className="muted small">
+              {pickList.length} line{pickList.length === 1 ? '' : 's'} · walk
+              the racks in this order
+            </span>
+          </div>
+
+          {pickList.length === 0 ? (
+            <p className="muted">This order has no items to collect.</p>
+          ) : (
+            <ol className="picklist__rows">
+              {pickList.map((row) => {
+                const located = Boolean(row.rack || row.shelf);
+
+                return (
+                  <li
+                    key={`${row.name}-${row.rack}-${row.shelf}`}
+                    className={`picklist__row ${located ? '' : 'picklist__row--unlocated'}`}
+                  >
+                    <span className="picklist__qty">× {row.quantity}</span>
+
+                    <span className="picklist__name">
+                      <strong>{row.name}</strong>
+                      {row.category ? (
+                        <em className="muted small"> {row.category}</em>
+                      ) : null}
+                      {!row.known ? (
+                        <em className="muted small"> — removed from the catalogue</em>
+                      ) : null}
+                    </span>
+
+                    {located ? (
+                      <span className="picklist__where">
+                        {row.rack ? <span className="chip">Rack {row.rack}</span> : null}
+                        {row.shelf ? (
+                          <span className="chip">Shelf {row.shelf}</span>
+                        ) : null}
+                      </span>
+                    ) : (
+                      <span className="chip chip--danger">No location</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+
+          {unlocated.length > 0 ? (
+            <p className="alert alert--warn">
+              {unlocated.length} line{unlocated.length === 1 ? '' : 's'} without a
+              rack — set one in the product catalogue to speed up picking.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="tracker-grid">
         <section className="panel">

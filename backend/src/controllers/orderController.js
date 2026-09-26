@@ -30,10 +30,17 @@ import { ensureStoreCustomer } from '../utils/storeCustomer.js';
 // the store so the page can show which merchant the order is from.
 // NOTE: `username` MUST stay in the rider select - the merchant dashboard
 // renders `@${order.rider.username}` and drops to `@undefined` without it.
+//
+// `items.product` is a *live* lookup of the catalogue row, unlike the frozen
+// name/price copied onto the line. That is deliberate: a receipt must never
+// change, but "where do I find this?" is a question about right now - if the
+// merchant re-shelves a product, the picker must see the new rack, not the one
+// recorded at checkout. Only the picking fields are selected.
 const ORDER_POPULATE = [
   { path: 'rider', select: 'name username phone email location' },
   { path: 'customer', select: 'name email phone' },
   { path: 'store', select: 'name slug image' },
+  { path: 'items.product', select: 'name rack shelf category image' },
 ];
 
 const toFiniteNumber = (value) => {

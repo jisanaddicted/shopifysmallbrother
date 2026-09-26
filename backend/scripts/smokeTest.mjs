@@ -606,10 +606,15 @@ async function main() {
   check('a customer cannot see the delivery pool', customerPool.status === 403, `got ${customerPool.status}`);
 
   // --- A rider may not take an order from a store they are not bound to ---
+  // Same care as the first order: the grocer's catalogue is served newest-first
+  // and earlier runs have already sold out the top item, so buy something that
+  // is actually on the shelf rather than blindly taking grocerProducts[0].
+  const grocerBuyable =
+    grocerProducts.find((p) => Number(p.stock) >= 1) || grocerProducts[0];
   const grocerOrder = await api('POST', '/orders', {
     token: sessions.customer,
     body: {
-      items: [{ productId: grocerProducts[0]._id, quantity: 1 }],
+      items: [{ productId: grocerBuyable._id, quantity: 1 }],
       address: { line1: '3 Grocer Way', phone: '+1 555 010 8888' },
       location: { lat: 27.7172, lng: 85.324 },
     },
@@ -659,8 +664,60 @@ async function main() {
   const stealAttempt = await api('DELETE', `/products/${grocerProducts[0]._id}`, { token: sessions.merchant });
   check('a merchant cannot delete another store product', stealAttempt.status === 403, `got ${stealAttempt.status}`);
 
-  const ownDelete = await api('DELETE', `/products/${createdProduct.data?.product?._id}`, { token: sessions.merchant });
+  // --- The pick list the back office shows on an order ----------------------
+  // Each line carries a *live* lookup of its catalogue product, so an admin can
+  // read off where every item is right now. The frozen name/price receipt next to
+  // it must not move. This runs before the product is deleted below - an order
+  // line can only point at a product that still exists.
+  const pickOrder = await api('POST', '/orders', {
+    token: sessions.customer,
+    body: {
+      items: [{ productId: newProduct._id, quantity: 1 }],
+      address: { line1: '4 Pick Lane', phone: '+1 555 010 9999' },
+      location: { lat: 27.7172, lng: 85.324 },
+    },
+  });
+  const pickOrderId = pickOrder.data?.order?._id;
+  const pickLine = pickOrder.data?.order?.items?.[0];
+  check(
+    'an order line carries the rack the picker needs',
+    String(pickLine?.product?._id) === String(newProduct?._id) &&
+      pickLine?.product?.rack === 'B2' &&
+      pickLine?.product?.shelf === '4',
+    `rack=${pickLine?.product?.rack} shelf=${pickLine?.product?.shelf}`,
+  );
+  check(
+    'the receipt keeps the name and price it was bought at',
+    pickLine?.name === newProduct.name && Number(pickLine?.price) === Number(newProduct.price),
+    `${pickLine?.name} @ ${pickLine?.price}`,
+  );
+
+  // Re-shelve it. "Where is it?" is a question about now, so the order has to
+  // follow the product to its new rack.
+  await api('PUT', `/products/${newProduct._id}`, {
+    token: sessions.merchant,
+    body: { name: newProduct.name, price: newProduct.price, category: 'Test', stock: 5, rack: 'C9', shelf: '1' },
+  });
+  const pickAfter = await api('GET', `/orders/${pickOrderId}`, { token: sessions.merchant });
+  check(
+    'a re-shelved product shows its new rack on the order',
+    pickAfter.data?.order?.items?.[0]?.product?.rack === 'C9',
+    String(pickAfter.data?.order?.items?.[0]?.product?.rack),
+  );
+
+  // Now the product leaves the catalogue. A receipt must outlive it: the line is
+  // still there, with no location to show - which the UI flags rather than
+  // inventing a shelf.
+  const ownDelete = await api('DELETE', `/products/${newProduct._id}`, { token: sessions.merchant });
   check('a merchant can delete their own product', ownDelete.status === 200, `got ${ownDelete.status}`);
+
+  const pickDeleted = await api('GET', `/orders/${pickOrderId}`, { token: sessions.merchant });
+  const orphanLine = pickDeleted.data?.order?.items?.[0];
+  check(
+    'a deleted product leaves the order line intact but unlocated',
+    orphanLine?.name === newProduct.name && (orphanLine?.product ?? null) === null,
+    `name=${orphanLine?.name} product=${orphanLine?.product}`,
+  );
 
   // --- Store -> admin invitation: accept/decline + panel scoping -----------
   // A store owner invites the platform admin by username; the admin answers

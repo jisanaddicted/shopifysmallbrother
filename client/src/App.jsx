@@ -175,6 +175,13 @@ export default function App() {
             <Route path={ROUTES.ADMIN_PRODUCTS} element={<ProductManager />} />
             <Route path={ROUTES.ADMIN_INVITATIONS} element={<AdminInvitations />} />
             <Route path={ROUTES.ADMIN_THEME} element={<ThemeBuilder />} />
+            {/* Same order view the customer sees, but mounted in the shell so
+                the side rail survives. variant="admin" only swaps the wording
+                and the "back" target. */}
+            <Route
+              path={ROUTES.ADMIN_ORDER}
+              element={<OrderTracker variant="admin" />}
+            />
           </Route>
 
           {/* A store's public page - anyone with the link, even logged out. */}

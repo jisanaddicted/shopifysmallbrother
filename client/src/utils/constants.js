@@ -245,6 +245,10 @@ export const ROUTES = {
   // Store->admin invitations: the admin accepts/declines stores that asked
   // them to help run them (replaces the old admin-only Stores tab).
   ADMIN_INVITATIONS: '/admin/invitations',
+  // One order opened from the dispatch board. It lives INSIDE the admin
+  // DashboardLayout group so the side rail stays visible (the customer's
+  // /track/:orderId sits outside it and shows the top navbar instead).
+  ADMIN_ORDER: '/admin/orders/:orderId',
   ADMIN_THEME: '/admin/theme',
   PROFILE: '/profile',
   // A customer's own profile INSIDE their store: /s/<slug>/profile (see
@@ -257,6 +261,10 @@ export const ROUTES = {
 
 // Build a real tracker URL from an order id: orderTrackerPath('abc') -> /track/abc
 export const orderTrackerPath = (orderId) => `/track/${orderId}`;
+
+// The same order opened from the admin dispatch board. Same page component, but
+// rendered inside the side-navbar shell: adminOrderPath('abc') -> /admin/orders/abc
+export const adminOrderPath = (orderId) => `/admin/orders/${orderId}`;
 
 // Build a store's public URL: shopPath('joes-pizza') -> /s/joes-pizza
 export const shopPath = (slug) => `/s/${slug}`;

@@ -294,6 +294,16 @@ join an order room you own, are delivering, or administer.
   both, so typing a rack number finds what sits in it. Nothing depends on them —
   a takeaway menu leaves both blank. `formatLocation()` in
   `client/src/utils/formatters.js` prints the em dash when they are unset.
+- **Order lines carry a live product lookup, not just a frozen receipt.** An
+  order line copies `name`/`price` on purpose — a receipt must never change. But
+  `ORDER_POPULATE` in `backend/src/controllers/orderController.js` also fills
+  `items.product` with the *current* catalogue row (`name rack shelf category
+  image`), because "where do I find this?" is a question about right now: a
+  product re-shelved after checkout shows its new rack, not the old one. The
+  admin order page (`OrderTracker.jsx` `variant="admin"`) turns that into a
+  **Pick list** — numbered in aisle order (A1, A2, A10, with unlocated lines last
+  and flagged). A deleted product leaves the line intact with `product: null`,
+  which the panel reports as *No location* rather than inventing a shelf.
 - `backend/.env` is git-ignored; only `.env.example` is committed.
 
 ## File map for AI editors

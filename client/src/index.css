@@ -1132,6 +1132,70 @@ ol {
   align-items: start;
 }
 
+/* Pick list on the back-office order page: a walkable, numbered list of what
+   to collect, in aisle order. */
+.picklist {
+  margin-bottom: 1.25rem;
+}
+
+.picklist__rows {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  counter-reset: pick;
+}
+
+.picklist__row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.25rem;
+  border-top: 1px solid var(--line);
+}
+
+/* The number is the walking order: it is the only part a picker must trust. */
+.picklist__row::before {
+  counter-increment: pick;
+  content: counter(pick);
+  flex: 0 0 1.6rem;
+  height: 1.6rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.picklist__qty {
+  flex: 0 0 auto;
+  min-width: 2.4rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.picklist__name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.picklist__name em {
+  font-style: normal;
+}
+
+.picklist__where {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.picklist__row--unlocated {
+  background: var(--danger-soft);
+  border-radius: var(--radius-sm, 6px);
+}
+
 .tracker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

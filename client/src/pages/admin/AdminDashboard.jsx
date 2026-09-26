@@ -6,7 +6,7 @@ import {
   ORDER_STATUS,
   ORDER_STATUS_LABELS,
   ORDER_STATUS_TONE,
-  orderTrackerPath,
+  adminOrderPath,
 } from '../../utils/constants';
 import {
   formatCurrency,
@@ -152,7 +152,10 @@ export default function AdminDashboard() {
               return (
                 <tr key={id}>
                   <td>
-                    <Link className="link-btn" to={orderTrackerPath(id)}>
+                    {/* Stays inside /admin so the side rail is still there when
+                        the details open (the customer /track/:id route is
+                        outside the shell and swaps the rail for the navbar). */}
+                    <Link className="link-btn" to={adminOrderPath(id)}>
                       #{String(id).slice(-6).toUpperCase()}
                     </Link>
                   </td>
