@@ -234,6 +234,8 @@ export const ROUTES = {
   ORDER_TRACKER: '/track/:orderId',
   RIDER_CONSOLE: '/rider',  MERCHANT_DASHBOARD: '/merchant',
   MERCHANT_PRODUCTS: '/merchant/products',
+  // Live map of this store's deliveries in progress (see RiderTracker.jsx).
+  MERCHANT_RIDERS: '/merchant/riders',
   MERCHANT_THEME: '/merchant/theme',  ADMIN_DASHBOARD: '/admin',
   ADMIN_PRODUCTS: '/admin/products',
   ADMIN_STORES: '/admin/stores',

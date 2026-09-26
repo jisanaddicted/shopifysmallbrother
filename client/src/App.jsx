@@ -18,6 +18,7 @@ import OrderTracker from './pages/customer/OrderTracker';
 import ShopPage from './pages/customer/ShopPage';
 import Storefront from './pages/customer/Storefront';
 import MerchantDashboard from './pages/store/MerchantDashboard';
+import RiderTracker from './pages/store/RiderTracker';
 import ThemeBuilder from './pages/store/ThemeBuilder';
 import RiderConsole from './pages/rider/RiderConsole';
 import { ROLES, ROUTES } from './utils/constants';
@@ -152,6 +153,7 @@ export default function App() {
               element={<MerchantDashboard />}
             />
             <Route path={ROUTES.MERCHANT_PRODUCTS} element={<ProductManager />} />
+            <Route path={ROUTES.MERCHANT_RIDERS} element={<RiderTracker />} />
             <Route path={ROUTES.MERCHANT_THEME} element={<ThemeBuilder />} />
           </Route>
 

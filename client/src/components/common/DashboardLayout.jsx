@@ -9,8 +9,8 @@ import { initials } from '../../utils/formatters';
  * panel). Replaces the top <Navbar/> on those routes so the merchant and the
  * admin get a persistent left rail instead of top links.
  *
- * variant="merchant" -> My store, Products
- * variant="admin"    -> Dispatch, Products, Stores
+ * variant="merchant" -> My store, Products, Rider tracker, Theme
+ * variant="admin"    -> Dispatch, Products, Stores, Theme
  *
  * The profile avatar lives in the top-right corner of the content topbar
  * (not in the sidebar). On small screens the rail collapses behind a
@@ -33,6 +33,8 @@ export default function DashboardLayout({ variant = 'merchant' }) {
     ? [
         { to: ROUTES.MERCHANT_DASHBOARD, label: 'My store', icon: '🏪', end: true },
         { to: ROUTES.MERCHANT_PRODUCTS, label: 'Products', icon: '📦', end: false },
+        // Live delivery map: where each rider of this store is right now.
+        { to: ROUTES.MERCHANT_RIDERS, label: 'Rider tracker', icon: '🛵', end: false },
         { to: ROUTES.MERCHANT_THEME, label: 'Theme', icon: '🎨', end: false },
       ]
     : [
