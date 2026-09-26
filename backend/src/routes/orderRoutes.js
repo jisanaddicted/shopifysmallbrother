@@ -17,24 +17,44 @@ import { ROLES } from '../utils/constants.js';
 
 const router = Router();
 
-// Guest checkout: creating an order and viewing/cancelling it with the
-// guestToken need NO account. Everything else still needs a signed-in user
-// (each protected route re-checks requireAuth itself).
+// --- Fixed paths BEFORE "/:id" -------------------------------------------
+// "/:id" below is deliberately open to guests (order tracking with a
+// guestToken), so any single-segment fixed path registered after it would be
+// swallowed by it and answered with 400 "That order id is not valid." instead
+// of its own response. They are registered here instead, each carrying its
+// own requireAuth (the router-wide requireAuth further down only guards the
+// one-order routes above it).
+router.get(
+  '/mine',
+  requireAuth,
+  requireRole(ROLES.CUSTOMER, ROLES.ADMIN),
+  listMyOrders,
+);
+
+router.get(
+  '/rider/assigned',
+  requireAuth,
+  requireRole(ROLES.RIDER),
+  listRiderOrders,
+);
+
+// Unclaimed orders from the stores this rider is bound to.
+router.get('/pool', requireAuth, requireRole(ROLES.RIDER), listOrderPool);
+
+// Orders placed with a store the signed-in account runs: as owner, or as a
+// store admin the owner appointed (who keeps their own platform role).
+router.get('/store/mine', requireAuth, requireStoreStaff, listStoreOrders);
+
+router.get('/', requireAuth, requireRole(ROLES.ADMIN), listAllOrders);
+
+// --- Guest checkout -------------------------------------------------------
+// Creating an order and viewing/cancelling it with the guestToken need NO
+// account.
 router.post('/', optionalAuth, createOrder);
 router.get('/:id', optionalAuth, getOrder);
 router.patch('/:id/cancel', optionalAuth, cancelOrder);
 
 router.use(requireAuth);
-
-// --- Fixed paths first, so they are not captured by "/:id" -----------------
-router.get('/mine', requireRole(ROLES.CUSTOMER, ROLES.ADMIN), listMyOrders);
-router.get('/rider/assigned', requireRole(ROLES.RIDER), listRiderOrders);
-// Unclaimed orders from the stores this rider is bound to.
-router.get('/pool', requireRole(ROLES.RIDER), listOrderPool);
-// Orders placed with a store the signed-in account runs: as owner, or as a
-// store admin the owner appointed (who keeps their own platform role).
-router.get('/store/mine', requireStoreStaff, listStoreOrders);
-router.get('/', requireRole(ROLES.ADMIN), listAllOrders);
 
 // --- One order ------------------------------------------------------------
 router.post('/:id/claim', requireRole(ROLES.RIDER), claimOrder);

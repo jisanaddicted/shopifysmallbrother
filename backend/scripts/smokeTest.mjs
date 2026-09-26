@@ -63,9 +63,18 @@ async function main() {
   );
 
   // --- Login ---------------------------------------------------------------
+  // A customer account belongs to a store, so a customer signs in FROM a
+  // storefront: /s/<slug>/login sends `storeSlug`. Staff use the plain door.
+  const CUSTOMER_STORE_SLUG = 'joes-pizza';
+
   const sessions = {};
+
   for (const [role, creds] of Object.entries(DEMO)) {
-    const res = await api('POST', '/auth/login', { body: creds });
+    const body =
+      role === 'customer'
+        ? { ...creds, storeSlug: CUSTOMER_STORE_SLUG }
+        : creds;
+    const res = await api('POST', '/auth/login', { body });
     sessions[role] = res.data?.token;
 
     check(`login as ${role}`, res.status === 200 && Boolean(res.data?.token), `got ${res.status}`);
@@ -79,6 +88,14 @@ async function main() {
       res.data?.user && !('passwordHash' in res.data.user),
     );
   }
+
+  // The storefront sign-in must be the only door for a customer.
+  const portalDoor = await api('POST', '/auth/login', { body: DEMO.customer });
+  check(
+    'a customer cannot sign in at the staff portal door',
+    portalDoor.status === 403,
+    `got ${portalDoor.status}`,
+  );
 
   const badLogin = await api('POST', '/auth/login', {
     body: { email: DEMO.customer.email, password: 'wrong-password' },
@@ -101,8 +118,15 @@ async function main() {
   check('GET /products returns the catalogue', products.status === 200 && list.length > 0, `${list.length} products`);
 
   // --- Place an order (customer) ------------------------------------------
-  const cheapest = [...list].sort((a, b) => a.price - b.price)[0];
+  // Order a product that is actually in stock: the development catalogue also
+  // carries fixtures from earlier runs (zero-stock "Blank Stock ..." items),
+  // and the cheapest of those would fail every check below.
   const quantity = 2;
+  const cheapest =
+    [...list]
+      .filter((product) => Number(product.stock) >= quantity)
+      .sort((a, b) => a.price - b.price)[0] ||
+    [...list].sort((a, b) => a.price - b.price)[0];
 
   const created = await api('POST', '/orders', {
     token: sessions.customer,
@@ -282,8 +306,14 @@ async function main() {
   // globally by username, sees her profile card, and invites her as a store
   // ADMIN (not a rider). After accepting, she manages the store's orders but
   // still cannot take deliveries on the road.
+  // She keeps the platform role `customer`, so - like every customer - she
+  // signs in FROM a storefront (/s/<slug>/login), never the staff portal.
   const saLogin = await api('POST', '/auth/login', {
-    body: { email: 'storeadmin@example.com', password: 'password123' },
+    body: {
+      email: 'storeadmin@example.com',
+      password: 'password123',
+      storeSlug: CUSTOMER_STORE_SLUG,
+    },
   });
   const saToken = saLogin.data?.token;
   check(
