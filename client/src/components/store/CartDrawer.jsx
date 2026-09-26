@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
-import { ROUTES } from '../../utils/constants';
+import { checkoutPath, lastStoreVisit } from '../../utils/constants';
 import { formatCurrency } from '../../utils/formatters';
 
 export default function CartDrawer() {
@@ -18,6 +18,15 @@ export default function CartDrawer() {
     itemCount,
   } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
+  // The drawer lives outside <Routes>, so read the store slug straight from
+  // the URL (/s/<slug>/...) instead of useParams; fall back to the last
+  // storefront the shopper visited. Checkout then stays store-scoped:
+  // /s/<slug>/checkout, so the page can brand itself with THAT store.
+  const pathSlug = location.pathname.startsWith('/s/')
+    ? location.pathname.split('/')[2] || ''
+    : '';
+  const storeSlug = pathSlug || lastStoreVisit() || '';
 
   // Lock the page behind the drawer, close it with Escape.
   useEffect(() => {
@@ -39,7 +48,7 @@ export default function CartDrawer() {
 
   const goToCheckout = () => {
     closeCart();
-    navigate(ROUTES.CHECKOUT);
+    navigate(checkoutPath(storeSlug));
   };
 
   return (

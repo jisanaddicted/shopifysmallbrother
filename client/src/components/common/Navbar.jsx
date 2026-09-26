@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
-import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES, lastStoreVisit, shopPath } from '../../utils/constants';
+import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES, checkoutPath, lastStoreVisit, shopPath } from '../../utils/constants';
 import { initials } from '../../utils/formatters';
 import { getPublicStore } from '../../services/storeService';
 
@@ -80,6 +80,10 @@ export default function Navbar() {
   // store's own URL (/s/<slug>). Everyone else keeps the default brand.
   const brandLogo = brandStore?.logo || brandStore?.image || '';
   const brandStorePath = brandStore?.slug ? shopPath(brandStore.slug) : '';
+  // Checkout belongs to a store too: /s/<slug>/checkout when we know which
+  // one (the brand store, else the last storefront visited), bare /checkout
+  // only when no slug is known at all.
+  const checkoutTarget = checkoutPath(brandStore?.slug || lastStoreVisit() || '');
 
   return (
     <header className="navbar">
@@ -118,13 +122,13 @@ export default function Navbar() {
           {!isAuthenticated && (
             <>
               <NavLink to={ROUTES.STORE}>Store</NavLink>
-              <NavLink to={ROUTES.CHECKOUT}>Checkout</NavLink>
+              <NavLink to={checkoutTarget}>Checkout</NavLink>
             </>
           )}
           {isCustomer && (
             <>
               <NavLink to={ROUTES.STORE}>Store</NavLink>
-              <NavLink to={ROUTES.CHECKOUT}>Checkout</NavLink>
+              <NavLink to={checkoutTarget}>Checkout</NavLink>
             </>
           )}
           {isRider && <NavLink to={ROUTES.RIDER_CONSOLE}>My deliveries</NavLink>}

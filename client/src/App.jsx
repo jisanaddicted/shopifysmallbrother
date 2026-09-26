@@ -125,7 +125,10 @@ export default function App() {
           <Route path={ROUTES.STORE} element={<Storefront />} />
           {/* Checkout + tracker are public: guests order with name+phone and
               watch their order with the token from checkout. The pages
-              themselves handle signed-in vs guest. */}
+              themselves handle signed-in vs guest. Checkout lives inside the
+              store it belongs to (/s/<slug>/checkout); the bare /checkout
+              stays for old links and redirects to the scoped URL. */}
+          <Route path={ROUTES.STORE_CHECKOUT} element={<Checkout />} />
           <Route path={ROUTES.CHECKOUT} element={<Checkout />} />
           <Route path={ROUTES.ORDER_TRACKER} element={<OrderTracker />} />
 

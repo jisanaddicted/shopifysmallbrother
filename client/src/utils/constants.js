@@ -231,6 +231,10 @@ export const ROUTES = {
   REGISTER: '/register',
   STORE: '/store',
   CHECKOUT: '/checkout',
+  // Checkout inside a storefront: /s/<slug>/checkout (see checkoutPath below).
+  // The bare /checkout stays for old links and bounces to the scoped URL
+  // when a store slug is known.
+  STORE_CHECKOUT: '/s/:slug/checkout',
   ORDER_TRACKER: '/track/:orderId',
   RIDER_CONSOLE: '/rider',  MERCHANT_DASHBOARD: '/merchant',
   MERCHANT_PRODUCTS: '/merchant/products',
@@ -254,6 +258,11 @@ export const orderTrackerPath = (orderId) => `/track/${orderId}`;
 
 // Build a store's public URL: shopPath('joes-pizza') -> /s/joes-pizza
 export const shopPath = (slug) => `/s/${slug}`;
+
+// Build a store's checkout URL: checkoutPath('joes-pizza') -> /s/joes-pizza/checkout.
+// No store known (old bookmark, guest who never opened a storefront) keeps the
+// bare /checkout.
+export const checkoutPath = (slug) => customerPath(slug, 'checkout');
 
 // Every /s/<slug> page records its slug here, so the app always knows which
 // storefront the shopper is (or was last) looking at. Navbar logout reads it
