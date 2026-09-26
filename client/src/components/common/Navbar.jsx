@@ -131,7 +131,12 @@ export default function Navbar() {
               <NavLink to={checkoutTarget}>Checkout</NavLink>
             </>
           )}
-          {isRider && <NavLink to={ROUTES.RIDER_CONSOLE}>My deliveries</NavLink>}
+          {isRider && (
+            <>
+              <NavLink to={ROUTES.RIDER_CONSOLE}>My deliveries</NavLink>
+              <NavLink to={ROUTES.RIDER_ANALYTICS}>Analytics</NavLink>
+            </>
+          )}
           {isStore && (
             <>
               <NavLink to={ROUTES.MERCHANT_DASHBOARD}>My store</NavLink>

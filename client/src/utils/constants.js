@@ -237,6 +237,8 @@ export const ROUTES = {
   STORE_CHECKOUT: '/s/:slug/checkout',
   ORDER_TRACKER: '/track/:orderId',
   RIDER_CONSOLE: '/rider',  MERCHANT_DASHBOARD: '/merchant',
+  // How long the rider's own deliveries took, stage by stage.
+  RIDER_ANALYTICS: '/rider/analytics',
   MERCHANT_PRODUCTS: '/merchant/products',
   // Live map of this store's deliveries in progress (see RiderTracker.jsx).
   MERCHANT_RIDERS: '/merchant/riders',

@@ -39,6 +39,25 @@ export function formatDuration(seconds) {
 }
 
 /**
+ * "38 min" / "1h 05m" from a duration in *milliseconds* - the unit the backend
+ * reports delivery timings in. Unlike formatDuration() this takes ms, not
+ * seconds, so a whole delivery can be read at a glance. Returns an em dash for
+ * anything missing, which is what a stage that never happened looks like.
+ */
+export function formatDurationMs(ms) {
+  const total = Number(ms);
+  if (!Number.isFinite(total) || total < 0) return '—';
+
+  const minutes = Math.round(total / 60000);
+  if (minutes < 1) return 'under a minute';
+
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours <= 0) return `${rest} min`;
+  return `${hours}h ${String(rest).padStart(2, '0')}m`;
+}
+
+/**
  * Straight-line distance in metres between two { lat, lng } points.
  * Used for the "rider is 850 m away" readout (Haversine formula).
  */

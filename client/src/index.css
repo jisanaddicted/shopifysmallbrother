@@ -420,6 +420,13 @@ ol {
   border-color: transparent;
 }
 
+/* Still moving: an order that has not been delivered or cancelled yet. */
+.chip--warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: transparent;
+}
+
 .chip--button {
   cursor: pointer;
   font: inherit;
@@ -1122,6 +1129,63 @@ ol {
 .stat--ok {
   background: #f0fdf4;
   border-color: #bbf7d0;
+}
+
+/* --- Delivery timing (RiderAnalytics) ------------------------------------ */
+
+/* Five headline numbers need a little more room than the default stat tile. */
+.timing-stats {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+/* "Where the time goes": one row per stage of a delivery, with a bar showing
+   that stage's share of the whole trip. */
+.legs {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.leg {
+  display: grid;
+  grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr) minmax(5rem, auto);
+  align-items: center;
+  gap: 1rem;
+}
+
+.leg__label {
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.leg__track {
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.leg__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+  transition: width 0.3s ease;
+}
+
+/* On a narrow screen the label stacks above its own bar. */
+@media (max-width: 620px) {
+  .leg {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .leg__value {
+    justify-self: start;
+  }
 }
 
 /* --- Page layouts --------------------------------------------------------- */

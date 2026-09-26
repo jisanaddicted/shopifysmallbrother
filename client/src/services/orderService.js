@@ -72,6 +72,13 @@ export const updateOrderStatus = (orderId, status, note = '') =>
     .then((res) => res.data.order || res.data);
 
 /**
+ * GET /orders/rider/analytics - how long the rider's deliveries took.
+ * Resolves to { summary, orders, delivered, open, cancelled }.
+ */
+export const getRiderAnalytics = () =>
+  api.get('/orders/rider/analytics').then((res) => res.data || {});
+
+/**
  * PATCH /orders/:id/location
  * REST fallback for pushing the rider GPS position when the socket is down.
  */
@@ -97,6 +104,7 @@ export default {
   getOrderById,
   cancelOrder,
   getRiderOrders,
+  getRiderAnalytics,
   updateOrderStatus,
   pushRiderLocation,
   getAllOrders,

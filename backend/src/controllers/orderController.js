@@ -17,6 +17,7 @@ import { priceOrder, riderAllowedStatuses } from '../utils/pricing.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { canAccessOrder } from '../utils/orderAccess.js';
 import { activeStoreIds, isBoundToStore } from '../utils/storeRider.js';
+import { summariseTimings } from '../utils/deliveryTiming.js';
 import {
   loadManageableStore,
   managedStoreIds,
@@ -25,6 +26,13 @@ import {
 } from '../utils/storeAccess.js';
 import { emitOrderStatusUpdated, notifyStoreMembers } from '../sockets/index.js';
 import { ensureStoreCustomer } from '../utils/storeCustomer.js';
+
+/**
+ * How many of a rider's most recent orders feed the analytics page. The averages
+ * are computed over this window rather than every delivery ever made, so the
+ * numbers describe how the rider is doing *now* and the query stays bounded.
+ */
+const ANALYTICS_WINDOW = 100;
 
 // The tracker needs the rider's name/phone and the customer's details, and
 // the store so the page can show which merchant the order is from.
@@ -373,6 +381,25 @@ export const listRiderOrders = asyncHandler(async (req, res) => {
 });
 
 /**
+ * GET /api/orders/rider/analytics
+ *
+ * The rider's own delivery numbers: how long each stage took, how long they
+ * personally took per order, and the averages across everything they have
+ * delivered. Every duration is read back out of the order's own statusHistory,
+ * so an old delivery reports the same figures it did on the day.
+ *
+ * Scoped to the signed-in rider - a rider only ever sees their own timings.
+ */
+export const getRiderAnalytics = asyncHandler(async (req, res) => {
+  const orders = await Order.find({ rider: req.user._id })
+    .sort({ createdAt: -1 })
+    .limit(ANALYTICS_WINDOW)
+    .populate(ORDER_POPULATE);
+
+  res.json(summariseTimings(orders));
+});
+
+/**
  * PATCH /api/orders/:id/status
  * body: { status, note }
  *
@@ -662,6 +689,7 @@ export default {
   getOrder,
   cancelOrder,
   listRiderOrders,
+  getRiderAnalytics,
   updateOrderStatus,
   updateRiderLocation,
   listOrderPool,

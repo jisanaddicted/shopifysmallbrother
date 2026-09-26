@@ -4,6 +4,7 @@ import {
   claimOrder,
   createOrder,
   getOrder,
+  getRiderAnalytics,
   listAllOrders,
   listMyOrders,
   listOrderPool,
@@ -36,6 +37,14 @@ router.get(
   requireAuth,
   requireRole(ROLES.RIDER),
   listRiderOrders,
+);
+
+// How long the rider's deliveries took, per stage and on average.
+router.get(
+  '/rider/analytics',
+  requireAuth,
+  requireRole(ROLES.RIDER),
+  getRiderAnalytics,
 );
 
 // Unclaimed orders from the stores this rider is bound to.

@@ -306,6 +306,19 @@ async function main() {
     });
     check('the rider GPS fallback endpoint works', ping.status === 200, `got ${why(ping)}`);
 
+    // Walk the *whole* happy path rather than jumping straight to delivered, so
+    // every leg of the delivery gets its own stamp in statusHistory. That is
+    // what the analytics below read back: the ride can only be timed from a real
+    // pickup, which a "confirmed -> delivered" shortcut would never record.
+    for (const step of ['preparing', 'ready_for_pickup', 'picked_up', 'out_for_delivery']) {
+      // Sequential on purpose: each status depends on the one before it.
+      // eslint-disable-next-line no-await-in-loop
+      await api('PATCH', `/orders/${orderId}/status`, {
+        token: sessions.rider,
+        body: { status: step },
+      });
+    }
+
     const delivered = await api('PATCH', `/orders/${orderId}/status`, {
       token: sessions.rider,
       body: { status: 'delivered' },
@@ -318,6 +331,90 @@ async function main() {
 
     const riderRead = await api('GET', `/orders/${orderId}`, { token: sessions.rider });
     check('an involved rider can read the order', riderRead.status === 200, `got ${why(riderRead)}`);
+
+    // --- Rider analytics: the delivery timings we just performed --------------
+    // Every duration is read back out of the order's own statusHistory, so the
+    // order that was just delivered has to show up in the rider's own numbers.
+    const analytics = await api('GET', '/orders/rider/analytics', {
+      token: sessions.rider,
+    });
+    const myRow = (analytics.data?.orders || []).find(
+      (row) => String(row.id) === String(orderId),
+    );
+    check(
+      'the rider analytics endpoint reports their deliveries',
+      analytics.status === 200 && Boolean(analytics.data?.summary),
+      `got ${why(analytics)}`,
+    );
+    check(
+      'the delivered order appears in the rider timings',
+      Boolean(myRow) && myRow.isDelivered === true,
+      `${(analytics.data?.orders || []).length} row(s)`,
+    );
+    check(
+      'a delivered order reports a real end-to-end time',
+      Number.isFinite(myRow?.totalMs) && myRow.totalMs > 0,
+      `totalMs=${myRow?.totalMs}`,
+    );
+    check(
+      'the ride leg is timed from pickup, not from the order',
+      Number.isFinite(myRow?.rideMs) && myRow.rideMs > 0 && myRow.rideMs <= myRow.totalMs,
+      `rideMs=${myRow?.rideMs} totalMs=${myRow?.totalMs}`,
+    );
+    check(
+      'the rider timings stay inside the requested window',
+      (analytics.data?.orders || []).length <= 100,
+      `${(analytics.data?.orders || []).length} rows`,
+    );
+    check(
+      'the averages are rolled up for the summary cards',
+      Number.isFinite(analytics.data?.summary?.avgRideMs) &&
+        Number.isFinite(analytics.data?.summary?.avgTotalMs) &&
+        analytics.data.summary.avgTotalMs > 0,
+      `avgRide=${analytics.data?.summary?.avgRideMs} avgTotal=${analytics.data?.summary?.avgTotalMs}`,
+    );
+    check(
+      'the on-time share is reported as a percentage',
+      Number.isFinite(analytics.data?.summary?.onTimePct) &&
+        analytics.data.summary.onTimePct >= 0 &&
+        analytics.data.summary.onTimePct <= 100,
+      `onTimePct=${analytics.data?.summary?.onTimePct}`,
+    );
+
+    // A rider's numbers are their own: nobody else's row may appear.
+    const otherRider = await api('POST', '/auth/login', {
+      body: { email: 'rider2@example.com', password: 'password123' },
+    });
+    if (otherRider.status === 200) {
+      const otherAnalytics = await api('GET', '/orders/rider/analytics', {
+        token: otherRider.data?.token,
+      });
+      check(
+        "a rider never sees another rider's deliveries",
+        !(otherAnalytics.data?.orders || []).some(
+          (row) => String(row.id) === String(orderId),
+        ),
+        `${(otherAnalytics.data?.orders || []).length} row(s)`,
+      );
+    }
+
+    // The endpoint is rider-only.
+    const customerAnalytics = await api('GET', '/orders/rider/analytics', {
+      token: sessions.customer,
+    });
+    check(
+      'a customer cannot read the rider analytics',
+      customerAnalytics.status === 403,
+      `got ${why(customerAnalytics)}`,
+    );
+    const adminAnalytics = await api('GET', '/orders/rider/analytics', {
+      token: sessions.admin,
+    });
+    check(
+      'a platform admin cannot read the rider analytics',
+      adminAnalytics.status === 403,
+      `got ${why(adminAnalytics)}`,
+    );
 
     // Unbind again: the later journeys expect this rider NOT to be bound to
     // whatever store the catalogue order happened to come from. Only the store

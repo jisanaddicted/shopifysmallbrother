@@ -21,6 +21,7 @@ import MerchantDashboard from './pages/store/MerchantDashboard';
 import RiderTracker from './pages/store/RiderTracker';
 import ThemeBuilder from './pages/store/ThemeBuilder';
 import RiderConsole from './pages/rider/RiderConsole';
+import RiderAnalytics from './pages/rider/RiderAnalytics';
 import { ROLES, ROUTES } from './utils/constants';
 /** "/" sends everyone to the right home page for their role. */
 function HomeRedirect() {
@@ -138,6 +139,17 @@ export default function App() {
             element={
               <ProtectedRoute allowedRoles={[ROLES.RIDER]}>
                 <RiderConsole />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Rider analytics: how long each stage of their deliveries took,
+              read out of the orders' own status history. */}
+          <Route
+            path={ROUTES.RIDER_ANALYTICS}
+            element={
+              <ProtectedRoute allowedRoles={[ROLES.RIDER]}>
+                <RiderAnalytics />
               </ProtectedRoute>
             }
           />
