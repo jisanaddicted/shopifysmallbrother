@@ -1280,6 +1280,24 @@ ol {
   margin: 0;
 }
 
+/* The ✕ in the profile header (see ProfilePage.jsx). It builds on .icon-btn
+   (quiet, borderless) but is sized for a thumb: the page is what customers
+   land on from the storefront's account sheet. */
+.profile__close {
+  font-size: 1.15rem;
+  line-height: 1;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line);
+  background: var(--surface-alt);
+  border-radius: 999px;
+  min-width: 34px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+}
+
 
 .timeline__item.is-done {
   color: var(--ink);

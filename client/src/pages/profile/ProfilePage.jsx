@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import authService from '../../services/authService';
 import storeService from '../../services/storeService';
-import { customerPath, lastStoreVisit } from '../../utils/constants';
+import {
+  HOME_ROUTE_BY_ROLE,
+  ROUTES,
+  customerPath,
+  lastStoreVisit,
+} from '../../utils/constants';
 import { initials } from '../../utils/formatters';
 
 /**
@@ -14,12 +19,38 @@ import { initials } from '../../utils/formatters';
  * When mounted under /s/:slug/profile the page stays inside the customer's
  * store (slug from the URL); the bare /profile route is kept for staff and
  * old links — customers landing there are bounced to their scoped page.
+ *
+ * Because it is a full page (opened from the storefront's account sheet), the
+ * header carries a ✕ that closes it again — see closeProfile below.
  */
 export default function ProfilePage() {
-  const { user, setUser, isRider, isCustomer, customerHomeRoute, shoppingStores } = useAuth();
+  const { user, setUser, isRider, isCustomer, customerHomeRoute, homeRoute, shoppingStores } =
+    useAuth();
   // Present only on the scoped route /s/:slug/profile — that slug is what
   // keeps the customer inside their store after login.
   const { slug: routeSlug } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Where the ✕ in the header sends people when there is no step to undo:
+  // customers back to the store they were browsing (slug straight from the
+  // URL, so the store never drops out of the URL), staff to their dashboard.
+  const closeTarget = routeSlug
+    ? customerPath(routeSlug)
+    : homeRoute || customerHomeRoute || HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.HOME;
+
+  // "Close" should undo the step that opened the profile (the storefront
+  // account sheet, the rider console, ...). A deep link or a refresh has no
+  // step to undo — the router marks the first page with key 'default' — so
+  // those fall back to closeTarget instead of leaving the app.
+  const closeProfile = () => {
+    if (location.key !== 'default') {
+      navigate(-1);
+      return;
+    }
+
+    navigate(closeTarget, { replace: true });
+  };
 
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
@@ -119,6 +150,19 @@ export default function ProfilePage() {
           <h1>My profile</h1>
           <p className="muted">Your account details and delivery handle.</p>
         </div>
+
+        {/* The same ✕ the cart drawer and the account sheets carry, so a
+            shopper who opened the profile by mistake can close it again
+            instead of hunting for a back button. */}
+        <button
+          type="button"
+          className="icon-btn profile__close"
+          onClick={closeProfile}
+          aria-label="Close profile"
+          title="Close profile"
+        >
+          ✕
+        </button>
       </header>
 
       {error ? <p className="alert alert--danger">{error}</p> : null}
