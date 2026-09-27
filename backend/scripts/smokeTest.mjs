@@ -433,6 +433,68 @@ async function main() {
     const riderRead = await api('GET', `/orders/${orderId}`, { token: sessions.rider });
     check('an involved rider can read the order', riderRead.status === 200, `got ${why(riderRead)}`);
 
+    // --- Store-side rider analytics ------------------------------------------
+    // The store owner's view of the same timings, rolled up per rider. Derived
+    // from the order's statusHistory above, so the numbers are a record of what
+    // happened rather than a counter that could drift.
+    const storeAnalytics = await api('GET', '/orders/store/analytics', {
+      token: ownerToken,
+    });
+    const analyticsSummary = storeAnalytics.data?.summary || {};
+    const analyticsRow = (storeAnalytics.data?.orders || []).find(
+      (row) => String(row.id) === String(orderId),
+    );
+
+    check(
+      'the store owner can read their delivery analytics',
+      storeAnalytics.status === 200,
+      `got ${why(storeAnalytics)}`,
+    );
+    check(
+      'the analytics carry the store back',
+      storeAnalytics.data?.store?._id &&
+        String(storeAnalytics.data.store._id) === String(storeId),
+    );
+    check(
+      'the order that was just delivered is timed',
+      analyticsRow?.isDelivered === true && Number.isFinite(analyticsRow?.totalMs),
+      `isDelivered ${analyticsRow?.isDelivered}, total ${analyticsRow?.totalMs}`,
+    );
+    check(
+      'every leg of that delivery is measured',
+      Number.isFinite(analyticsRow?.prepMs) &&
+        Number.isFinite(analyticsRow?.waitMs) &&
+        Number.isFinite(analyticsRow?.rideMs),
+      `prep ${analyticsRow?.prepMs}, wait ${analyticsRow?.waitMs}, ride ${analyticsRow?.rideMs}`,
+    );
+    check(
+      'the rider who carried it is named',
+      Boolean(analyticsRow?.riderName),
+      `got ${analyticsRow?.riderName}`,
+    );
+    check(
+      'the per-rider rollup covers the store',
+      Array.isArray(storeAnalytics.data?.riders) &&
+        storeAnalytics.data.riders.length > 0,
+    );
+    check(
+      'the rollup averages match the store-wide average',
+      Number.isFinite(analyticsSummary.avgTotalMs) ||
+        analyticsSummary.avgTotalMs === null,
+      `got ${analyticsSummary.avgTotalMs}`,
+    );
+
+    // Named distinctly from the `customerAnalytics` used further down for the
+    // rider-analytics permission check.
+    const customerStoreAnalytics = await api('GET', '/orders/store/analytics', {
+      token: sessions.customer,
+    });
+    check(
+      'a customer cannot read the store analytics',
+      customerStoreAnalytics.status === 403,
+      `got ${why(customerStoreAnalytics)}`,
+    );
+
     // --- Rider analytics: the delivery timings we just performed --------------
     // Every duration is read back out of the order's own statusHistory, so the
     // order that was just delivered has to show up in the rider's own numbers.

@@ -251,6 +251,9 @@ export const ROUTES = {
   // How long the rider's own deliveries took, stage by stage.
   RIDER_ANALYTICS: '/rider/analytics',
   MERCHANT_PRODUCTS: '/merchant/products',
+  // How long this store's deliveries take, per rider. Same numbers the rider
+  // sees about themselves, read off the orders' own status history.
+  MERCHANT_ANALYTICS: '/merchant/analytics',
   // Live map of this store's deliveries in progress (see RiderTracker.jsx).
   MERCHANT_RIDERS: '/merchant/riders',
   MERCHANT_THEME: '/merchant/theme',  ADMIN_DASHBOARD: '/admin',

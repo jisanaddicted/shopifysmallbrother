@@ -114,6 +114,10 @@ export function summariseTimings(orders) {
     return {
       id: String(order?._id || order?.id || ''),
       store: order?.store?.name || order?.store?.slug || 'Unknown store',
+      // Who carried it. The rider's own analytics page ignores these, but the
+      // store-side table needs them next to the timings.
+      riderId: order?.rider?._id || order?.rider?.id || order?.rider || null,
+      riderName: order?.rider?.name || null,
       status: order?.status || null,
       total: order?.total ?? null,
       ...t,
@@ -157,4 +161,95 @@ export function summariseTimings(orders) {
   };
 }
 
-export default { orderTimings, inFlightTiming, summariseTimings, DELIVERY_TARGET_MS };
+/**
+ * Every status change on one order, in the order it happened, with how long the
+ * order sat in the step *before* it.
+ *
+ * `orderTimings` answers "how long did the whole delivery take"; this answers
+ * "walk me through it" - the tracker renders one row per update, so a customer
+ * can see the order was confirmed at 14:02 and picked up at 14:19. `sinceMs` is
+ * null on the first stamp (nothing came before it) and on any entry whose
+ * timestamp is missing, rather than being reported as a misleading 0.
+ */
+export function statusSteps(order) {
+  const history = Array.isArray(order?.statusHistory) ? order.statusHistory : [];
+
+  return history
+    .map((entry, index) => {
+      const at = asDate(entry?.at);
+      const previous = index > 0 ? asDate(history[index - 1]?.at) : null;
+
+      return {
+        status: entry?.status || null,
+        note: entry?.note || '',
+        at,
+        by: entry?.by || null,
+        // How long the PREVIOUS step lasted, i.e. the time this update ended.
+        sinceMs:
+          at && previous ? Math.max(0, at.getTime() - previous.getTime()) : null,
+      };
+    })
+    .filter((step) => step.status && step.at);
+}
+
+/**
+ * Rolls orders up per rider for the store-side analytics tab.
+ *
+ * The same `summariseTimings` maths the rider sees about themselves, so a
+ * merchant and a rider reading the same delivery agree on the numbers. Orders
+ * nobody has claimed are kept as their own "Awaiting a rider" row rather than
+ * being dropped - a queue of unclaimed orders is something a store needs to see.
+ */
+export function summariseByRider(orders) {
+  const groups = new Map();
+
+  for (const order of orders || []) {
+    const rider = order?.rider;
+    const riderId = rider?._id || rider?.id || rider || null;
+    const key = riderId ? String(riderId) : 'unassigned';
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        riderId: riderId ? String(riderId) : null,
+        name: rider?.name || (rider ? 'Rider' : 'Awaiting a rider'),
+        username: rider?.username || '',
+        orders: [],
+      });
+    }
+
+    groups.get(key).orders.push(order);
+  }
+
+  return [...groups.values()]
+    .map((group) => {
+      const roll = summariseTimings(group.orders);
+
+      return {
+        riderId: group.riderId,
+        name: group.name,
+        username: group.username,
+        delivered: roll.delivered,
+        open: roll.open,
+        cancelled: roll.cancelled,
+        summary: roll.summary,
+      };
+    })
+    // Most deliveries first, then the quickest average among equals.
+    .sort((a, b) => {
+      if (b.delivered !== a.delivered) return b.delivered - a.delivered;
+
+      const left = a.summary.avgTotalMs ?? Number.POSITIVE_INFINITY;
+      const right = b.summary.avgTotalMs ?? Number.POSITIVE_INFINITY;
+
+      return left - right;
+    });
+}
+
+export default {
+  orderTimings,
+  inFlightTiming,
+  summariseTimings,
+  summariseByRider,
+  statusSteps,
+  DELIVERY_TARGET_MS,
+};

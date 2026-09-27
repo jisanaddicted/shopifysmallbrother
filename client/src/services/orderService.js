@@ -95,6 +95,16 @@ export const getAllOrders = (params = {}) =>
     .get('/orders', { params })
     .then((res) => res.data.orders || res.data || []);
 
+/**
+ * GET /orders/store/analytics?storeId= - how long this store's deliveries take,
+ * rolled up overall AND per rider. Store owner or an appointed store admin.
+ * Resolves to { summary, orders, delivered, open, cancelled, riders, store }.
+ */
+export const getStoreAnalytics = (storeId) =>
+  api
+    .get('/orders/store/analytics', { params: storeId ? { storeId } : {} })
+    .then((res) => res.data || {});
+
 // Note: there is no assignRider() anymore. Riders claim deliveries
 // themselves from their pool (see claimOrder below).
 
@@ -108,6 +118,7 @@ export default {
   updateOrderStatus,
   pushRiderLocation,
   getAllOrders,
+  getStoreAnalytics,
   getOrderPool,
   claimOrder,
 };

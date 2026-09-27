@@ -63,6 +63,13 @@ export default function DashboardLayout({ variant = 'merchant' }) {
         { to: ROUTES.MERCHANT_PRODUCTS, label: 'Products', icon: '📦', end: false },
         // Live delivery map: where each rider of this store is right now.
         { to: ROUTES.MERCHANT_RIDERS, label: 'Rider tracker', icon: '🛵', end: false },
+        // How long deliveries take here, split by who owned each wait.
+        {
+          to: ROUTES.MERCHANT_ANALYTICS,
+          label: 'Rider analytics',
+          icon: '📈',
+          end: false,
+        },
         { to: ROUTES.MERCHANT_THEME, label: 'Theme', icon: '🎨', end: false },
       ]
     : [

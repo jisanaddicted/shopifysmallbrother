@@ -220,6 +220,8 @@ no-response network failure into *"Cannot reach the API server at
 | `PATCH` | `/orders/:id/status` | assigned rider / admin | advance the status. A rider walks the happy path (or jumps to `delivered`); an admin may only do `confirmed` → `preparing` → `ready_for_pickup` |
 | `PATCH` | `/orders/:id/location` | assigned rider | GPS fallback ping |
 | `GET` | `/orders` | admin | dispatch board (`status`, `page`) — only orders of stores the admin runs |
+| `GET` | `/orders/rider/analytics` | rider | how long each stage of *their* deliveries took |
+| `GET` | `/orders/store/analytics` | store staff (owner / appointed store admin) | the same timings for the whole store, rolled up per rider (`storeId` optional) |
 
 Stores / riders / menus / users live under `/stores`, `/riders`, `/menu`,
 `/users`, `/admin` — read `backend/src/routes/*.js` plus the matching
@@ -286,6 +288,20 @@ join an order room you own, are delivering, or administer.
   a rewind, or a self-declared `delivered` with a 403 even if the request is
   hand-made. Pushing it on the road stays the rider's job, and cancelling stays
   the customer's.
+- **Every status change is timestamped, and that is the only source of the timing
+  numbers.** `applyStatus` (and `claimOrder`) push `{ status, note, by, at }` onto
+  `Order.statusHistory`, so a delivery finished last month still reports exactly
+  what it took — nothing is counted live and can drift. `deliveryTiming.js` reads
+  the history back out and splits a delivery into the three legs that say *who*
+  was slow: **prep** (placed → ready, the store), **wait** (ready → picked up,
+  the rider), **ride** (picked up → delivered, the rider). The rider's own page
+  (`/rider/analytics`) and the store's (`/merchant/analytics`, per rider) both
+  come from that one function, so a merchant and a rider reading the same
+  delivery always agree. The order tracker shows the whole audit trail —
+  every update, when it happened, and how long the step before it lasted — using
+  `client/src/utils/timings.js`, a deliberate mirror of the backend helper
+  (same reason the constants are duplicated: the tracker holds a single order, so
+  there is nothing to ask the server for).
 - **Passwords** are bcrypt-hashed with `select: false`, so a hash can never
   leak into a JSON response by accident.
 - **CORS** is an allow-list from `CLIENT_ORIGIN` in `backend/.env`, plus any
@@ -328,8 +344,9 @@ client/src/
   pages/auth/                Login.jsx, Register.jsx, PortalAuth.jsx (+ portal-auth.css)
                              CustomerLogin.jsx, CustomerRegister.jsx (+ customer-auth.css)
   pages/customer/            Storefront.jsx, ShopPage.jsx, Checkout.jsx, OrderTracker.jsx
-  pages/rider/RiderConsole.jsx
-  pages/store/MerchantDashboard.jsx
+  pages/rider/RiderConsole.jsx, RiderAnalytics.jsx
+  pages/store/MerchantDashboard.jsx, RiderTracker.jsx,
+                  ThemeBuilder.jsx, StoreRiderAnalytics.jsx
   pages/admin/               AdminDashboard.jsx, AdminInvitations.jsx, ProductManager.jsx
 backend/src/
   controllers/authController.js  register/login/me/updateMe/usernameAvailable

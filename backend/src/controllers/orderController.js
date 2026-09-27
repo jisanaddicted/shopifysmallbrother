@@ -17,7 +17,7 @@ import { priceOrder, riderAllowedStatuses, adminNextStatus } from '../utils/pric
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { canAccessOrder } from '../utils/orderAccess.js';
 import { activeStoreIds, isBoundToStore } from '../utils/storeRider.js';
-import { summariseTimings } from '../utils/deliveryTiming.js';
+import { summariseTimings, summariseByRider } from '../utils/deliveryTiming.js';
 import {
   loadManageableStore,
   managedStoreIds,
@@ -33,6 +33,13 @@ import { ensureStoreCustomer } from '../utils/storeCustomer.js';
  * numbers describe how the rider is doing *now* and the query stays bounded.
  */
 const ANALYTICS_WINDOW = 100;
+
+/**
+ * How many of a store's most recent orders feed the store analytics tab. Wider
+ * than the rider's own window because a store wants its whole recent history
+ * here, and the per-rider rollup gets thin fast with only 100 rows.
+ */
+const STORE_ANALYTICS_WINDOW = 200;
 
 // The tracker needs the rider's name/phone and the customer's details, and
 // the store so the page can show which merchant the order is from.
@@ -689,6 +696,45 @@ export const listAllOrders = asyncHandler(async (req, res) => {
     page,
     pages: Math.max(1, Math.ceil(total / limit)),
     total,
+  });
+});
+
+/**
+ * GET /api/orders/store/analytics?storeId=
+ *
+ * How long deliveries at this store take, and which rider is responsible.
+ *
+ * The store owner's (or an appointed store admin's) view of the same numbers
+ * the rider sees about themselves: every figure is derived from the orders' own
+ * statusHistory, so it is a record of what happened rather than a counter that
+ * has to be maintained. `riders` is the per-rider rollup of the very same
+ * orders, which is what the store dashboard's analytics tab renders.
+ *
+ * `?storeId=` picks one of several stores; without it the primary store (the
+ * one owned, otherwise the first one administered) is used - identical to
+ * /orders/store/mine.
+ */
+export const getStoreAnalytics = asyncHandler(async (req, res) => {
+  const requested = req.query.storeId || null;
+
+  const entry = requested
+    ? await loadManageableStore(requested, req.user)
+    : await primaryStoreFor(req.user);
+
+  if (!entry) throw new HttpError(404, 'You do not have a store yet.');
+
+  const orders = await Order.find({ store: entry.store._id })
+    .sort({ createdAt: -1 })
+    .limit(STORE_ANALYTICS_WINDOW)
+    .populate(ORDER_POPULATE);
+
+  res.json({
+    ...summariseTimings(orders),
+    riders: summariseByRider(orders),
+    store: entry.store,
+    role: entry.role,
+    isOwner: entry.role === STORE_ROLES.OWNER,
+    window: STORE_ANALYTICS_WINDOW,
   });
 });
 

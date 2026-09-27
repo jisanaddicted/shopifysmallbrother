@@ -1177,6 +1177,48 @@ ol {
   transition: width 0.3s ease;
 }
 
+/* The order tracker's Timing panel reuses .leg without the bar, so the value
+   moves up beside its label instead of sitting in the bar's empty column. */
+.leg--plain {
+  grid-template-columns: minmax(9rem, 14rem) auto;
+  justify-content: start;
+  gap: 1rem;
+}
+
+.timing__headline {
+  margin: 0 0 1rem;
+  color: var(--ink-soft);
+}
+
+.timing__headline strong {
+  color: var(--ink);
+  font-size: 1.3rem;
+  margin-right: 0.3rem;
+}
+
+/* The audit trail: one row per status update - what happened, when, and how
+   long the step before it lasted. */
+.steps {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.steps__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.steps__time,
+.steps__since {
+  white-space: nowrap;
+}
+
 /* On a narrow screen the label stacks above its own bar. */
 @media (max-width: 620px) {
   .leg {
@@ -1186,6 +1228,14 @@ ol {
 
   .leg__value {
     justify-self: start;
+  }
+
+  .leg--plain {
+    grid-template-columns: 1fr;
+  }
+
+  .steps__row {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }
 

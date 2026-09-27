@@ -5,6 +5,7 @@ import {
   createOrder,
   getOrder,
   getRiderAnalytics,
+  getStoreAnalytics,
   listAllOrders,
   listMyOrders,
   listOrderPool,
@@ -53,6 +54,15 @@ router.get('/pool', requireAuth, requireRole(ROLES.RIDER), listOrderPool);
 // Orders placed with a store the signed-in account runs: as owner, or as a
 // store admin the owner appointed (who keeps their own platform role).
 router.get('/store/mine', requireAuth, requireStoreStaff, listStoreOrders);
+
+// How long this store's deliveries take, per rider and per order. MUST stay
+// above the open `/:id` below, or "analytics" is swallowed as an order id.
+router.get(
+  '/store/analytics',
+  requireAuth,
+  requireStoreStaff,
+  getStoreAnalytics,
+);
 
 router.get('/', requireAuth, requireRole(ROLES.ADMIN), listAllOrders);
 
