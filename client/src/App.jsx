@@ -204,6 +204,18 @@ export default function App() {
                 by ?storeId= and defaults to the admin's primary store, and it
                 explains itself when the admin runs no store at all. */}
             <Route path={ROUTES.ADMIN_RIDERS} element={<RiderTracker />} />
+            {/* Opened from the rider tracker: same view, same side rail, but
+                "back" returns to the tracker instead of Dispatch. */}
+            <Route
+              path={ROUTES.ADMIN_RIDER_ORDER}
+              element={
+                <OrderTracker
+                  variant="admin"
+                  backTo={ROUTES.ADMIN_RIDERS}
+                  backLabel="Back to rider tracker"
+                />
+              }
+            />
             <Route path={ROUTES.ADMIN_THEME} element={<ThemeBuilder />} />
             {/* Same order view the customer sees, but mounted in the shell so
                 the side rail survives. variant="admin" only swaps the wording

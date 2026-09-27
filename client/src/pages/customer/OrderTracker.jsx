@@ -33,8 +33,16 @@ import { deliveryLegs, elapsedMs, statusSteps } from '../../utils/timings';
  * variant="rider" - the same, opened from the rider's own pages at
  *   /rider/orders/:orderId, for the same reason: it stays inside the rider
  *   shell instead of dropping the rider onto the public navbar.
+ *
+ * `backTo`/`backLabel` let the caller send "back" where the user actually came
+ * from - the rider tracker's order view returns to the tracker, not to the
+ * dispatch board - instead of every shell-mounted view assuming its own board.
  */
-export default function OrderTracker({ variant = 'customer' }) {
+export default function OrderTracker({
+  variant = 'customer',
+  backTo: backToProp,
+  backLabel: backLabelProp,
+}) {
   const isAdmin = variant === 'admin';
   const isStaffView = isAdmin || variant === 'rider';
   const { orderId } = useParams();
@@ -186,17 +194,22 @@ export default function OrderTracker({ variant = 'customer' }) {
   }
 
   // Where "back" goes: each back-office view returns to the board it was opened
-  // from; a customer goes back to the shop they ordered from.
-  const backTo = isAdmin
-    ? ROUTES.ADMIN_DASHBOARD
-    : variant === 'rider'
-      ? ROUTES.RIDER_CONSOLE
-      : ROUTES.STORE;
-  const backLabel = isAdmin
-    ? 'Back to orders'
-    : variant === 'rider'
-      ? 'Back to deliveries'
-      : 'Back to store';
+  // from (overridable, so the rider tracker's order view goes back to the
+  // tracker); a customer goes back to the shop they ordered from.
+  const backTo =
+    backToProp ||
+    (isAdmin
+      ? ROUTES.ADMIN_DASHBOARD
+      : variant === 'rider'
+        ? ROUTES.RIDER_CONSOLE
+        : ROUTES.STORE);
+  const backLabel =
+    backLabelProp ||
+    (isAdmin
+      ? 'Back to orders'
+      : variant === 'rider'
+        ? 'Back to deliveries'
+        : 'Back to store');
   // The customer tracker is full-bleed (it has the navbar above it); every
   // shell-mounted view uses the standard back-office page padding.
   const pageClass = isStaffView ? 'page' : 'page page--customer';

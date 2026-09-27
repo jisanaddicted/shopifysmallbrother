@@ -11,7 +11,6 @@ import {
   ROUTES,
   STORE_RIDER_STATUS,
   STORE_RIDER_STATUS_LABELS,
-  orderTrackerPath,
   shopPath,
 } from '../../utils/constants';
 import {
@@ -394,7 +393,7 @@ export default function RiderTracker() {
             <p className="muted">
               Nothing is moving right now. A delivery appears here the moment a
               rider accepts it - new orders land on{' '}
-              <Link to={ROUTES.MERCHANT_DASHBOARD}>My store</Link>.
+              <Link to={ROUTES.ADMIN_DASHBOARD}>Dispatch</Link>.
             </p>
           ) : (
             <ul className="rider-list">
@@ -510,7 +509,10 @@ export default function RiderTracker() {
 
                   <Link
                     className="btn btn-outline btn-sm"
-                    to={orderTrackerPath(orderIdOf(selected))}
+                    to={ROUTES.ADMIN_RIDER_ORDER.replace(
+                      ':orderId',
+                      orderIdOf(selected),
+                    )}
                   >
                     Open the full timeline
                   </Link>
@@ -535,7 +537,7 @@ export default function RiderTracker() {
           <h2 className="panel__title">Rider roster</h2>
           <span className="muted small">
             Invite or remove riders from{' '}
-            <Link to={ROUTES.MERCHANT_DASHBOARD}>My store</Link>.
+            <Link to={ROUTES.ADMIN_DASHBOARD}>Dispatch</Link>.
           </span>
         </div>
 

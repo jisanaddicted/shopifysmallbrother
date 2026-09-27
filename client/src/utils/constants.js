@@ -272,6 +272,9 @@ export const ROUTES = {
   // DashboardLayout group so the side rail stays visible (the customer's
   // /track/:orderId sits outside it and shows the top navbar instead).
   ADMIN_ORDER: '/admin/orders/:orderId',
+  // The same order view reached from the admin's Rider tracker, so "back" goes
+  // to the tracker rather than to Dispatch. Same page, different origin.
+  ADMIN_RIDER_ORDER: '/admin/riders/:orderId',
   ADMIN_THEME: '/admin/theme',
   PROFILE: '/profile',
   // A customer's own profile INSIDE their store: /s/<slug>/profile (see
