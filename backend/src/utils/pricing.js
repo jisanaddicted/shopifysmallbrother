@@ -1,4 +1,5 @@
 import {
+  ADMIN_STATUS_STEPS,
   DELIVERY_FEE,
   FREE_DELIVERY_OVER,
   ORDER_STATUS,
@@ -48,6 +49,20 @@ export function riderAllowedStatuses(currentStatus) {
   return [...new Set(allowed)];
 }
 
+/**
+ * The one status an admin may move this order to, or null when the admin has no
+ * say over where it currently is. Confirmed -> preparing, preparing -> ready
+ * for pickup, and nothing else - see ADMIN_STATUS_STEPS.
+ */
+export function adminNextStatus(status) {
+  return ADMIN_STATUS_STEPS[status] || null;
+}
+
 export { round2 };
 
-export default { priceOrder, nextStatusInFlow, riderAllowedStatuses };
+export default {
+  priceOrder,
+  nextStatusInFlow,
+  riderAllowedStatuses,
+  adminNextStatus,
+};

@@ -169,6 +169,17 @@ export const ORDER_STATUS_FLOW = [
   ORDER_STATUS.DELIVERED,
 ];
 
+// The ONLY status moves the admin panel may make from an order page: a confirmed
+// order starts being prepared, and a preparing one becomes ready for pickup.
+// Nothing else is offered, so the panel can never skip, rewind, or mark a
+// delivery finished - the rider owns it from pickup on, and the customer may
+// still cancel. The server enforces the identical table
+// (ADMIN_STATUS_STEPS in backend/src/utils/constants.js) - keep both in sync.
+export const ADMIN_STATUS_STEPS = {
+  [ORDER_STATUS.CONFIRMED]: ORDER_STATUS.PREPARING,
+  [ORDER_STATUS.PREPARING]: ORDER_STATUS.READY_FOR_PICKUP,
+};
+
 export const ORDER_STATUS_LABELS = {
   [ORDER_STATUS.PENDING]: 'Pending',
   [ORDER_STATUS.CONFIRMED]: 'Confirmed',

@@ -117,6 +117,23 @@ export const CANCELLABLE_STATUSES = [
   ORDER_STATUS.READY_FOR_PICKUP,
 ];
 
+// The ONLY status moves a platform admin may make: what the kitchen is doing
+// with an order before a rider collects it. Each key is the status the order has
+// to be sitting at for the move to be allowed, and each value is the single
+// status it may become.
+//
+// Deliberately just these two steps. Everything else about a delivery belongs to
+// somebody else - the rider drives it out and marks it delivered, the customer
+// may cancel - so the admin panel can neither skip ahead, rewind the kitchen,
+// nor hand an order over as finished. `PATCH /orders/:id/status` enforces this
+// server-side; the button in the admin order page reads the same table.
+//
+// Mirror of ADMIN_STATUS_STEPS in client/src/utils/constants.js.
+export const ADMIN_STATUS_STEPS = {
+  [ORDER_STATUS.CONFIRMED]: ORDER_STATUS.PREPARING,
+  [ORDER_STATUS.PREPARING]: ORDER_STATUS.READY_FOR_PICKUP,
+};
+
 export const PAYMENT_METHODS = ['cod', 'card'];
 
 // Pricing rules - must match client/src/utils/constants.js + CartContext.
@@ -145,6 +162,7 @@ export default {
   ORDER_STATUS,
   ORDER_STATUS_VALUES,
   ORDER_STATUS_FLOW,
+  ADMIN_STATUS_STEPS,
   CANCELLABLE_STATUSES,
   PAYMENT_METHODS,
   DELIVERY_FEE,

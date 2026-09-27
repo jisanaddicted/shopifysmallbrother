@@ -217,7 +217,7 @@ no-response network failure into *"Cannot reach the API server at
 | `GET` | `/orders/:id` | customer / assigned rider / store member (incl. admin of that store) | one order (guests: `?guestToken=`) |
 | `PATCH` | `/orders/:id/cancel` | customer | cancel before pickup |
 | `GET` | `/orders/rider/assigned` | rider | this rider's deliveries |
-| `PATCH` | `/orders/:id/status` | assigned rider / store member (admin of that store) | advance the status (happy-path order enforced) |
+| `PATCH` | `/orders/:id/status` | assigned rider / admin | advance the status. A rider walks the happy path (or jumps to `delivered`); an admin may only do `confirmed` → `preparing` → `ready_for_pickup` |
 | `PATCH` | `/orders/:id/location` | assigned rider | GPS fallback ping |
 | `GET` | `/orders` | admin | dispatch board (`status`, `page`) — only orders of stores the admin runs |
 
@@ -277,6 +277,15 @@ join an order room you own, are delivering, or administer.
 - **Roles are enforced on the server**, not just hidden in the UI. Riders may
   only move an order along the happy path (or jump straight to `delivered`);
   only admins dispatch and edit the catalogue.
+- **An admin owns the kitchen, not the delivery.** From an order page the admin
+  can move it `confirmed` → `preparing` → `ready_for_pickup` and no further: the
+  button appears only while the order is sitting at a status they may actually
+  change. `ADMIN_STATUS_STEPS` (duplicated in `backend/src/utils/constants.js`
+  and `client/src/utils/constants.js`, and read by the button *and* by
+  `updateOrderStatus`) is the single table behind it, so the API refuses a skip,
+  a rewind, or a self-declared `delivered` with a 403 even if the request is
+  hand-made. Pushing it on the road stays the rider's job, and cancelling stays
+  the customer's.
 - **Passwords** are bcrypt-hashed with `select: false`, so a hash can never
   leak into a JSON response by accident.
 - **CORS** is an allow-list from `CLIENT_ORIGIN` in `backend/.env`, plus any

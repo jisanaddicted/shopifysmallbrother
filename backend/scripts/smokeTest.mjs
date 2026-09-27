@@ -300,6 +300,102 @@ async function main() {
     });
     check('a customer cannot set the status', customerStatus.status === 403, `got ${why(customerStatus)}`);
 
+    // --- Admin panel: the kitchen, and only the kitchen ----------------------
+    // A platform admin only ever reaches orders of stores they actually run
+    // (see canAccessOrder), so appoint this one first - the owner invites
+    // ada.admin, ada.admin accepts. Without that every call below would be
+    // refused with "This order does not belong to you" and the status rule would
+    // never actually be exercised.
+    //
+    // Same repeatability guard as the rider above: drop the binding an earlier
+    // run left behind, or re-inviting is refused with 409 "already has a pending
+    // invitation" and the test only passes on a clean database.
+    const adminMe = await api('GET', '/auth/me', { token: sessions.admin });
+    const adminUserId = adminMe.data?.user?._id;
+    if (adminUserId) {
+      await api('DELETE', `/stores/${storeId}/riders/${adminUserId}`, {
+        token: ownerToken,
+      });
+    }
+
+    const appointAdmin = await api('POST', `/stores/${storeId}/riders`, {
+      token: ownerToken,
+      body: { username: 'ada.admin', role: 'admin' },
+    });
+    const adminRequestId =
+      appointAdmin.data?.invitation?._id || appointAdmin.data?.invitation?.id;
+    check(
+      'the store owner can appoint a platform admin',
+      (appointAdmin.status === 200 || appointAdmin.status === 201) &&
+        Boolean(adminRequestId),
+      `got ${why(appointAdmin)}`,
+    );
+
+    const adminAccepted = adminRequestId
+      ? await api('PATCH', `/riders/requests/${adminRequestId}`, {
+          token: sessions.admin,
+          body: { action: 'accept' },
+        })
+      : { status: 0 };
+    check(
+      'the platform admin accepts and can now see that store orders',
+      adminAccepted.status === 200,
+      `got ${why(adminAccepted)}`,
+    );
+
+    // The order is sitting at `confirmed` here. An admin may walk it forward
+    // exactly two steps - preparing, then ready for pickup - and nothing else:
+    // no rewinding, no skipping, no marking somebody else's delivery finished.
+    const adminPrepares = await api('PATCH', `/orders/${orderId}/status`, {
+      token: sessions.admin,
+      body: { status: 'preparing' },
+    });
+    check(
+      'an admin can move a confirmed order to preparing',
+      adminPrepares.status === 200 && adminPrepares.data?.order?.status === 'preparing',
+      `got ${why(adminPrepares)}/${adminPrepares.data?.order?.status}`,
+    );
+
+    const adminReady = await api('PATCH', `/orders/${orderId}/status`, {
+      token: sessions.admin,
+      body: { status: 'ready_for_pickup' },
+    });
+    check(
+      'an admin can then move it to ready for pickup',
+      adminReady.status === 200 && adminReady.data?.order?.status === 'ready_for_pickup',
+      `got ${why(adminReady)}/${adminReady.data?.order?.status}`,
+    );
+
+    const adminSkips = await api('PATCH', `/orders/${orderId}/status`, {
+      token: sessions.admin,
+      body: { status: 'out_for_delivery' },
+    });
+    check(
+      'an admin cannot skip past the rider stages',
+      adminSkips.status === 403,
+      `got ${why(adminSkips)}`,
+    );
+
+    const adminDelivers = await api('PATCH', `/orders/${orderId}/status`, {
+      token: sessions.admin,
+      body: { status: 'delivered' },
+    });
+    check(
+      'an admin cannot mark a delivery finished',
+      adminDelivers.status === 403,
+      `got ${why(adminDelivers)}`,
+    );
+
+    const adminRewinds = await api('PATCH', `/orders/${orderId}/status`, {
+      token: sessions.admin,
+      body: { status: 'preparing' },
+    });
+    check(
+      'an admin cannot rewind the kitchen',
+      adminRewinds.status === 403,
+      `got ${why(adminRewinds)}`,
+    );
+
     const ping = await api('PATCH', `/orders/${orderId}/location`, {
       token: sessions.rider,
       body: { lat: 27.7172, lng: 85.324 },
@@ -310,6 +406,11 @@ async function main() {
     // every leg of the delivery gets its own stamp in statusHistory. That is
     // what the analytics below read back: the ride can only be timed from a real
     // pickup, which a "confirmed -> delivered" shortcut would never record.
+    //
+    // The order is already at `ready_for_pickup` (the admin walked the kitchen
+    // above), so the first entry or two here are no-ops or are refused - the
+    // stamps that matter, picked_up / out_for_delivery / delivered, are the
+    // rider's own and are what the analytics measures.
     for (const step of ['preparing', 'ready_for_pickup', 'picked_up', 'out_for_delivery']) {
       // Sequential on purpose: each status depends on the one before it.
       // eslint-disable-next-line no-await-in-loop

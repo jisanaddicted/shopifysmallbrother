@@ -5,6 +5,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useSocket } from '../../context/SocketContext';
 import orderService from '../../services/orderService';
 import {
+  ADMIN_STATUS_STEPS,
   ORDER_STATUS,
   ORDER_STATUS_FLOW,
   ORDER_STATUS_TONE,
@@ -36,6 +37,8 @@ export default function OrderTracker({ variant = 'customer' }) {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [advancing, setAdvancing] = useState(false);
+  const [advanceError, setAdvanceError] = useState('');
 
   const loadOrder = useCallback(async () => {
     setLoading(true);
@@ -65,6 +68,34 @@ export default function OrderTracker({ variant = 'customer' }) {
 
   // A socket status beats the value we fetched over REST.
   const status = statusUpdates[orderId]?.status || order?.status;
+
+  // The single status an admin may set this order to, or null when there is
+  // nothing for them to do (pending, already ready, on the road, done, or
+  // cancelled). Reading the same table the API enforces means the button can
+  // never offer a move the server would refuse.
+  const adminNextStatus = isAdmin ? ADMIN_STATUS_STEPS[status] || null : null;
+
+  const advanceAsAdmin = async () => {
+    if (!adminNextStatus || advancing) return;
+
+    setAdvancing(true);
+    setAdvanceError('');
+
+    try {
+      const updated = await orderService.updateOrderStatus(
+        orderId,
+        adminNextStatus,
+        'Kitchen update by an admin',
+      );
+      // Adopt the response straight away: the button moves on to the next step
+      // without waiting for a Refresh or for the socket to catch up.
+      setOrder(updated);
+    } catch (err) {
+      setAdvanceError(err.message || 'Could not update the status.');
+    } finally {
+      setAdvancing(false);
+    }
+  };
 
   const customerLocation = order?.location || order?.address?.location || null;
   const riderLocation =
@@ -182,6 +213,23 @@ export default function OrderTracker({ variant = 'customer' }) {
             </Link>
           ) : null}
 
+          {/* Admin-only, and only while the order is actually sitting at a
+              status the admin may move. No button appears for a pending order,
+              one already ready, one on the road, or a finished/cancelled one -
+              so there is no dead control to click and no dropdown to guess at. */}
+          {adminNextStatus ? (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={advanceAsAdmin}
+              disabled={advancing}
+            >
+              {advancing
+                ? 'Saving…'
+                : `Mark as ${formatStatus(adminNextStatus).toLowerCase()}`}
+            </button>
+          ) : null}
+
           <span className={`live-dot ${connected ? 'live-dot--on' : ''}`}>
             {connected ? 'Live' : 'Offline'}
           </span>
@@ -194,6 +242,10 @@ export default function OrderTracker({ variant = 'customer' }) {
           </button>
         </div>
       </header>
+
+      {advanceError ? (
+        <p className="alert alert--danger">{advanceError}</p>
+      ) : null}
 
       <DeliveryMap
         customerLocation={customerLocation}

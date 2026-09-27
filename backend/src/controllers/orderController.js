@@ -13,7 +13,7 @@ import {
   ROLES,
   STORE_CUSTOMER_SOURCE,
 } from '../utils/constants.js';
-import { priceOrder, riderAllowedStatuses } from '../utils/pricing.js';
+import { priceOrder, riderAllowedStatuses, adminNextStatus } from '../utils/pricing.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { canAccessOrder } from '../utils/orderAccess.js';
 import { activeStoreIds, isBoundToStore } from '../utils/storeRider.js';
@@ -405,7 +405,9 @@ export const getRiderAnalytics = asyncHandler(async (req, res) => {
  *
  * A rider may only move an order along the happy path - or jump straight to
  * delivered, which is what the console's "Mark delivered" button does.
- * Admins may set any status.
+ * An admin may only drive the kitchen side: confirmed -> preparing, then
+ * preparing -> ready for pickup (ADMIN_STATUS_STEPS). They can neither rewind
+ * the kitchen nor mark a delivery finished - the rider owns the rest.
  */
 export const updateOrderStatus = asyncHandler(async (req, res) => {
   const { status, note } = req.body || {};
@@ -433,7 +435,22 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
         `A rider cannot move this order from “${order.status}” to “${status}”.`,
       );
     }
-  } else if (req.user.role !== ROLES.ADMIN) {
+  } else if (req.user.role === ROLES.ADMIN) {
+    // The admin panel drives the kitchen only, and only one step at a time:
+    // confirmed -> preparing -> ready for pickup. This used to let an admin set
+    // ANY status, which meant the panel could skip the kitchen entirely, rewind
+    // it, or hand an order to a rider as already delivered. The rider owns
+    // everything from pickup onwards, and the customer may still cancel.
+    const adminAllowed = adminNextStatus(order.status);
+    if (adminAllowed !== status) {
+      throw new HttpError(
+        403,
+        adminAllowed
+          ? `An admin can only move a “${order.status}” order on to “${adminAllowed}”.`
+          : `An admin cannot change an order that is “${order.status}”.`,
+      );
+    }
+  } else {
     throw new HttpError(403, 'Only a rider or an admin can change the status.');
   }
 
