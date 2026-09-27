@@ -10,7 +10,8 @@ import { initials } from '../../utils/formatters';
  * panel). Replaces the top <Navbar/> on those routes so the merchant and the
  * admin get a persistent left rail instead of top links.
  *
- * variant="merchant" -> My store, Products, Rider tracker, Theme
+ * variant="merchant" -> My store, Products, Rider tracker, Rider analytics, Theme
+ * variant="rider"    -> My deliveries, Analytics
  * variant="admin"    -> Dispatch, Products, Invitations, Theme
  *
  * The admin rail shows a count badge on Invitations while a store is waiting
@@ -56,42 +57,63 @@ export default function DashboardLayout({ variant = 'merchant' }) {
 
   const brandTarget = HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.HOME;
   const isMerchant = variant === 'merchant';
+  const isRiderShell = variant === 'rider';
 
-    const links = isMerchant
-    ? [
-        { to: ROUTES.MERCHANT_DASHBOARD, label: 'My store', icon: '🏪', end: true },
-        { to: ROUTES.MERCHANT_PRODUCTS, label: 'Products', icon: '📦', end: false },
-        // Live delivery map: where each rider of this store is right now.
-        { to: ROUTES.MERCHANT_RIDERS, label: 'Rider tracker', icon: '🛵', end: false },
-        // How long deliveries take here, split by who owned each wait.
-        {
-          to: ROUTES.MERCHANT_ANALYTICS,
-          label: 'Rider analytics',
-          icon: '📈',
-          end: false,
-        },
-        { to: ROUTES.MERCHANT_THEME, label: 'Theme', icon: '🎨', end: false },
-      ]
-    : [
-        { to: ROUTES.ADMIN_DASHBOARD, label: 'Dispatch', icon: '🧭', end: true },
-        { to: ROUTES.ADMIN_PRODUCTS, label: 'Products', icon: '📦', end: false },
-        // Stores invite this admin by username; the answer happens here.
-        {
-          to: ROUTES.ADMIN_INVITATIONS,
-          label: 'Invitations',
-          icon: '✉️',
-          end: false,
-          badge: pendingInvites,
-        },
-        { to: ROUTES.ADMIN_THEME, label: 'Theme', icon: '🎨', end: false },
-      ];
+  // Three back-office shells, one per variant. The rider's rail is short: the
+  // console and their own numbers, which is the same pair the rider navbar used
+  // to carry across the top.
+  const merchantLinks = [
+    { to: ROUTES.MERCHANT_DASHBOARD, label: 'My store', icon: '🏪', end: true },
+    { to: ROUTES.MERCHANT_PRODUCTS, label: 'Products', icon: '📦', end: false },
+    // Live delivery map: where each rider of this store is right now.
+    { to: ROUTES.MERCHANT_RIDERS, label: 'Rider tracker', icon: '🛵', end: false },
+    // How long deliveries take here, split by who owned each wait.
+    {
+      to: ROUTES.MERCHANT_ANALYTICS,
+      label: 'Rider analytics',
+      icon: '📈',
+      end: false,
+    },
+    { to: ROUTES.MERCHANT_THEME, label: 'Theme', icon: '🎨', end: false },
+  ];
 
-  const title = isMerchant ? 'Store dashboard' : 'Admin panel';
-  const subtitle = isMerchant
-    ? user?.username
-      ? `@${user.username}`
-      : user?.name || user?.email || ''
-    : 'Platform controls';
+  const riderLinks = [
+    { to: ROUTES.RIDER_CONSOLE, label: 'My deliveries', icon: '🛵', end: true },
+    { to: ROUTES.RIDER_ANALYTICS, label: 'Analytics', icon: '📈', end: false },
+  ];
+
+  const adminLinks = [
+    { to: ROUTES.ADMIN_DASHBOARD, label: 'Dispatch', icon: '🧭', end: true },
+    { to: ROUTES.ADMIN_PRODUCTS, label: 'Products', icon: '📦', end: false },
+    // Stores invite this admin by username; the answer happens here.
+    {
+      to: ROUTES.ADMIN_INVITATIONS,
+      label: 'Invitations',
+      icon: '✉️',
+      end: false,
+      badge: pendingInvites,
+    },
+    { to: ROUTES.ADMIN_THEME, label: 'Theme', icon: '🎨', end: false },
+  ];
+
+  const links = isRiderShell
+    ? riderLinks
+    : isMerchant
+      ? merchantLinks
+      : adminLinks;
+
+  const title = isRiderShell
+    ? 'Rider console'
+    : isMerchant
+      ? 'Store dashboard'
+      : 'Admin panel';
+  const subtitle = isRiderShell
+    ? 'Your deliveries'
+    : isMerchant
+      ? user?.username
+        ? `@${user.username}`
+        : user?.name || user?.email || ''
+      : 'Platform controls';
 
   return (
     <div className="dash">

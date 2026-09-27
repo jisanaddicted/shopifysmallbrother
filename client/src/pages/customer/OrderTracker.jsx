@@ -30,9 +30,13 @@ import { deliveryLegs, elapsedMs, statusSteps } from '../../utils/timings';
  *   board at /admin/orders/:orderId. It renders *inside* <DashboardLayout>, so
  *   the side rail stays put; only the padding, the wording and the "back"
  *   target differ. Nothing is duplicated for the back office.
+ * variant="rider" - the same, opened from the rider's own pages at
+ *   /rider/orders/:orderId, for the same reason: it stays inside the rider
+ *   shell instead of dropping the rider onto the public navbar.
  */
 export default function OrderTracker({ variant = 'customer' }) {
   const isAdmin = variant === 'admin';
+  const isStaffView = isAdmin || variant === 'rider';
   const { orderId } = useParams();
   const { joinOrder, leaveOrder, getRiderLocation, statusUpdates, connected } =
     useSocket();
@@ -172,16 +176,30 @@ export default function OrderTracker({ variant = 'customer' }) {
     return (
       <LoadingSpinner
         fullPage
-        label={isAdmin ? 'Loading the order…' : 'Loading your order…'}
+        label={
+        isStaffView
+          ? 'Loading the order…'
+          : 'Loading your order…'
+      }
       />
     );
   }
 
-  // Where "back" goes: the admin goes back to the dispatch board, a customer
-  // back to the shop they ordered from.
-  const backTo = isAdmin ? ROUTES.ADMIN_DASHBOARD : ROUTES.STORE;
-  const backLabel = isAdmin ? 'Back to orders' : 'Back to store';
-  const pageClass = isAdmin ? 'page' : 'page page--customer';
+  // Where "back" goes: each back-office view returns to the board it was opened
+  // from; a customer goes back to the shop they ordered from.
+  const backTo = isAdmin
+    ? ROUTES.ADMIN_DASHBOARD
+    : variant === 'rider'
+      ? ROUTES.RIDER_CONSOLE
+      : ROUTES.STORE;
+  const backLabel = isAdmin
+    ? 'Back to orders'
+    : variant === 'rider'
+      ? 'Back to deliveries'
+      : 'Back to store';
+  // The customer tracker is full-bleed (it has the navbar above it); every
+  // shell-mounted view uses the standard back-office page padding.
+  const pageClass = isStaffView ? 'page' : 'page page--customer';
 
   if (error) {
     return (
@@ -216,8 +234,9 @@ export default function OrderTracker({ variant = 'customer' }) {
 
         <div className="button-row">
           {/* The admin reads this inside the side rail, so it needs a way back
-              to the board; a customer already has the navbar above them. */}
-          {isAdmin ? (
+              to the board; a customer already has the navbar above them. The
+              rider's shell-mounted view needs one for the same reason. */}
+          {isStaffView ? (
             <Link className="btn btn-outline btn-sm" to={backTo}>
               ← {backLabel}
             </Link>
@@ -260,7 +279,10 @@ export default function OrderTracker({ variant = 'customer' }) {
       <DeliveryMap
         customerLocation={customerLocation}
         riderLocation={riderLocation}
-        riderLabel={order?.rider?.name || (isAdmin ? 'Rider' : 'Your rider')}
+        riderLabel={
+          order?.rider?.name ||
+          (isAdmin ? 'Rider' : variant === 'rider' ? 'You' : 'Your rider')
+        }
       />
 
       {isAdmin ? (

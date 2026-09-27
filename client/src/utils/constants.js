@@ -247,7 +247,12 @@ export const ROUTES = {
   // when a store slug is known.
   STORE_CHECKOUT: '/s/:slug/checkout',
   ORDER_TRACKER: '/track/:orderId',
-  RIDER_CONSOLE: '/rider',  MERCHANT_DASHBOARD: '/merchant',
+  RIDER_CONSOLE: '/rider',
+  // One delivery opened from the rider's own pages, mounted INSIDE the rider
+  // shell so the side rail stays put - the same trick the admin order view uses.
+  // Without it the link would leave the dashboard for /track/:orderId and the
+  // rider would land on the public navbar.
+  RIDER_ORDER: '/rider/orders/:orderId',  MERCHANT_DASHBOARD: '/merchant',
   // How long the rider's own deliveries took, stage by stage.
   RIDER_ANALYTICS: '/rider/analytics',
   MERCHANT_PRODUCTS: '/merchant/products',

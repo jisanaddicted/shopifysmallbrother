@@ -58,21 +58,24 @@ function NotFound() {
  * Route table. Every protected page is wrapped in <ProtectedRoute> so the
  * role check happens before the page (and its API calls) ever mount.
  *
- * The store dashboard (/merchant*) and the admin panel (/admin*) render
- * inside <DashboardLayout> - a side navbar - so the top <Navbar/> is hidden
- * on those routes. Everywhere else (customer, rider, auth, public shop) the
- * top navbar stays as-is.
+ * The store dashboard (/merchant*), the admin panel (/admin*) and the rider
+ * console (/rider*) all render inside <DashboardLayout> - a side navbar - so the
+ * top <Navbar/> is hidden on those routes. Everywhere else (customer, auth,
+ * public shop) the top navbar stays as-is.
  */
 export default function App() {
   const location = useLocation();
   const pathname = location.pathname || '';
   // Portal entry (/login + /register) has NO navbar: split-screen brand panel
   // + form IS the chrome. Dashboards and storefronts keep hiding it too.
+  // /rider counts as a dashboard now - it renders in <DashboardLayout>, so
+  // leaving the top navbar up would stack two navigation bars on one page.
   const hideTopNavbar =
     pathname === ROUTES.LOGIN ||
     pathname === ROUTES.REGISTER ||
     pathname.startsWith('/merchant') ||
     pathname.startsWith('/admin') ||
+    pathname.startsWith('/rider') ||
     pathname.startsWith('/s/');
 
   // The portal is full-bleed (its own background), so drop the centered
@@ -134,26 +137,33 @@ export default function App() {
           <Route path={ROUTES.CHECKOUT} element={<Checkout />} />
           <Route path={ROUTES.ORDER_TRACKER} element={<OrderTracker />} />
 
-          {/* Rider */}
+          {/* Rider - the whole rider area is a side-navbar shell, so the console,
+              their analytics and a single delivery opened from either of them all
+              keep the same rail. The order view used to link out to the public
+              /track/:orderId, which dropped the rider onto the top navbar. */}
           <Route
-            path={ROUTES.RIDER_CONSOLE}
             element={
               <ProtectedRoute allowedRoles={[ROLES.RIDER]}>
-                <RiderConsole />
+                <DashboardLayout variant="rider" />
               </ProtectedRoute>
             }
-          />
+          >
+            <Route path={ROUTES.RIDER_CONSOLE} element={<RiderConsole />} />
 
-          {/* Rider analytics: how long each stage of their deliveries took,
-              read out of the orders' own status history. */}
-          <Route
-            path={ROUTES.RIDER_ANALYTICS}
-            element={
-              <ProtectedRoute allowedRoles={[ROLES.RIDER]}>
-                <RiderAnalytics />
-              </ProtectedRoute>
-            }
-          />
+            {/* Rider analytics: how long each stage of their deliveries took,
+                read out of the orders' own status history. */}
+            <Route
+              path={ROUTES.RIDER_ANALYTICS}
+              element={<RiderAnalytics />}
+            />
+
+            {/* Same order view the customer sees, mounted in the rider shell so
+                the side rail survives - the same trick the admin view uses. */}
+            <Route
+              path={ROUTES.RIDER_ORDER}
+              element={<OrderTracker variant="rider" />}
+            />
+          </Route>
 
           {/* Store owner and store admins the owner appointed.
               {/* Admin panel - side-navbar shell instead of the top navbar. */}

@@ -227,10 +227,18 @@ export default function RiderAnalytics() {
                   {rows.map((row) => (
                     <tr key={row.id}>
                       <td>
-                        <Link to={`${ROUTES.ORDER_TRACKER.replace(
-                          ':orderId',
-                          row.id,
-                        )}`}>{row.store}</Link>
+                        {/* Stays INSIDE the rider shell (/rider/orders/:id) so
+                            the side rail survives. Linking to the public
+                            /track/:orderId instead dropped the rider onto the
+                            top navbar. */}
+                        <Link
+                          to={ROUTES.RIDER_ORDER.replace(
+                            ':orderId',
+                            row.id,
+                          )}
+                        >
+                          {row.store}
+                        </Link>
                       </td>
 
                       <td>
