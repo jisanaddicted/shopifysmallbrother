@@ -408,86 +408,95 @@ export default function OrderTracker({
           )}
         </section>
 
-        <section className="panel">
-          <h2 className="panel__title">Timing</h2>
+        {/*
+          Back office only. A customer watching their own delivery sees the
+          Progress timeline, not the kitchen's timings - "store prep 12 min /
+          wait 3 min / ride 40s" is the store's and the rider's evidence, and
+          the audit-trail notes (who accepted it, who moved it on) are internal.
+          Gated on isStaffView, so the admin and rider variants keep it.
+        */}
+        {isStaffView ? (
+          <section className="panel">
+            <h2 className="panel__title">Timing</h2>
 
-          {steps.length === 0 ? (
-            <p className="muted">
-              No timing recorded yet - the times appear as the order progresses.
-            </p>
-          ) : (
-            <>
-              <p className="timing__headline">
-                {timings.isDelivered ? (
-                  <>
-                    <strong>{formatDurationMs(timings.totalMs)}</strong> from
-                    order to doorstep
-                  </>
-                ) : timings.isCancelled ? (
-                  <>
-                    <strong>—</strong> cancelled before it was delivered
-                  </>
-                ) : (
-                  <>
-                    <strong>{formatDurationMs(runningMs)}</strong> so far
-                  </>
-                )}
+            {steps.length === 0 ? (
+              <p className="muted">
+                No timing recorded yet - the times appear as the order progresses.
               </p>
+            ) : (
+              <>
+                <p className="timing__headline">
+                  {timings.isDelivered ? (
+                    <>
+                      <strong>{formatDurationMs(timings.totalMs)}</strong> from
+                      order to doorstep
+                    </>
+                  ) : timings.isCancelled ? (
+                    <>
+                      <strong>—</strong> cancelled before it was delivered
+                    </>
+                  ) : (
+                    <>
+                      <strong>{formatDurationMs(runningMs)}</strong> so far
+                    </>
+                  )}
+                </p>
 
-              {/* The three legs, so "it took 50 minutes" can be attributed to
-                  the kitchen or the rider rather than just stated. */}
-              <ul className="legs">
-                {[
-                  { key: 'prepMs', label: 'Store prep', hint: 'placed → ready' },
-                  { key: 'waitMs', label: 'Waited', hint: 'ready → picked up' },
-                  { key: 'rideMs', label: 'Ride', hint: 'picked up → delivered' },
-                ].map((leg) => (
-                  <li key={leg.key} className="leg leg--plain">
-                    <span className="leg__label">
-                      {leg.label}
-                      <span className="muted small block">{leg.hint}</span>
-                    </span>
-                    <strong className="leg__value">
-                      {formatDurationMs(timings[leg.key])}
-                    </strong>
-                  </li>
-                ))}
-              </ul>
+                {/* The three legs, so "it took 50 minutes" can be attributed to
+                    the kitchen or the rider rather than just stated. */}
+                <ul className="legs">
+                  {[
+                    { key: 'prepMs', label: 'Store prep', hint: 'placed → ready' },
+                    { key: 'waitMs', label: 'Waited', hint: 'ready → picked up' },
+                    { key: 'rideMs', label: 'Ride', hint: 'picked up → delivered' },
+                  ].map((leg) => (
+                    <li key={leg.key} className="leg leg--plain">
+                      <span className="leg__label">
+                        {leg.label}
+                        <span className="muted small block">{leg.hint}</span>
+                      </span>
+                      <strong className="leg__value">
+                        {formatDurationMs(timings[leg.key])}
+                      </strong>
+                    </li>
+                  ))}
+                </ul>
 
-              {/* Every progress update, when it happened and how long the step
-                  before it lasted - the full audit trail as a customer sees it. */}
-              <ol className="steps">
-                {steps.map((step, index) => (
-                  <li
-                    key={`${step.status}-${step.at.getTime()}-${index}`}
-                    className="steps__row"
-                  >
-                    <span className="steps__label">
-                      <strong>{formatStatus(step.status)}</strong>
-                      {step.note ? (
-                        <span className="muted small block">{step.note}</span>
-                      ) : null}
-                    </span>
+                {/* Every progress update, when it happened and how long the step
+                    before it lasted - the full audit trail. */}
+                <ol className="steps">
+                  {steps.map((step, index) => (
+                    <li
+                      key={`${step.status}-${step.at.getTime()}-${index}`}
+                      className="steps__row"
+                    >
+                      <span className="steps__label">
+                        <strong>{formatStatus(step.status)}</strong>
+                        {step.note ? (
+                          <span className="muted small block">{step.note}</span>
+                        ) : null}
+                      </span>
 
-                    <span className="steps__time muted small">
-                      {formatTime(step.at)}
-                    </span>
+                      <span className="steps__time muted small">
+                        {formatTime(step.at)}
+                      </span>
 
-                    <span className="steps__since">
-                      {index === 0 ? (
-                        <span className="muted small">start</span>
-                      ) : (
-                        <span className="muted small">
-                          {formatDurationMs(step.sinceMs)} earlier
-                        </span>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
-        </section>
+                      <span className="steps__since">
+                        {index === 0 ? (
+                          <span className="muted small">start</span>
+                        ) : (
+                          <span className="muted small">
+                            {formatDurationMs(step.sinceMs)} earlier
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+          </section>
+        ) : null}
 
         <section className="panel">
           <h2 className="panel__title">Items</h2>
