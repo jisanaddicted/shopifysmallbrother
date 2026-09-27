@@ -16,6 +16,9 @@ dist-ssr/
 *.log
 npm-debug.log*
 
+# Local runtime files (PIDs written when starting the backend / cloudflared tunnel)
+.cf-*.pid
+
 # Editor / OS
 .DS_Store
 Thumbs.db

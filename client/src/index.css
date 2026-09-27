@@ -510,7 +510,8 @@ ol {
   margin-bottom: 0;
 }
 
-.field--inline select {
+.field--inline select,
+.field--inline input {
   width: auto;
 }
 
@@ -1371,6 +1372,50 @@ ol {
 .rider-list__id {
   font-weight: 700;
   font-size: 0.9rem;
+}
+
+/* Status + date filters above the rider's delivery list. */
+.rider-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.rider-filters__row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.6rem;
+}
+
+.rider-filters__row .field > span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.rider-filters__row .field select,
+.rider-filters__row .field input {
+  padding: 0.45rem 0.5rem;
+  font-size: 0.85rem;
+}
+
+.rider-filters__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.rider-filters__note {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: var(--brand-soft);
 }
 
 .manager {

@@ -15,6 +15,10 @@ export function formatCurrency(amount, currency = DEFAULT_CURRENCY) {
   return new Intl.NumberFormat(DEFAULT_LOCALE, {
     style: 'currency',
     currency,
+    // 'narrowSymbol' prefers the real sign over the ISO code, so BDT prints as
+    // "৳12.50" instead of "BDT 12.50" (and NPR/PKR as "Rs"). For USD/EUR/GBP/
+    // INR/AED it is identical to the default, so this only ever helps.
+    currencyDisplay: 'narrowSymbol',
     maximumFractionDigits: 2,
   }).format(value);
 }

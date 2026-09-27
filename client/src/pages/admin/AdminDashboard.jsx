@@ -16,11 +16,44 @@ import {
 
 const STATUS_FILTERS = ['all', ...Object.values(ORDER_STATUS)];
 
+// --- Date range filter -------------------------------------------------------
+// A date input hands back a bare "YYYY-MM-DD" with no timezone, so both bounds
+// are built in the *viewer's* local calendar. Comparing against
+// `new Date('2026-09-27')` would parse that as UTC midnight instead, which
+// silently drops or double-counts orders for anyone not on UTC. `endOfDay` is
+// what makes "To: 27 Sep" include an order placed at 23:50 that same evening.
+
+/** First millisecond of the given local day. */
+const startOfDay = (value) => new Date(`${value}T00:00:00.000`);
+
+/** Last millisecond of the given local day (inclusive). */
+const endOfDay = (value) => new Date(`${value}T23:59:59.999`);
+
+/** A Date as "YYYY-MM-DD" in local time — toISOString() would shift the day. */
+const toInputDate = (date) => {
+  const pad = (n) => String(n).padStart(2, '0');
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate(),
+  )}`;
+};
+
+/** Shortcuts that fill the two date boxes. "7" counts today itself. */
+const RANGE_PRESETS = [
+  { value: 'all', label: 'All time' },
+  { value: 'today', label: 'Today' },
+  { value: '7', label: 'Last 7 days' },
+  { value: '30', label: 'Last 30 days' },
+];
+
 export default function AdminDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
+  const [preset, setPreset] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const loadBoard = useCallback(async () => {
     setLoading(true);
@@ -40,10 +73,55 @@ export default function AdminDashboard() {
     loadBoard();
   }, [loadBoard]);
 
+  const clearDates = () => {
+    setPreset('all');
+    setDateFrom('');
+    setDateTo('');
+  };
+
+  // A preset fills the two date boxes rather than being applied on its own, so
+  // the range actually in force is always visible — and can then be nudged by
+  // hand (which switches the select to "Custom range").
+  const applyPreset = (value) => {
+    if (value === 'all' || value === 'custom') {
+      clearDates();
+      return;
+    }
+
+    const to = new Date();
+    const from = new Date();
+    if (value === 'today') {
+      from.setHours(0, 0, 0, 0);
+    } else {
+      from.setDate(from.getDate() - (Number(value) - 1));
+      from.setHours(0, 0, 0, 0);
+    }
+
+    setPreset(value);
+    setDateFrom(toInputDate(from));
+    setDateTo(toInputDate(to));
+  };
+
+  const hasDateFilter = Boolean(dateFrom || dateTo);
+
   const visible = useMemo(() => {
-    if (filter === 'all') return orders;
-    return orders.filter((order) => order.status === filter);
-  }, [orders, filter]);
+    // Either bound may be empty on its own — "everything from 27 Sep onwards"
+    // is a legitimate filter, so neither is assumed.
+    const from = dateFrom ? startOfDay(dateFrom).getTime() : null;
+    const to = dateTo ? endOfDay(dateTo).getTime() : null;
+
+    return orders.filter((order) => {
+      if (filter !== 'all' && order.status !== filter) return false;
+      if (from === null && to === null) return true;
+
+      const placed = new Date(order.createdAt).getTime();
+      if (!Number.isFinite(placed)) return false;
+      if (from !== null && placed < from) return false;
+      if (to !== null && placed > to) return false;
+
+      return true;
+    });
+  }, [orders, filter, dateFrom, dateTo]);
 
   const stats = useMemo(() => {
     const isOpen = (order) =>
@@ -128,7 +206,67 @@ export default function AdminDashboard() {
             ))}
           </select>
         </label>
+
+        <label className="field field--inline">
+          <span>Placed</span>
+          <select value={preset} onChange={(event) => applyPreset(event.target.value)}>
+            {RANGE_PRESETS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+            {/* Only offered while a hand-picked range is in force, so the select
+                can never report "All time" while dates are still applied. */}
+            {preset === 'custom' ? (
+              <option value="custom">Custom range</option>
+            ) : null}
+          </select>
+        </label>
+
+        <label className="field field--inline">
+          <span>From</span>
+          <input
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(event) => {
+              setDateFrom(event.target.value);
+              setPreset('custom');
+            }}
+          />
+        </label>
+
+        <label className="field field--inline">
+          <span>To</span>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(event) => {
+              setDateTo(event.target.value);
+              setPreset('custom');
+            }}
+          />
+        </label>
+
+        {hasDateFilter ? (
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={clearDates}
+          >
+            Clear dates
+          </button>
+        ) : null}
       </div>
+
+      {hasDateFilter ? (
+        <p className="muted small">
+          Showing {visible.length} of {orders.length} orders placed between{' '}
+          {dateFrom ? startOfDay(dateFrom).toLocaleDateString() : 'the start'} and{' '}
+          {dateTo ? endOfDay(dateTo).toLocaleDateString() : 'now'}.
+        </p>
+      ) : null}
 
       <div className="table-wrap">
         <table className="table">

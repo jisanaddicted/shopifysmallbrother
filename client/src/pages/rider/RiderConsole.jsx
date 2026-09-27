@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DeliveryMap from '../../components/maps/DeliveryMap';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useSocket } from '../../context/SocketContext';
@@ -9,10 +9,101 @@ import {
   ORDER_STATUS_FLOW,
   ORDER_STATUS_TONE,
 } from '../../utils/constants';
-import { formatCurrency, formatStatus } from '../../utils/formatters';
+import { formatCurrency, formatDateTime, formatStatus } from '../../utils/formatters';
 
 // Never send a GPS ping more often than this (milliseconds).
 const PING_INTERVAL_MS = 4000;
+
+// --- List filters ----------------------------------------------------------
+// The console already holds every order this rider has been given (the server
+// sends them all, newest first, with no limit), so the filters run here rather
+// than as another round trip. The values below are what "no filter" looks like.
+const ALL_STATUSES = 'all';
+const ACTIVE_ONLY = 'active';
+const ANY_DATE = 'all';
+
+const STATUS_OPTIONS = [
+  { value: ALL_STATUSES, label: 'All statuses' },
+  { value: ACTIVE_ONLY, label: 'In progress' },
+  ...ORDER_STATUS_FLOW.map((status) => ({ value: status, label: formatStatus(status) })),
+  { value: ORDER_STATUS.CANCELLED, label: formatStatus(ORDER_STATUS.CANCELLED) },
+];
+
+const DATE_OPTIONS = [
+  { value: ANY_DATE, label: 'Any date' },
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: 'custom', label: 'Custom range' },
+];
+
+/** A status the rider is done with - "in progress" means neither of these. */
+const isClosed = (status) =>
+  status === ORDER_STATUS.DELIVERED || status === ORDER_STATUS.CANCELLED;
+
+/**
+ * Parses a <input type="date"> value ("2026-09-26") into a *local* midnight.
+ * `new Date('2026-09-26')` would be parsed as UTC and can land on the previous
+ * day for anybody west of Greenwich, so the parts are read out by hand.
+ */
+const parseDay = (value) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return null;
+
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+};
+
+const startOfDay = (date) => {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+};
+
+const endOfDay = (date) => {
+  const copy = startOfDay(date);
+  copy.setHours(23, 59, 59, 999);
+  return copy;
+};
+
+// How many days back each quick option reaches. "7d" means today *and* the six
+// days before it, so it is 7 days of orders in total rather than 8.
+const DATE_WINDOWS = { today: 1, '7d': 7, '30d': 30 };
+
+/**
+ * The [from, to] window the date filter selects, or null for "any date".
+ *
+ * A custom range with only one end filled in is treated as "any date" rather
+ * than as "hide everything" - the rider is halfway through typing, and a list
+ * that suddenly empties looks like a bug. Reversed dates are swapped so the
+ * range is still usable.
+ */
+function dateWindow(dateFilter, fromDate, toDate) {
+  if (dateFilter === 'custom') {
+    const from = parseDay(fromDate);
+    const to = parseDay(toDate);
+    if (!from || !to) return null;
+
+    return from.getTime() <= to.getTime()
+      ? { from: startOfDay(from), to: endOfDay(to) }
+      : { from: startOfDay(to), to: endOfDay(from) };
+  }
+
+  const days = DATE_WINDOWS[dateFilter];
+  if (!days) return null;
+
+  const to = endOfDay(new Date());
+  const from = startOfDay(new Date());
+  from.setDate(from.getDate() - (days - 1));
+
+  return { from, to };
+}
+
+/** "In progress" is a group of statuses, not one, so it is matched by hand. */
+const matchesStatus = (status, statusFilter) => {
+  if (statusFilter === ALL_STATUSES) return true;
+  if (statusFilter === ACTIVE_ONLY) return !isClosed(status);
+  return status === statusFilter;
+};
 
 export default function RiderConsole() {
   const { broadcastLocation, joinOrder, leaveOrder, connected, newOrders, clearNewOrder } = useSocket();
@@ -33,11 +124,48 @@ export default function RiderConsole() {
   const [myPosition, setMyPosition] = useState(null);
   const [locationError, setLocationError] = useState('');
 
+  // --- List filters ---------------------------------------------------------
+  // Status and date picking for the assigned-deliveries list. The server hands
+  // over every order this rider has, so this is a local pass - no round trip,
+  // and the list never flickers while filters change.
+  const [statusFilter, setStatusFilter] = useState(ALL_STATUSES);
+  const [dateFilter, setDateFilter] = useState(ANY_DATE);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
   const watchIdRef = useRef(null);
   const lastPingRef = useRef(0);
 
   const activeOrder =
     orders.find((order) => (order._id || order.id) === activeId) || null;
+
+  // The list as the filters leave it. A date filter only ever *hides* orders -
+  // the selection and the detail pane are left alone, so narrowing the list
+  // mid-delivery never yanks the job out from under the rider.
+  const visibleOrders = useMemo(() => {
+    const range = dateWindow(dateFilter, fromDate, toDate);
+
+    return orders.filter((order) => {
+      if (!matchesStatus(order.status, statusFilter)) return false;
+      if (!range) return true;
+
+      const at = new Date(order.createdAt);
+      if (Number.isNaN(at.getTime())) return true; // undated: keep it visible
+      return at >= range.from && at <= range.to;
+    });
+  }, [orders, statusFilter, dateFilter, fromDate, toDate]);
+
+  const hasFilters = statusFilter !== ALL_STATUSES || dateFilter !== ANY_DATE;
+
+  const resetFilters = () => {
+    setStatusFilter(ALL_STATUSES);
+    setDateFilter(ANY_DATE);
+    setFromDate('');
+    setToDate('');
+  };
+
+  // A custom range needs both ends before it can hide anything.
+  const customRangeIncomplete = dateFilter === 'custom' && (!fromDate || !toDate);
 
   // --- Load the orders assigned to me --------------------------------------
   const loadOrders = useCallback(async () => {
@@ -436,38 +564,132 @@ export default function RiderConsole() {
         <div className="rider-grid">
           <aside className="panel rider-list">
             <h2 className="panel__title">Assigned to me</h2>
-            <ul>
-              {orders.map((order) => {
-                const id = order._id || order.id;
-                const isActive = id === activeId;
 
-                return (
-                  <li key={id}>
-                    <button
-                      type="button"
-                      className={`rider-list__item ${
-                        isActive ? 'is-active' : ''
-                      }`}
-                      onClick={() => setActiveId(id)}
-                    >
-                      <span className="rider-list__id">
-                        #{String(id).slice(-6).toUpperCase()}
-                      </span>
-                      <span
-                        className={`badge badge--${
-                          ORDER_STATUS_TONE[order.status] || 'info'
+            <div className="rider-filters">
+              <div className="rider-filters__row">
+                <label className="field">
+                  <span>Status</span>
+                  <select
+                    value={statusFilter}
+                    onChange={(event) => setStatusFilter(event.target.value)}
+                  >
+                    {STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Date</span>
+                  <select
+                    value={dateFilter}
+                    onChange={(event) => setDateFilter(event.target.value)}
+                  >
+                    {DATE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {dateFilter === 'custom' ? (
+                <div className="rider-filters__row">
+                  <label className="field">
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={fromDate}
+                      max={toDate || undefined}
+                      onChange={(event) => setFromDate(event.target.value)}
+                    />
+                  </label>
+
+                  <label className="field">
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={toDate}
+                      min={fromDate || undefined}
+                      onChange={(event) => setToDate(event.target.value)}
+                    />
+                  </label>
+                </div>
+              ) : null}
+
+              <div className="rider-filters__footer">
+                <span className="muted small">
+                  {hasFilters
+                    ? `${visibleOrders.length} of ${orders.length} shown`
+                    : `${orders.length} assigned`}
+                </span>
+
+                {hasFilters ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={resetFilters}
+                  >
+                    Clear filters
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            {visibleOrders.length === 0 ? (
+              <p className="empty">
+                {customRangeIncomplete
+                  ? 'Pick both a from and a to date.'
+                  : 'No deliveries match these filters.'}
+              </p>
+            ) : (
+              <ul>
+                {visibleOrders.map((order) => {
+                  const id = order._id || order.id;
+                  const isActive = id === activeId;
+
+                  return (
+                    <li key={id}>
+                      <button
+                        type="button"
+                        className={`rider-list__item ${
+                          isActive ? 'is-active' : ''
                         }`}
+                        onClick={() => setActiveId(id)}
                       >
-                        {formatStatus(order.status)}
-                      </span>
-                      <span className="muted small">
-                        {order.address?.line1 || 'No address'}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+                        <span className="rider-list__id">
+                          #{String(id).slice(-6).toUpperCase()}
+                        </span>
+                        <span
+                          className={`badge badge--${
+                            ORDER_STATUS_TONE[order.status] || 'info'
+                          }`}
+                        >
+                          {formatStatus(order.status)}
+                        </span>
+                        <span className="muted small">
+                          {formatDateTime(order.createdAt)}
+                        </span>
+                        <span className="muted small">
+                          {order.address?.line1 || 'No address'}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            {hasFilters &&
+            activeOrder &&
+            !visibleOrders.some((order) => (order._id || order.id) === activeId) ? (
+              <p className="muted small rider-filters__note">
+                The delivery you are viewing is hidden by these filters.
+              </p>
+            ) : null}
           </aside>
 
           <div className="rider-main">
