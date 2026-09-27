@@ -50,10 +50,14 @@ export default function AdminDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [preset, setPreset] = useState('all');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  // The board opens on what the desk actually works: today's orders that are
+  // still Pending. Both filters are seeded, not just the selects - the date
+  // boxes show today's range so what is in force is visible, which is why the
+  // `preset` and the two date values have to agree from the first render.
+  const [filter, setFilter] = useState(ORDER_STATUS.PENDING);
+  const [preset, setPreset] = useState('today');
+  const [dateFrom, setDateFrom] = useState(() => toInputDate(new Date()));
+  const [dateTo, setDateTo] = useState(() => toInputDate(new Date()));
 
   const loadBoard = useCallback(async () => {
     setLoading(true);
