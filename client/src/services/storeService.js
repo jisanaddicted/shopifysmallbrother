@@ -17,7 +17,15 @@ export const getPublicStoreMenu = (slug) =>
 // ---------------------------------------------------------------------------
 
 /** GET /stores/mine -> { store, riders } (primary store only). */
-export const getMyStore = () => api.get('/stores/mine').then((res) => res.data);
+/**
+ * GET /stores/mine[?storeId=] - the store this account runs, plus its team.
+ * Pass `storeId` to pick one of several stores (the admin panel's rider tracker
+ * does); without it the primary store is used.
+ */
+export const getMyStore = (storeId) =>
+  api
+    .get('/stores/mine', { params: storeId ? { storeId } : {} })
+    .then((res) => res.data);
 
 /**
  * GET /stores/mine/all -> { stores: [{ store, role, isOwner }] }

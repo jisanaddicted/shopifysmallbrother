@@ -65,8 +65,6 @@ export default function DashboardLayout({ variant = 'merchant' }) {
   const merchantLinks = [
     { to: ROUTES.MERCHANT_DASHBOARD, label: 'My store', icon: '🏪', end: true },
     { to: ROUTES.MERCHANT_PRODUCTS, label: 'Products', icon: '📦', end: false },
-    // Live delivery map: where each rider of this store is right now.
-    { to: ROUTES.MERCHANT_RIDERS, label: 'Rider tracker', icon: '🛵', end: false },
     // How long deliveries take here, split by who owned each wait.
     {
       to: ROUTES.MERCHANT_ANALYTICS,
@@ -85,6 +83,10 @@ export default function DashboardLayout({ variant = 'merchant' }) {
   const adminLinks = [
     { to: ROUTES.ADMIN_DASHBOARD, label: 'Dispatch', icon: '🧭', end: true },
     { to: ROUTES.ADMIN_PRODUCTS, label: 'Products', icon: '📦', end: false },
+    // Live delivery map across the stores this admin runs. Moved here from the
+    // store dashboard: watching every rider at once is an operations view, and
+    // an admin with several stores picks which one from this page.
+    { to: ROUTES.ADMIN_RIDERS, label: 'Rider tracker', icon: '🛵', end: false },
     // Stores invite this admin by username; the answer happens here.
     {
       to: ROUTES.ADMIN_INVITATIONS,

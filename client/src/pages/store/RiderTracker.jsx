@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import DeliveryMap from '../../components/maps/DeliveryMap';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import storeService from '../../services/storeService';
 import {
@@ -63,12 +64,23 @@ const riderHandle = (order) =>
 const shortId = (orderId) => `#${String(orderId).slice(-6).toUpperCase()}`;
 
 /**
- * Merchant-side rider tracker (/merchant/riders).
+ * The live delivery board: every delivery that is currently moving.
  *
- * The back office watches every delivery that is currently moving:
- *  - the roster and the orders come from REST (`getMyStore` +
- *    `listStoreOrders`, both of which work for the owner AND for a store admin
- *    the owner appointed),
+ * Now reached from the ADMIN panel (/admin/riders), not the store dashboard, so
+ * it has to cope with three callers:
+ *  - the stores this account runs come from the session (`useAuth().stores`),
+ *    which is already in memory, so the picker costs no request. Without that a
+ *    platform admin who runs no store would simply see nothing - and says so,
+ *    instead of the "You do not have a store yet" error this page used to
+ *    surface as a red alert.
+ *  - `?storeId=` in the URL picks which store, and survives a refresh or a
+ *    shared link, so switching does not fire a request for a page we already
+ *    have.
+ *  - a store owner (or an admin running one store) never sees a picker at all.
+ *
+ *  - the roster and the orders come from REST (`getMyStore` + `listStoreOrders`,
+ *    both of which work for the owner AND for a store admin the owner appointed,
+ *    AND for a platform admin appointed to run the store),
  *  - each order in progress is joined as a socket room, and the server relays
  *    every rider GPS ping to that room (see backend/src/sockets/index.js), so
  *    the pin moves with no refresh,
@@ -85,6 +97,10 @@ export default function RiderTracker() {
     newOrders,
   } = useSocket();
 
+  // The session's store list - `[{ store, role }]`, owner-owned first.
+  const { stores } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [store, setStore] = useState(null);
   const [orders, setOrders] = useState([]);
   const [roster, setRoster] = useState([]);
@@ -94,32 +110,76 @@ export default function RiderTracker() {
   // Bumped on a timer purely so the time labels re-render (see TICK_MS).
   const [, setTick] = useState(0);
 
-  const load = useCallback(async () => {
-    setError('');
+  // An account that runs no store has nothing to track. This is a normal state
+  // in the admin panel - not something to render as a failure.
+  const hasStore = (stores || []).length > 0;
 
-    try {
-      // Two reads, both scoped to the same primary store:
-      //  - getMyStore      -> the store + its team (owner OR appointed admin)
-      //  - listStoreOrders -> the orders, each with the assigned rider and the
-      //    last GPS ping they reported (ORDER_POPULATE on the server).
-      const [mine, orderList] = await Promise.all([
-        storeService.getMyStore(),
-        storeService.listStoreOrders(),
-      ]);
+  // The requested store, but only if this account may actually run it -
+  // otherwise fall back to the primary one, so a hand-edited ?storeId= cannot
+  // point the page at somebody else's shop.
+  const requestedId = searchParams.get('storeId');
+  const activeEntry = useMemo(() => {
+    const entries = stores || [];
+    if (!entries.length) return null;
 
-      setStore(mine.store || null);
-      setRoster(Array.isArray(mine.riders) ? mine.riders : []);
-      setOrders(Array.isArray(orderList) ? orderList : []);
-    } catch (err) {
-      setError(err.message || 'Could not load the delivery board.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    return (
+      entries.find(
+        (entry) => String(entry.store?._id || entry.store?.id) === requestedId,
+      ) || entries[0]
+    );
+  }, [stores, requestedId]);
+
+  const activeStoreId = activeEntry?.store?._id || activeEntry?.store?.id || null;
+
+  const load = useCallback(
+    async (storeId) => {
+      setError('');
+
+      // Nothing to load yet - leave the empty state in charge.
+      if (!storeId) {
+        setStore(null);
+        setRoster([]);
+        setOrders([]);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Two reads, both scoped to the SAME store:
+        //  - getMyStore      -> the store + its team (owner, appointed store
+        //    admin, or a platform admin running it)
+        //  - listStoreOrders -> the orders, each with the assigned rider and the
+        //    last GPS ping they reported (ORDER_POPULATE on the server).
+        const [mine, orderList] = await Promise.all([
+          storeService.getMyStore(storeId),
+          storeService.listStoreOrders(storeId),
+        ]);
+
+        setStore(mine.store || null);
+        setRoster(Array.isArray(mine.riders) ? mine.riders : []);
+        setOrders(Array.isArray(orderList) ? orderList : []);
+      } catch (err) {
+        setError(err.message || 'Could not load the delivery board.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    load();
-  }, [load]);
+    load(activeStoreId);
+  }, [load, activeStoreId]);
+
+  // Switching stores re-scopes the board, and keeps the choice in the URL.
+  const switchStore = useCallback(
+    (nextId) => {
+      setSelectedId(null);
+      setOrders([]);
+      setSearchParams(nextId ? { storeId: nextId } : {});
+    },
+    [setSearchParams],
+  );
 
   // Keep the "pinged N min ago" labels honest while the page stays open.
   useEffect(() => {
@@ -218,6 +278,40 @@ export default function RiderTracker() {
     return <LoadingSpinner fullPage label="Loading the rider tracker…" />;
   }
 
+  // An admin who runs no store has nothing to watch. Say what to do about it
+  // rather than showing the raw "You do not have a store yet" failure.
+  if (!hasStore) {
+    return (
+      <div className="page">
+        <header className="page__header">
+          <div>
+            <h1>Rider tracker</h1>
+            <p className="muted">
+              every delivery that is moving right now, live.
+            </p>
+          </div>
+        </header>
+
+        <section className="panel">
+          <p className="empty">
+            You do not run a store yet, so there is nothing to track. A store
+            owner invites you by username, and the store appears here once you
+            accept the invitation.
+          </p>
+
+          <div className="button-row">
+            <Link className="btn btn-outline btn-sm" to={ROUTES.ADMIN_INVITATIONS}>
+              Go to invitations
+            </Link>
+            <Link className="btn btn-ghost btn-sm" to={ROUTES.ADMIN_DASHBOARD}>
+              Back to dispatch
+            </Link>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <header className="page__header">
@@ -234,6 +328,27 @@ export default function RiderTracker() {
         </div>
 
         <div className="button-row">
+          {/* Only worth showing when there is a choice to make: an admin can run
+              several stores, and each one has its own riders and deliveries. */}
+          {(stores || []).length > 1 ? (
+            <label className="field field--inline">
+              <span>Store</span>
+              <select
+                value={activeStoreId || ''}
+                onChange={(event) => switchStore(event.target.value)}
+              >
+                {(stores || []).map((entry) => (
+                  <option
+                    key={String(entry.store?._id || entry.store?.id)}
+                    value={String(entry.store?._id || entry.store?.id)}
+                  >
+                    {entry.store?.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
           <span className={`live-dot ${connected ? 'live-dot--on' : ''}`}>
             {connected ? 'Live' : 'Offline'}
           </span>

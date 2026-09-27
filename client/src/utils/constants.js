@@ -259,8 +259,10 @@ export const ROUTES = {
   // How long this store's deliveries take, per rider. Same numbers the rider
   // sees about themselves, read off the orders' own status history.
   MERCHANT_ANALYTICS: '/merchant/analytics',
-  // Live map of this store's deliveries in progress (see RiderTracker.jsx).
-  MERCHANT_RIDERS: '/merchant/riders',
+  // Live map of every delivery in progress. Reached from the ADMIN panel now
+  // (/admin/riders) - it is an operations view across the stores an admin runs,
+  // so it sits beside Dispatch rather than in the store dashboard.
+  ADMIN_RIDERS: '/admin/riders',
   MERCHANT_THEME: '/merchant/theme',  ADMIN_DASHBOARD: '/admin',
   ADMIN_PRODUCTS: '/admin/products',
   // Store->admin invitations: the admin accepts/declines stores that asked

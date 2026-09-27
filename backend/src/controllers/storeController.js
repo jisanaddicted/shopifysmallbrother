@@ -82,14 +82,29 @@ export const getPublicStore = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET /api/stores/mine - the store the signed-in account runs, plus its team.
+ * GET /api/stores/mine[?storeId=] - the store the signed-in account runs, plus
+ * its team.
  *
- * Works for the owner who signed the store up and for every store admin that
- * owner appointed. `role` says which of the two the caller is, so the client
- * can hide the owner-only controls instead of failing on them.
+ * Works for the owner who signed the store up, for every store admin that owner
+ * appointed, and for a platform admin who was appointed to run the store.
+ * `role` says which of the three the caller is, so the client can hide the
+ * owner-only controls instead of failing on them.
+ *
+ * `?storeId=` picks one of several stores - the same convention as
+ * /orders/store/mine and /orders/store/analytics, and what lets the admin
+ * panel's rider tracker switch between the stores an admin runs. Without it the
+ * primary store (the one owned, otherwise the first one administered) is used.
+ *
+ * The team roster is READABLE by any of those three, but only the owner may
+ * change it: that stays guarded by the /stores/:id/riders routes.
  */
 export const getMyStore = asyncHandler(async (req, res) => {
-  const entry = await primaryStoreFor(req.user);
+  const requested = req.query.storeId || null;
+
+  const entry = requested
+    ? await loadManageableStore(requested, req.user)
+    : await primaryStoreFor(req.user);
+
   if (!entry) throw new HttpError(404, 'You do not have a store yet.');
 
   const { store, role } = entry;

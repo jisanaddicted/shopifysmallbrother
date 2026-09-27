@@ -118,14 +118,41 @@ async function main() {
   check('GET /products returns the catalogue', products.status === 200 && list.length > 0, `${list.length} products`);
 
   // --- Place an order (customer) ------------------------------------------
-  // Order a product that is actually in stock: the development catalogue also
-  // carries fixtures from earlier runs (zero-stock "Blank Stock ..." items),
-  // and the cheapest of those would fail every check below.
+  // Joe's Pizza is resolved FIRST, and the order below is placed there on
+  // purpose. The rest of this walk-through assumes it: the rider is invited to
+  // this store, claims from its pool, and the platform admin is appointed to it
+  // before the theme picker is checked. It used to pick the cheapest product in
+  // the WHOLE catalogue, which made all of that depend on history - every run
+  // leaves a "probe-store-*" behind (created by the signup check, never
+  // deleted), and as soon as one of those held a cheap in-stock item the order
+  // drifted onto a store nobody in this file has the password for. Tying the
+  // pick to the seeded store makes it depend on the seed alone.
   const quantity = 2;
+  const ownerEntries = {};
+  for (const email of ['store@example.com', 'grocer@example.com']) {
+    // eslint-disable-next-line no-await-in-loop
+    const ownerLogin = await api('POST', '/auth/login', {
+      body: { email, password: 'password123' },
+    });
+    const entryStore = ownerLogin.data?.store;
+    if (ownerLogin.data?.token && entryStore?.slug) {
+      ownerEntries[entryStore.slug] = {
+        token: ownerLogin.data.token,
+        id: String(entryStore._id || entryStore.id),
+      };
+    }
+  }
+
+  const pizza = ownerEntries['joes-pizza'];
+  // In stock AND at Joe's Pizza.
+  const sellable = [...list].filter(
+    (product) =>
+      Number(product.stock) >= quantity &&
+      pizza &&
+      String(product.store?._id || product.store) === pizza.id,
+  );
   const cheapest =
-    [...list]
-      .filter((product) => Number(product.stock) >= quantity)
-      .sort((a, b) => a.price - b.price)[0] ||
+    sellable.sort((a, b) => a.price - b.price)[0] ||
     [...list].sort((a, b) => a.price - b.price)[0];
 
   const created = await api('POST', '/orders', {
@@ -189,19 +216,9 @@ async function main() {
   const storeId = order?.store?._id || order?.store || null;
   let riderUserId = null;
 
-  // Only a store's own owner manages its roster: a platform admin never assigns
-  // people to stores. The order above landed on whichever product was cheapest
-  // across the whole catalogue, so resolve the owner of *that* store rather than
-  // assuming Joe's Pizza.
-  const ownerTokens = {};
-  for (const email of ['store@example.com', 'grocer@example.com']) {
-    const ownerLogin = await api('POST', '/auth/login', {
-      body: { email, password: 'password123' },
-    });
-    const slug = ownerLogin.data?.store?.slug;
-    if (ownerLogin.data?.token && slug) ownerTokens[slug] = ownerLogin.data.token;
-  }
-  const ownerToken = ownerTokens[order?.store?.slug] || null;
+  // The owner tokens were resolved up front, next to the order itself (see
+  // "Place an order"), because the product had to come from one of their stores.
+  const ownerToken = ownerEntries[order?.store?.slug]?.token || null;
   check(
     'the store that took the order has an owner who can sign in',
     Boolean(ownerToken),

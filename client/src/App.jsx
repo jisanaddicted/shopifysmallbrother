@@ -179,7 +179,6 @@ export default function App() {
               element={<MerchantDashboard />}
             />
             <Route path={ROUTES.MERCHANT_PRODUCTS} element={<ProductManager />} />
-            <Route path={ROUTES.MERCHANT_RIDERS} element={<RiderTracker />} />
             <Route
               path={ROUTES.MERCHANT_ANALYTICS}
               element={<StoreRiderAnalytics />}
@@ -201,6 +200,10 @@ export default function App() {
             />
             <Route path={ROUTES.ADMIN_PRODUCTS} element={<ProductManager />} />
             <Route path={ROUTES.ADMIN_INVITATIONS} element={<AdminInvitations />} />
+            {/* Live delivery map. Moved out of the store dashboard: it is scoped
+                by ?storeId= and defaults to the admin's primary store, and it
+                explains itself when the admin runs no store at all. */}
+            <Route path={ROUTES.ADMIN_RIDERS} element={<RiderTracker />} />
             <Route path={ROUTES.ADMIN_THEME} element={<ThemeBuilder />} />
             {/* Same order view the customer sees, but mounted in the shell so
                 the side rail survives. variant="admin" only swaps the wording
