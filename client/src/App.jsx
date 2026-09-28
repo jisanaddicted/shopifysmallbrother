@@ -62,23 +62,32 @@ function NotFound() {
  *
  * The store dashboard (/merchant*), the admin panel (/admin*) and the rider
  * console (/rider*) all render inside <DashboardLayout> - a side navbar - so the
- * top <Navbar/> is hidden on those routes. Everywhere else (customer, auth,
- * public shop) the top navbar stays as-is.
+ * top <Navbar/> is hidden on those routes. /profile does the same for store
+ * staff, whose profile is mounted in the merchant shell. Everywhere else
+ * (customer, auth, public shop) the top navbar stays as-is.
  */
 export default function App() {
   const location = useLocation();
   const pathname = location.pathname || '';
+  // Store staff (owner, store admin, or a customer an owner appointed) - the
+  // group that lives in the side-rail merchant dashboard. Drives both the
+  // profile route below and the navbar rule further down.
+  const { isStore } = useAuth();
   // Portal entry (/login + /register) has NO navbar: split-screen brand panel
   // + form IS the chrome. Dashboards and storefronts keep hiding it too.
   // /rider counts as a dashboard now - it renders in <DashboardLayout>, so
   // leaving the top navbar up would stack two navigation bars on one page.
+  // /profile counts for store staff for the same reason: their profile is
+  // mounted in the merchant shell (see the route below), and without this the
+  // public navbar would render ON TOP of the side rail - two navbars at once.
   const hideTopNavbar =
     pathname === ROUTES.LOGIN ||
     pathname === ROUTES.REGISTER ||
     pathname.startsWith('/merchant') ||
     pathname.startsWith('/admin') ||
     pathname.startsWith('/rider') ||
-    pathname.startsWith('/s/');
+    pathname.startsWith('/s/') ||
+    (isStore && pathname === ROUTES.PROFILE);
 
   // The portal is full-bleed (its own background), so drop the centered
   // .app-main container there just like the dashboards do.
@@ -119,14 +128,39 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path={ROUTES.PROFILE}
-            element={
-              <ProtectedRoute>
-                <ProfilePage />
-              </ProtectedRoute>
-            }
-          />
+          {/* A store owner reaches their profile from the avatar in the DASHBOARD
+              shell - DashboardLayout's profile link points here. Rendering that
+              on the public chrome put a top navbar on a back-office page, so the
+              entire navigation swapped out the moment they clicked their own
+              picture, and "back" went to a storefront instead of their dashboard.
+
+              So store staff (owner, or anybody an owner appointed) get the
+              merchant shell: no top navbar, the same side rail as /merchant*,
+              and the avatar stays in the same corner they clicked it from.
+              `isStore` covers role `store`, role `storeadmin`, and a plain
+              `customer` who was appointed - all of whom live in that dashboard.
+
+              Everyone else keeps the existing public-chrome profile. */}
+          {isStore ? (
+            <Route
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout variant="merchant" />
+                </ProtectedRoute>
+              }
+            >
+              <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
+            </Route>
+          ) : (
+            <Route
+              path={ROUTES.PROFILE}
+              element={
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+          )}
 
           {/* Customer */}
           <Route path={ROUTES.STORE} element={<Storefront />} />

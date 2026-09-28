@@ -45,7 +45,7 @@ storeadmin` (`ROLES_REQUIRING_USERNAME`).
 
 | Door | URLs | Who | Components |
 | --- | --- | --- | --- |
-| **Staff portal** (app entry, NO navbar, split-screen `PortalAuth`: brand panel left, form right) | `/login`, `/register` | rider / store owner / store admin / admin | `client/src/pages/auth/Login.jsx`, `Register.jsx` (+ `PortalAuth.jsx`, `portal-auth.css`) |
+| **Staff portal** (app entry, NO navbar, split-screen `PortalAuth`: logo + brand panel left, form right) | `/login`, `/register` | rider / store owner / store admin / admin | `client/src/pages/auth/Login.jsx`, `Register.jsx` (+ `PortalAuth.jsx`, `portal-auth.css`) |
 | **Store-branded customer auth** (the slug IS the store context) | `/s/:slug/login`, `/s/:slug/register` | customers only | `CustomerLogin.jsx`, `CustomerRegister.jsx` (+ `customer-auth.css`) |
 
 `/` redirects logged-out visitors to `/login` and logged-in users to their
@@ -450,6 +450,7 @@ client/src/
   services/authService.js    login/register/me + localStorage session
   services/api.js            axios instance, token attach, 401 handling
   components/common/         ProtectedRoute.jsx, Navbar.jsx, DashboardLayout.jsx
+  assets/images/             ronex-mart-logo.png (brand logo on the staff portal)
   pages/auth/                Login.jsx, Register.jsx, PortalAuth.jsx (+ portal-auth.css)
                              CustomerLogin.jsx, CustomerRegister.jsx (+ customer-auth.css)
   pages/customer/            Storefront.jsx, ShopPage.jsx, Checkout.jsx, OrderTracker.jsx

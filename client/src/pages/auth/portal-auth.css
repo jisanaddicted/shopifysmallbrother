@@ -45,6 +45,24 @@
   gap: 1rem;
 }
 
+/* The Ronex Mart logo rides on its own white card: the panel behind it is a
+   dark blue gradient and would swallow the logo's navy wordmark + green
+   stripes. The artwork already ships on white, so the card just frames it. */
+.portal__logo-card {
+  align-self: flex-start;
+  max-width: 26rem;
+  padding: 0.9rem 1.15rem;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.4);
+}
+
+.portal__logo {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .portal__eyebrow {
   margin: 0;
   display: inline-flex;
@@ -59,21 +77,14 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+/* The name itself is carried by the logo above, so the heading only has to
+   carry "Supershop Online Portal" — a shorter, calmer line. */
 .portal__title {
   margin: 0;
-  font-size: clamp(2.4rem, 4.5vw, 3.6rem);
-  line-height: 1.02;
+  font-size: clamp(1.9rem, 3.4vw, 2.8rem);
+  line-height: 1.05;
   font-weight: 900;
   letter-spacing: -0.02em;
-}
-
-.portal__title-sub {
-  display: block;
-  margin-top: 0.4rem;
-  font-size: clamp(1.05rem, 2vw, 1.4rem);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: #dbeafe;
 }
 
 .portal__desc {
@@ -250,6 +261,10 @@
 
   .portal__brand-inner {
     max-width: 34rem;
+  }
+
+  .portal__logo-card {
+    max-width: 22rem;
   }
 
   .portal__form-side {
