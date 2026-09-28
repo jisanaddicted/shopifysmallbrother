@@ -1,4 +1,4 @@
-﻿import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Navbar from './components/common/Navbar';
 import DashboardLayout from './components/common/DashboardLayout';
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -9,6 +9,7 @@ import { useAuth } from './context/AuthContext';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminInvitations from './pages/admin/AdminInvitations';
 import ProductManager from './pages/admin/ProductManager';
+import ProductEditor from './pages/admin/ProductEditor';
 
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
@@ -223,7 +224,18 @@ export default function App() {
               path={ROUTES.MERCHANT_DASHBOARD}
               element={<MerchantDashboard />}
             />
-            <Route path={ROUTES.MERCHANT_PRODUCTS} element={<ProductManager />} />
+            <Route path={ROUTES.MERCHANT_PRODUCTS} element={<ProductManager basePath={ROUTES.MERCHANT_PRODUCTS} />} />
+            {/* The product form. `new` is declared before the `:productId`
+                route so it is never read as a product whose id is the word
+                "new" - both stay inside this shell so the side rail survives. */}
+            <Route
+              path={ROUTES.MERCHANT_PRODUCT_NEW}
+              element={<ProductEditor basePath={ROUTES.MERCHANT_PRODUCTS} />}
+            />
+            <Route
+              path={ROUTES.MERCHANT_PRODUCT_EDIT}
+              element={<ProductEditor basePath={ROUTES.MERCHANT_PRODUCTS} />}
+            />
             <Route
               path={ROUTES.MERCHANT_ANALYTICS}
               element={<StoreRiderAnalytics />}
@@ -243,7 +255,17 @@ export default function App() {
               path={ROUTES.ADMIN_DASHBOARD}
               element={<AdminDashboard />}
             />
-            <Route path={ROUTES.ADMIN_PRODUCTS} element={<ProductManager />} />
+            <Route path={ROUTES.ADMIN_PRODUCTS} element={<ProductManager basePath={ROUTES.ADMIN_PRODUCTS} />} />
+            {/* The same product form the store dashboard uses, reached from
+                the admin panel - same pages, different origin. */}
+            <Route
+              path={ROUTES.ADMIN_PRODUCT_NEW}
+              element={<ProductEditor basePath={ROUTES.ADMIN_PRODUCTS} />}
+            />
+            <Route
+              path={ROUTES.ADMIN_PRODUCT_EDIT}
+              element={<ProductEditor basePath={ROUTES.ADMIN_PRODUCTS} />}
+            />
             <Route path={ROUTES.ADMIN_INVITATIONS} element={<AdminInvitations />} />
             {/* Live delivery map. Moved out of the store dashboard: it is scoped
                 by ?storeId= and defaults to the admin's primary store, and it

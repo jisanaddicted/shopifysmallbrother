@@ -48,7 +48,11 @@ export default function ProductCard({ product }) {
       : 0
     : (product?.stock ?? product?.quantity ?? null);
 
-  const outOfStock = stock !== null && Number(stock) <= 0;
+  // A product that does not count stock is never "out of it" - the
+  // number on it is not a count, so greying the card out would be inventing a
+  // problem. Same rule the server applies when it refuses to oversell.
+  const countsStock = product?.trackInventory !== false;
+  const outOfStock = countsStock && stock !== null && Number(stock) <= 0;
 
   // Which image to show: the chosen row's own photo if it has one, else the
   // product's. Switching this as the shopper picks is the whole reason

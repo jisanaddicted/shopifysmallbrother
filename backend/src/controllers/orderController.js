@@ -311,11 +311,20 @@ export const createOrder = asyncHandler(async (req, res) => {
 
   const priced = lines.filter(Boolean);
 
+  // Does this line's product count stock at all? A made-to-order cake, a
+  // download, a service slot: there is no number that goes down, so the line
+  // is never short and is never decremented below. Read from the product
+  // document we already loaded rather than trusted from the request.
+  const countsStock = (line) => {
+    if (!line.product) return false;
+    return byId.get(String(line.product))?.trackInventory !== false;
+  };
+
   // Refuse to sell what we don't have in stock. Checked per line against the
   // variant's own stock when the product has variants, so "the red is gone" no
   // longer blocks an order for a size that is in stock.
   const short = priced.find((line) => {
-    if (!line.product) return false;
+    if (!countsStock(line)) return false;
     return line._stock < line.quantity;
   });
 
@@ -376,9 +385,12 @@ export const createOrder = asyncHandler(async (req, res) => {
   // selling three sizes would see its headline number fall by three per order
   // and hit zero while every size is still in stock. A product with no variants
   // takes the original top-level path, unchanged.
+  //
+  // Lines whose product does not track inventory are skipped entirely, so a
+  // made-to-order product never drifts into a negative count it does not have.
   await Promise.all(
     priced
-      .filter((line) => line.product)
+      .filter((line) => countsStock(line))
       .map((line) =>
         line.variant
           ? Product.updateOne(

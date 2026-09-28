@@ -85,6 +85,27 @@ export const STORE_CUSTOMER_SOURCE = {
 
 export const STORE_CUSTOMER_SOURCE_VALUES = Object.values(STORE_CUSTOMER_SOURCE);
 
+// ---------------------------------------------------------------------------
+// Product publishing status.
+//
+// ACTIVE is what every product has always been - the only value that existed
+// before this one did - so it is the default, which is what keeps every
+// existing product visible and buyable with no migration and no data change.
+//
+// DRAFT is a work in progress: editable by the merchant, hidden from the
+// storefront, and refused at checkout.
+// ARCHIVED is finished with: hidden from the storefront, refused at checkout,
+// and kept only so the orders that already point at it still resolve. That is
+// the difference from deleting it, which would leave those order lines orphaned.
+// ---------------------------------------------------------------------------
+export const PRODUCT_STATUS = {
+  ACTIVE: 'active',
+  DRAFT: 'draft',
+  ARCHIVED: 'archived',
+};
+
+export const PRODUCT_STATUS_VALUES = Object.values(PRODUCT_STATUS);
+
 export const ORDER_STATUS = {
   PENDING: 'pending',
   CONFIRMED: 'confirmed',
@@ -258,6 +279,8 @@ export default {
   ROLES,
   ROLE_VALUES,
   SELF_SIGNUP_ROLES,
+  PRODUCT_STATUS,
+  PRODUCT_STATUS_VALUES,
   ORDER_STATUS,
   ORDER_STATUS_VALUES,
   ORDER_STATUS_FLOW,

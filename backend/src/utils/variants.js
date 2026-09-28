@@ -88,6 +88,18 @@ export function variantTitle(variant) {
 export function resolveLineTarget(product, variantId) {
   if (!product) return { ok: false, reason: 'no-variant' };
 
+  // A product that is not on the shelf cannot be bought, whatever its options
+  // say. Checked HERE, in the one function all three callers share, rather than
+  // in each of them: the storefront hides it, the cart holds it, and the order
+  // controller prices it - and a shopper who filled a basket yesterday must be
+  // told at checkout that the item was withdrawn, not after payment.
+  //
+  // A product with no `status` at all is treated as active, so anything that
+  // predates this field keeps working untouched.
+  if (product.status && product.status !== 'active') {
+    return { ok: false, reason: 'unavailable' };
+  }
+
   if (!hasVariants(product)) {
     return {
       ok: true,
@@ -137,6 +149,9 @@ export function resolveLineTarget(product, variantId) {
  * about the same product, phrased for however the shopper got there.
  */
 export function resolveErrorMessage(reason, productName = 'this product') {
+  if (reason === 'unavailable') {
+    return `“${productName}” is no longer available. Please remove it from your cart.`;
+  }
   if (reason === 'disabled') {
     return `“${productName}” is no longer available in that option. Please choose another.`;
   }

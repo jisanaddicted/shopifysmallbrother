@@ -9,6 +9,8 @@ node_modules/
 # Logs
 *.log
 npm-debug.log*
+# stderr capture written when the backend is started in the background
+*.err
 
 # Editor / OS
 .DS_Store

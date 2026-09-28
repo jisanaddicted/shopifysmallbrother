@@ -59,5 +59,59 @@ const err = bad.validateSync();
 if (err) rejected = 1;
 check('negative variant price is rejected', rejected, 1);
 
+// --- Publishing + organisation ---------------------------------------------
+// A product created the way every product was created before these fields
+// existed: active, counting stock, no vendor. Nothing here may change.
+check('default: status is active', plainJson.status, 'active');
+check('default: isPublished', plainJson.isPublished, true);
+check('default: one channel', plainJson.channelCount, 1);
+check('default: tracks inventory', plainJson.trackInventory, true);
+check('default: no productType', plainJson.productType, '');
+check('default: no vendor', plainJson.vendor, '');
+check('default: no collections', plainJson.collections, []);
+check('default: inventory value is price x stock', plainJson.inventoryValue, 840);
+
+// A draft is invisible and unbuyable, and an archived one is the same - the
+// difference is only ever what the merchant intends to do with it next.
+for (const status of ['draft', 'archived']) {
+  const off = new Product({ name: 'Hidden', price: 100, stock: 4, status }).toJSON();
+  check(`${status}: not published`, off.isPublished, false);
+  check(`${status}: on no channel`, off.channelCount, 0);
+  // Still has a real price and stock - it is hidden, not deleted, and an order
+  // that already points at it must still be able to resolve it.
+  check(`${status}: price still readable`, off.priceRange, { min: 100, max: 100 });
+}
+
+// A status outside the enum is rejected rather than silently stored, which
+// would otherwise put a typo'd product on the shelf.
+let badStatus = 0;
+if (new Product({ name: 'Typo', price: 1, status: 'publshed' }).validateSync()) badStatus = 1;
+check('an unknown status is rejected', badStatus, 1);
+
+// "I don't count these" - a made-to-order item. It must not be blocked at
+// zero, and it must not be valued as though it had stock.
+const untracked = new Product({
+  name: 'Custom cake',
+  price: 40,
+  stock: 0,
+  trackInventory: false,
+}).toJSON();
+check('untracked: is still published', untracked.isPublished, true);
+check('untracked: is worth nothing', untracked.inventoryValue, 0);
+
+// A variant product's value reads the matrix, not the seed price, so the
+// figure cannot disagree with what a shopper is charged.
+const valued = new Product({
+  name: 'Tee',
+  price: 500,
+  stock: 99,
+  options: [{ name: 'Size', values: ['S', 'L'] }],
+  variants: [
+    { optionValues: { Size: 'S' }, price: 500, stock: 3 },
+    { optionValues: { Size: 'L' }, price: 700, stock: 5 },
+  ],
+}).toJSON();
+check('matrix: value uses the cheapest price x total stock', valued.inventoryValue, 4000);
+
 console.log(`\nproduct model: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

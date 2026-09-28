@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+import { PRODUCT_STATUS } from '../utils/constants.js';
+
 // ---------------------------------------------------------------------------
 // Variants
 // ---------------------------------------------------------------------------
@@ -116,6 +118,38 @@ const productSchema = new mongoose.Schema(
     image: { type: String, trim: true, default: '' },
     description: { type: String, trim: true, maxlength: 500, default: '' },
 
+    // --- Publishing ---------------------------------------------------------
+    // Whether this product is on the shelf, being written, or finished with.
+    // `active` is the default, so every product that exists today is on the
+    // shelf exactly as it was before this field did.
+    status: {
+      type: String,
+      enum: Object.values(PRODUCT_STATUS),
+      default: PRODUCT_STATUS.ACTIVE,
+      index: true,
+    },
+
+    // "I don't count these." A made-to-order cake, a digital download, a
+    // service slot - none of them have a number that goes down when one is
+    // bought. With this off, stock is neither shown nor enforced, which is
+    // what stops the storefront from permanently greying the item out.
+    trackInventory: { type: Boolean, default: true },
+
+    // --- Organisation -------------------------------------------------------
+    // Free-text grouping the merchant already thinks in. All optional and all
+    // empty by default: a product with none of them set is a normal product,
+    // exactly as before.
+    //
+    // `category` already existed and is what the storefront filters by;
+    // `productType` is the finer "what kind of thing is it" (Skincare, Pizza,
+    // Spare part) that sits beside it, and `vendor` is who supplies it.
+    productType: { type: String, trim: true, maxlength: 60, default: '', index: true },
+    vendor: { type: String, trim: true, maxlength: 80, default: '' },
+    // Shopify-style collections: a list of labels, not a separate collection of
+    // documents, because nothing in this app needs to query a product BY its
+    // collection - they are only ever shown as tags on the product itself.
+    collections: { type: [String], default: () => [] },
+
     // The variation axes and the sellable combinations they generate. See the
     // notes above: both default to empty, which is the "this product has no
     // variants" case that the rest of the app already handles.
@@ -199,6 +233,44 @@ productSchema.virtual('totalStock').get(function getTotalStock() {
  */
 productSchema.virtual('imageCount').get(function getImageCount() {
   return this.variants.filter((variant) => String(variant.image || '').trim()).length;
+});
+
+/**
+ * Is this product on the shelf?
+ *
+ * The single definition of "a shopper can see and buy this". The storefront
+ * filters on it, the catalogue list filters on it, and the order controller
+ * refuses anything that is not it - all three read this one virtual so they
+ * cannot drift into three different answers about the same product.
+ */
+productSchema.virtual('isPublished').get(function getIsPublished() {
+  return this.status === PRODUCT_STATUS.ACTIVE;
+});
+
+/**
+ * How many sales channels this product is published to.
+ *
+ * This app has exactly one channel - the public storefront - so an active
+ * product is on one and a draft/archived one is on none. Exposed as a number
+ * because that is the shape the products table shows, and computing it here
+ * rather than in the UI is what keeps the column honest if a second channel
+ * (a marketplace, a POS) is ever added.
+ */
+productSchema.virtual('channelCount').get(function getChannelCount() {
+  return this.isPublished ? 1 : 0;
+});
+
+/**
+ * Price x stock across everything sellable, i.e. what the shelf is worth.
+ *
+ * Reads the same figures the storefront does - the price RANGE across the
+ * matrix, and the summed stock - so this can never disagree with what a
+ * customer would be charged. A product that does not track inventory
+ * contributes 0: there is no countable stock to value.
+ */
+productSchema.virtual('inventoryValue').get(function getInventoryValue() {
+  if (!this.trackInventory) return 0;
+  return this.priceRange.min * (Number(this.totalStock) || 0);
 });
 
 export const Product = mongoose.model('Product', productSchema);

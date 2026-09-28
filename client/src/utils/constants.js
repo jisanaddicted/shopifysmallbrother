@@ -150,7 +150,38 @@ export const ROLES_REQUIRING_USERNAME = [
   ROLES.STORE_ADMIN,
 ];
 
-// --- Store <-> rider binding ----------------------------------------------
+// --- Product publishing status ---------------------------------------------
+// Whether a product is on the shelf, still being written, or finished with.
+// Mirrors PRODUCT_STATUS in backend/src/utils/constants.js - the API and the
+// browser have to agree on these strings or a saved status will not stick.
+export const PRODUCT_STATUS = {
+  ACTIVE: 'active',
+  DRAFT: 'draft',
+  ARCHIVED: 'archived',
+};
+
+export const PRODUCT_STATUS_VALUES = Object.values(PRODUCT_STATUS);
+
+// What the products table and the status picker print. A product that somehow
+// arrives without a status (an older API, a hand-edited row) reads as Active,
+// because that is what it was before statuses existed.
+export const PRODUCT_STATUS_LABELS = {
+  [PRODUCT_STATUS.ACTIVE]: 'Active',
+  [PRODUCT_STATUS.DRAFT]: 'Draft',
+  [PRODUCT_STATUS.ARCHIVED]: 'Archived',
+};
+
+// The badge colour each status gets. Deliberately the same three the rest of
+// the back office already uses for its own stateful things (badges in
+// AdminDashboard, order chips in the tracker), so "Draft" reads the same way
+// everywhere in the app.
+export const PRODUCT_STATUS_TONE = {
+  [PRODUCT_STATUS.ACTIVE]: 'badge--success',
+  [PRODUCT_STATUS.DRAFT]: 'badge--warn',
+  [PRODUCT_STATUS.ARCHIVED]: 'badge--info',
+};
+
+// Store <-> rider binding ---------------------------------------------------
 export const STORE_RIDER_STATUS = {
   PENDING: 'pending',
   ACTIVE: 'active',
@@ -400,6 +431,12 @@ export const ROUTES = {
   // How long the rider's own deliveries took, stage by stage.
   RIDER_ANALYTICS: '/rider/analytics',
   MERCHANT_PRODUCTS: '/merchant/products',
+  // One product opened from the products table, and the "Add product" form.
+  // Both live INSIDE the merchant shell so the side rail survives, and `new` is
+  // matched before `:productId` so it is never read as a product whose id
+  // happens to be the word "new".
+  MERCHANT_PRODUCT_NEW: '/merchant/products/new',
+  MERCHANT_PRODUCT_EDIT: '/merchant/products/:productId',
   // How long this store's deliveries take, per rider. Same numbers the rider
   // sees about themselves, read off the orders' own status history.
   MERCHANT_ANALYTICS: '/merchant/analytics',
@@ -409,6 +446,10 @@ export const ROUTES = {
   ADMIN_RIDERS: '/admin/riders',
   MERCHANT_THEME: '/merchant/theme',  ADMIN_DASHBOARD: '/admin',
   ADMIN_PRODUCTS: '/admin/products',
+  // The same two product screens the store dashboard has, reached from the
+  // admin panel. Same pages, different origin - see MERCHANT_PRODUCT_NEW.
+  ADMIN_PRODUCT_NEW: '/admin/products/new',
+  ADMIN_PRODUCT_EDIT: '/admin/products/:productId',
   // Store->admin invitations: the admin accepts/declines stores that asked
   // them to help run them (replaces the old admin-only Stores tab).
   ADMIN_INVITATIONS: '/admin/invitations',
@@ -444,6 +485,19 @@ export const adminOrderPath = (orderId) => `/admin/orders/${orderId}`;
 
 // Build a store's public URL: shopPath('joes-pizza') -> /s/joes-pizza
 export const shopPath = (slug) => `/s/${slug}`;
+
+/**
+ * The two product screens, built for whichever shell the reader is in.
+ *
+ * `base` is the products list route itself ('/merchant/products' or
+ * '/admin/products'), so a caller never has to know which of the two it is:
+ * productNewPath(base) and productEditPath(base, id) both land inside the same
+ * DashboardLayout group the list is in, which is what keeps the side rail on
+ * screen. Passing the list route rather than the role is what stops the two
+ * shells from ever drifting apart.
+ */
+export const productNewPath = (base) => `${base}/new`;
+export const productEditPath = (base, productId) => `${base}/${productId}`;
 
 // Build a store's checkout URL: checkoutPath('joes-pizza') -> /s/joes-pizza/checkout.
 // No store known (old bookmark, guest who never opened a storefront) keeps the

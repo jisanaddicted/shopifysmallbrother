@@ -3374,3 +3374,250 @@ ol {
   margin-top: 1.1rem;
 }
 
+
+/* ==========================================================================
+   Products list + product editor
+   The two screens that replaced the single "inventory" page. Scoped under
+   `.products`, `.psum`, `.editor` and `.crumbs` so nothing here can reach the
+   storefront's own product cards, which are a different component entirely.
+   ========================================================================== */
+
+/* --- Summary strip --------------------------------------------------------
+   The row of figures above the products table. A bordered strip of cells
+   rather than the existing `.stats` cards, because these read as one
+   instrument panel - they describe the same list and are only meaningful
+   together - and because it has to sit flush against the table below it. */
+.psum {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* Drawn as an inset border rather than a real border on each cell, so the
+   strip has one outline around it and the dividers stop at its rounded
+   corners instead of poking out of them. */
+.psum__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.85rem 1rem;
+  box-shadow: inset -1px 0 0 var(--line);
+}
+
+.psum__cell:last-child {
+  box-shadow: none;
+}
+
+.psum__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.psum__value {
+  font-size: 1.3rem;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.psum__value.is-danger {
+  color: var(--danger);
+}
+
+.psum__note {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* On a phone the cells stack two-up and the right-hand divider would land
+   mid-row, so it is dropped and the gap does the separating instead. */
+@media (max-width: 640px) {
+  .psum {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .psum__cell {
+    box-shadow: none;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+/* --- Products table ------------------------------------------------------- */
+.products .products__check {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.products__check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+/* The product cell is a real button so "click the row to open it" is
+   reachable by keyboard and announced as a control, while still looking like
+   a table cell. The reset is deliberate: the shared `.btn` look would put a
+   border and a background on every row. */
+.table__product--button {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.table__product--button:hover strong {
+  text-decoration: underline;
+}
+
+.table__product--button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.table__product-text {
+  min-width: 0;
+}
+
+/* A figure the merchant has to act on - out of stock - is the one thing in
+   this table printed in red. */
+.products td.is-danger {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* --- Bulk action bar ------------------------------------------------------
+   Appears under the filter row only while something is ticked, so it never
+   takes up space in the common case of just reading the table. */
+.bulkbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 1rem;
+  background: var(--brand-soft);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .bulkbar .button-row {
+    width: 100%;
+  }
+}
+
+/* --- Breadcrumb ----------------------------------------------------------- */
+.crumbs {
+  font-size: 0.88rem;
+}
+
+.crumbs__link {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.crumbs__link:hover {
+  color: var(--brand);
+}
+
+/* --- Product editor -------------------------------------------------------
+   Two columns: the product itself on the left, how it is filed and published
+   on the right. The sidebar is the narrower one deliberately - everything in
+   it is a short label or a small number, while the left column holds the
+   fields a merchant types sentences into. */
+.editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 22rem);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.editor__main,
+.editor__side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+/* Sticky, so "Save" is reachable without scrolling past a long variant
+   matrix - which is exactly where a merchant is when they realise they want
+   to change the status. */
+.editor__actions {
+  position: sticky;
+  bottom: 0.5rem;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+/* The sidebar is a set of stacked panels, so the gap is what separates them;
+   a phone gets one column and the order stays top-to-bottom: what it is,
+   how much of it there is, how it is filed, then Save. */
+@media (max-width: 900px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .editor__actions {
+    position: static;
+  }
+}
+
+/* --- Media ----------------------------------------------------------------
+   The product photo and the tile that would add another. Only one photo is
+   supported today (per-variant photos live in the matrix), so the add tile is
+   a label for the URL field beneath it rather than a file picker that would
+   silently do nothing. */
+.media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.media__tile,
+.media__add {
+  width: 104px;
+  height: 104px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.media__tile {
+  border: 1px solid var(--line);
+  background: var(--surface-alt);
+}
+
+.media__tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media__add {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 1.5rem;
+}
