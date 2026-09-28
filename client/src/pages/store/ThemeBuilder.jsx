@@ -279,23 +279,54 @@ export default function ThemeBuilder() {
     setItems(newItems);
   };
 
+  /**
+   * Add a menu item, as a top-level row or as a sub-item of `parentId`.
+   *
+   * Returns the new row's id so the caller can open it straight away.
+   *
+   * The row is appended to the END of its sibling group, so a sub-item lands
+   * under the parent's caret instead of jumping to the top of the menu.
+   *
+   * Two things are opened automatically, because otherwise a freshly added
+   * sub-item would be effectively invisible: a sub-item only renders inside an
+   * expanded parent, and it has no label yet, so an empty "Untitled" row gives
+   * the user nothing obvious to click in order to name it.
+   */
   const addItem = (parentId = null) => {
+    const id = `new_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const siblingCount = items.filter(
       (i) => String(i.parentId || null) === String(parentId || null)
     ).length;
-    setItems([
-      ...items,
+
+    // The functional form, so two rapid clicks cannot both read the same stale
+    // `items` snapshot and one of the new rows would be silently lost.
+    setItems((prev) => [
+      ...prev,
       {
-        id: `new_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        id,
         label: '',
-        targetType: 'category',
-        target: '',
+        // A target is REQUIRED - the save endpoint rejects a row without one
+        // with "Every menu item needs a target". Defaulting to a category with
+        // an empty value therefore produced a row that could not be saved at
+        // all, so a new sub-item was born unsaveable until the user thought to
+        // pick a category. Pointing it at the store's own page is always valid,
+        // needs no product or category to exist first, and is a sensible
+        // "not set up yet" default the user can overwrite.
+        targetType: 'url',
+        target: store?.publicPath || (store?.slug ? `/s/${store.slug}` : ''),
         parentId,
         position: siblingCount,
         isVisible: true,
         isNew: true,
       },
     ]);
+
+    if (parentId) {
+      setOpenIds((prev) => new Set(prev).add(String(parentId)));
+    }
+    setEditingIds((prev) => new Set(prev).add(id));
+
+    return id;
   };
 
   /* --- Collapse / expand --- */
@@ -397,19 +428,36 @@ export default function ThemeBuilder() {
     setItems((prev) => [...prev, ...copies]);
   };
 
-  const handleSave = async () => {
-    if (!store) return;
-    const storeId = store._id || store.id;
-    if (!storeId) return;
+  /**
+   * Flatten the working list into the payload the save endpoint expects.
+   *
+   * Extracted from handleSave because the filtering below has a consequence
+   * worth stating once, in one place.
+   *
+   * Rows with no label are dropped - an abandoned "Untitled" row should not
+   * become a real menu entry. But a dropped row can be some OTHER row's parent:
+   * open a parent, add a sub-item, never name it, then save, and the child
+   * still points at an id that is no longer in the batch. The server rejects
+   * that with "Parent must reference another item in this batch", so the whole
+   * menu fails to save because of one half-finished row.
+   *
+   * So a child whose parent was dropped is promoted to the top level instead
+   * of taking the menu down with it. The alternative - silently deleting the
+   * child - would throw away a row the user can still see and name.
+   */
+  const buildPayload = (list) => {
+    const named = list.filter((i) => String(i.label || '').trim());
+    const namedIds = new Set(named.map((i) => String(i.id)));
 
-    const normalized = items
-      .filter((i) => String(i.label || '').trim())
+    return named
       .map((i) => ({
         id: i.id,
         label: String(i.label || '').trim(),
         targetType: i.targetType || 'category',
         target: String(i.target || '').trim(),
-        parentId: i.parentId || null,
+        // Promoted when the parent was dropped for having no label.
+        parentId:
+          i.parentId && namedIds.has(String(i.parentId)) ? i.parentId : null,
         position: Number(i.position || 0),
         isVisible: i.isVisible !== false,
       }))
@@ -418,6 +466,14 @@ export default function ThemeBuilder() {
         const bLevel = b.parentId ? 1 : 0;
         return aLevel - bLevel || a.position - b.position;
       });
+  };
+
+  const handleSave = async () => {
+    if (!store) return;
+    const storeId = store._id || store.id;
+    if (!storeId) return;
+
+    const normalized = buildPayload(items);
 
     setSaving(true);
     setError('');
@@ -491,15 +547,38 @@ export default function ThemeBuilder() {
               <Icon name="grip" />
             </span>
 
-            {/* The caret only appears on a row that HAS children - an always-there
-                caret on a leaf promises a submenu that does not exist. */}
-            {hasChildren ? (
+            {/* Every top-level row gets a caret, INCLUDING a leaf. That is the
+                whole "add a sub-item" affordance: a parent with no children yet
+                still needs a way to open its (empty) submenu, and the add row
+                lives in there. A leaf had no caret before, so the first
+                sub-item could only ever be added to a parent that already had
+                one.
+
+                A caret is deliberately NOT given to sub-items. Nesting stops at
+                two levels here because the save endpoint resolves parents in a
+                single parents-then-children pass, so a third level would be
+                written before its own parent existed and the whole save would
+                fail with "Parent item was not found earlier in the batch". */}
+            {depth === 0 ? (
               <button
                 type="button"
                 className={'menu-row__caret' + (isOpen ? ' is-open' : '')}
                 onClick={() => toggleOpen(key)}
                 aria-expanded={isOpen}
-                aria-label={isOpen ? 'Hide sub-items' : 'Show sub-items'}
+                aria-label={
+                  hasChildren
+                    ? isOpen
+                      ? 'Hide sub-items'
+                      : 'Show sub-items'
+                    : 'Add a sub-item'
+                }
+                title={
+                  hasChildren
+                    ? isOpen
+                      ? 'Hide sub-items'
+                      : 'Show sub-items'
+                    : 'Add a sub-item'
+                }
               >
                 <Icon name="caret" />
               </button>
@@ -651,19 +730,23 @@ export default function ThemeBuilder() {
             </div>
           ) : null}
 
-          {hasChildren && isOpen ? (
+          {/* Rendered whenever the row is OPEN, not only when it has children.
+              That is what makes an empty submenu usable: a parent opened for
+              the first time shows one button and nothing else, which says
+              "this can have sub-items" far better than hiding the only way to
+              create one. */}
+          {isOpen ? (
             <div className="menu-children">
               {renderBranch(children, depth + 1)}
 
               {/* "Add menu item to <PARENT>", named for the parent it will land
-                  under. A generic "+" would not say where the new row goes. */}
+                  under. A generic "+" would not say where the new row goes.
+                  addItem expands this parent and opens the new row's editor
+                  on its own, so no extra state juggling is needed here. */}
               <button
                 type="button"
                 className="menu-row menu-row--add"
-                onClick={() => {
-                  addItem(key);
-                  toggleOpen(key);
-                }}
+                onClick={() => addItem(key)}
               >
                 <span className="menu-row__grip" aria-hidden="true" />
                 <span className="menu-row__plus" aria-hidden="true">
