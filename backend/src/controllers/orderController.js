@@ -858,7 +858,7 @@ export const getStoreAnalytics = asyncHandler(async (req, res) => {
 /**
  * (removed) PATCH /api/orders/:id/assign
  *
- * Manual dispatch is gone on purpose: riders are bound to a store by the
+ * Manual rider assignment is gone on purpose: riders are bound to a store by the
  * admin/merchant, get pinged in real time when an order arrives, and claim
  * it themselves (POST /:id/claim). There is no admin "choose a rider" step.
  */

@@ -185,7 +185,7 @@ export default function Register() {
   // Admin accounts are never self-created (seeder / existing admin only),
   // so the picker offers the three self-signup staff roles.
   const PORTAL_ROLES = [
-    { value: ROLES.STORE, label: 'Store owner', hint: 'Sell & dispatch' },
+    { value: ROLES.STORE, label: 'Store owner', hint: 'Sell & manage orders' },
     { value: ROLES.RIDER, label: 'Rider', hint: 'Deliver orders' },
     { value: ROLES.STORE_ADMIN, label: 'Store admin', hint: 'Manage a store' },
   ];
@@ -335,7 +335,7 @@ export default function Register() {
               >
                 <option value={ROLES.RIDER}>Rider — I want to deliver</option>
                 <option value={ROLES.STORE}>
-                  Store — I want to sell and dispatch
+                  Store — I want to sell and manage orders
                 </option>
                 <option value={ROLES.STORE_ADMIN}>
                   Store admin — I manage a store's products &amp; orders

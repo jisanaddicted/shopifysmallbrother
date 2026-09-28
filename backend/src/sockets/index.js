@@ -217,7 +217,7 @@ export function initSockets(httpServer) {
         order.riderLocation = point;
         await order.save();
 
-        // Keep the rider's own last-known position fresh for dispatch.
+        // Keep the rider's own last-known position fresh for order tracking.
         await User.updateOne(
           { _id: socket.user._id },
           { $set: { location: point } },

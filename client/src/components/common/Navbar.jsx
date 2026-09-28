@@ -145,7 +145,7 @@ export default function Navbar() {
           )}
           {isAdmin && (
             <>
-              <NavLink to={ROUTES.ADMIN_DASHBOARD}>Dispatch</NavLink>
+              <NavLink to={ROUTES.ADMIN_DASHBOARD}>Orders</NavLink>
               <NavLink to={ROUTES.ADMIN_PRODUCTS}>Products</NavLink>
             </>
           )}

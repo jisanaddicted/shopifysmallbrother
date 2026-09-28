@@ -299,7 +299,7 @@ export const ORDER_STATUS_FLOW = [
 export const TRACKER_FLOW = [...ORDER_STATUS_FLOW, ORDER_STATUS.RECEIVED];
 
 // A status nothing more will happen to. Used wherever a "live"/"in progress"
-// list is built (rider console, merchant dashboard, dispatch boards) so a
+// list is built (rider console, merchant dashboard, orders boards) so a
 // received order stops being counted as unfinished work.
 export const CLOSED_STATUSES = [
   ORDER_STATUS.DELIVERED,
@@ -405,19 +405,19 @@ export const ROUTES = {
   MERCHANT_ANALYTICS: '/merchant/analytics',
   // Live map of every delivery in progress. Reached from the ADMIN panel now
   // (/admin/riders) - it is an operations view across the stores an admin runs,
-  // so it sits beside Dispatch rather than in the store dashboard.
+  // so it sits beside the orders board rather than in the store dashboard.
   ADMIN_RIDERS: '/admin/riders',
   MERCHANT_THEME: '/merchant/theme',  ADMIN_DASHBOARD: '/admin',
   ADMIN_PRODUCTS: '/admin/products',
   // Store->admin invitations: the admin accepts/declines stores that asked
   // them to help run them (replaces the old admin-only Stores tab).
   ADMIN_INVITATIONS: '/admin/invitations',
-  // One order opened from the dispatch board. It lives INSIDE the admin
+  // One order opened from the orders board. It lives INSIDE the admin
   // DashboardLayout group so the side rail stays visible (the customer's
   // /track/:orderId sits outside it and shows the top navbar instead).
   ADMIN_ORDER: '/admin/orders/:orderId',
   // The same order view reached from the admin's Rider tracker, so "back" goes
-  // to the tracker rather than to Dispatch. Same page, different origin.
+  // to the tracker rather than to the orders board. Same page, different origin.
   ADMIN_RIDER_ORDER: '/admin/riders/:orderId',
   ADMIN_THEME: '/admin/theme',
   PROFILE: '/profile',
@@ -438,7 +438,7 @@ export const ROUTES = {
 // Build a real tracker URL from an order id: orderTrackerPath('abc') -> /track/abc
 export const orderTrackerPath = (orderId) => `/track/${orderId}`;
 
-// The same order opened from the admin dispatch board. Same page component, but
+// The same order opened from the admin orders board. Same page component, but
 // rendered inside the side-navbar shell: adminOrderPath('abc') -> /admin/orders/abc
 export const adminOrderPath = (orderId) => `/admin/orders/${orderId}`;
 

@@ -41,7 +41,7 @@ import { deliveryLegs, elapsedMs, statusSteps } from '../../utils/timings';
  *
  * `backTo`/`backLabel` let the caller send "back" where the user actually came
  * from - the rider tracker's order view returns to the tracker, not to the
- * dispatch board - instead of every shell-mounted view assuming its own board.
+ * orders board - instead of every shell-mounted view assuming its own board.
  */
 export default function OrderTracker({
   variant = 'customer',
@@ -785,8 +785,8 @@ export default function OrderTracker({
             </>
           ) : (
             <p className="muted">
-              No rider assigned yet. They will appear here as soon as dispatch
-              confirms.
+              No rider assigned yet. They will appear here as soon as the store
+              assigns one.
             </p>
           )}
 

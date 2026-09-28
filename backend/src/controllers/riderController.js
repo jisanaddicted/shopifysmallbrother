@@ -74,7 +74,7 @@ export const respondToRequest = asyncHandler(async (req, res) => {
  * DELETE /api/riders/stores/:storeId  (self)
  *
  * The "Remove store" button in the admin panel: this account drops its own
- * store-admin membership, so the store disappears from its session - Dispatch,
+ * store-admin membership, so the store disappears from its session - Orders,
  * Products and Theme are all scoped through that same list. Marked `revoked`
  * rather than deleted (same as the owner-side revoke) so the store can simply
  * invite this account again later.

@@ -23,15 +23,15 @@ export default function PortalAuth({ mode, children }) {
           </h1>
           <p className="portal__desc">
             One login for every role that keeps the supershop moving — store
-            owners list products and dispatch orders, riders pick up and
-            deliver, and admins keep the whole marketplace healthy.
+            owners list products and manage orders, riders pick up and deliver,
+            and admins keep the whole marketplace healthy.
           </p>
           <ul className="portal__roles">
             <li>
               <span className="portal__role-dot portal__role-dot--store" aria-hidden="true" />
               <div>
                 <strong>Store owner</strong>
-                <span>Open your store, add products, dispatch orders.</span>
+                <span>Open your store, add products, manage orders.</span>
               </div>
             </li>
             <li>

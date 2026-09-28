@@ -284,7 +284,7 @@ export const updateMe = asyncHandler(async (req, res) => {
 
   if (phone !== undefined) user.phone = String(phone).trim();
 
-  // A rider toggling themselves on/off the dispatch list.
+  // A rider toggling themselves on/off the order list.
   if (isAvailable !== undefined && user.role === ROLES.RIDER) {
     user.isAvailable = Boolean(isAvailable);
   }

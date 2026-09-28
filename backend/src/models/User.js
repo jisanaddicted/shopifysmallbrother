@@ -56,7 +56,7 @@ const userSchema = new mongoose.Schema(
       default: ROLES.CUSTOMER,
     },
 
-    // Riders only: dispatch skips riders who have toggled themselves off.
+    // Riders only: order assignment skips riders who have toggled themselves off.
     isAvailable: { type: Boolean, default: true },
 
     // Riders only: last position seen from the socket.

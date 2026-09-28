@@ -302,7 +302,7 @@ export default function RiderTracker() {
               Go to invitations
             </Link>
             <Link className="btn btn-ghost btn-sm" to={ROUTES.ADMIN_DASHBOARD}>
-              Back to dispatch
+              Back to orders
             </Link>
           </div>
         </section>
@@ -392,7 +392,7 @@ export default function RiderTracker() {
             <p className="muted">
               Nothing is moving right now. A delivery appears here the moment a
               rider accepts it - new orders land on{' '}
-              <Link to={ROUTES.ADMIN_DASHBOARD}>Dispatch</Link>.
+              <Link to={ROUTES.ADMIN_DASHBOARD}>Orders</Link>.
             </p>
           ) : (
             <ul className="rider-list">
@@ -536,7 +536,7 @@ export default function RiderTracker() {
           <h2 className="panel__title">Rider roster</h2>
           <span className="muted small">
             Invite or remove riders from{' '}
-            <Link to={ROUTES.ADMIN_DASHBOARD}>Dispatch</Link>.
+            <Link to={ROUTES.ADMIN_DASHBOARD}>Orders</Link>.
           </span>
         </div>
 

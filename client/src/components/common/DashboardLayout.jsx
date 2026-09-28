@@ -12,7 +12,7 @@ import { initials } from '../../utils/formatters';
  *
  * variant="merchant" -> My store, Products, Rider tracker, Rider analytics, Theme
  * variant="rider"    -> My deliveries, Analytics
- * variant="admin"    -> Dispatch, Products, Invitations, Theme
+ * variant="admin"    -> Orders, Products, Invitations, Theme
  *
  * The admin rail shows a count badge on Invitations while a store is waiting
  * for an answer (refreshed on every navigation, so accepting from the page
@@ -81,7 +81,7 @@ export default function DashboardLayout({ variant = 'merchant' }) {
   ];
 
   const adminLinks = [
-    { to: ROUTES.ADMIN_DASHBOARD, label: 'Dispatch', icon: '🧭', end: true },
+    { to: ROUTES.ADMIN_DASHBOARD, label: 'Orders', icon: '🧭', end: true },
     { to: ROUTES.ADMIN_PRODUCTS, label: 'Products', icon: '📦', end: false },
     // Live delivery map across the stores this admin runs. Moved here from the
     // store dashboard: watching every rider at once is an operations view, and

@@ -123,8 +123,8 @@ export default function ProfilePage() {
       setUser(updated);
       setNotice(
         updated.isAvailable
-          ? 'You are visible to dispatch again.'
-          : 'You are hidden from dispatch until you switch back.',
+          ? 'You are visible for orders again.'
+          : 'You are hidden from order offers until you switch back.',
       );
     } catch (err) {
       setError(err.message || 'Could not update your availability.');

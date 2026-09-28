@@ -199,7 +199,7 @@ async function main() {
     (mine.data?.orders || []).some((entry) => (entry._id || entry.id) === orderId),
   );
 
-  // --- Dispatch is self-service now ------------------------------------------
+  // --- Rider assignment is self-service now ------------------------------------------
   // There is no admin "choose a rider" step: riders are bound to a store and
   // claim orders from their pool. The old manual endpoints must be gone.
   const forbidden = await api('GET', '/orders', { token: sessions.customer });
@@ -897,7 +897,7 @@ async function main() {
   }
 
   const riderAsAdmin = await api('GET', '/orders', { token: sessions.rider });
-  check('a rider cannot read the dispatch board', riderAsAdmin.status === 403, `got ${riderAsAdmin.status}`);
+  check('a rider cannot read the orders board', riderAsAdmin.status === 403, `got ${riderAsAdmin.status}`);
 
   // --- Merchant signup, storefront URL, and username rules -----------------
   const stamp = Date.now().toString(36);
@@ -1309,7 +1309,7 @@ async function main() {
   // --- Store -> admin invitation: accept/decline + panel scoping -----------
   // A store owner invites the platform admin by username; the admin answers
   // from the panel (GET/PATCH /riders/requests). Until an invitation is
-  // accepted, the admin's dispatch board and store list must not contain that
+  // accepted, the admin's orders board and store list must not contain that
   // store's data at all - the panel is scoped to stores the admin runs.
   if (sessions.admin && sessions.merchant && pizzaStore?._id && storeOrderId) {
     const adminMe = await api('GET', '/auth/me', { token: sessions.admin });
@@ -1391,7 +1391,7 @@ async function main() {
       token: sessions.admin,
     });
     check(
-      'a declined invitation does not open the dispatch board',
+      'a declined invitation does not open the orders board',
       (boardStillClosed.data?.orders || []).every(
         (entry) =>
           String(entry.store?._id || entry.store) !== String(pizzaStore._id),
@@ -1435,7 +1435,7 @@ async function main() {
 
     const boardAfter = await api('GET', '/orders', { token: sessions.admin });
     check(
-      "the dispatch board now includes that store's orders",
+      "the orders board now includes that store's orders",
       (boardAfter.data?.orders || []).some(
         (entry) => (entry._id || entry.id) === storeOrderId,
       ),
@@ -1594,7 +1594,7 @@ async function main() {
 
     const boardLeft = await api('GET', '/orders', { token: sessions.admin });
     check(
-      'the dispatch board closes for a removed store',
+      'the orders board closes for a removed store',
       (boardLeft.data?.orders || []).every(
         (entry) => String(entry.store?._id || entry.store) !== String(pizzaStore._id),
       ),

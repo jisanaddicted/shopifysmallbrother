@@ -8,7 +8,7 @@ import storeService from '../../services/storeService';
  *
  * A store owner invites this account by username ("Invite as store admin"
  * from their dashboard). Every pending invitation lands here; accepting links
- * the store to the account, after which Dispatch, Products and Theme only
+ * the store to the account, after which Orders, Products and Theme only
  * show that store's data. Declining leaves the account untouched. Each store
  * under "Stores you run" carries a Remove store button that drops the
  * membership again (the store can always invite this account later).
@@ -49,7 +49,7 @@ export default function AdminInvitations() {
   }, [load]);
 
   // "Remove store" - drop this account's membership at that store. The
-  // session re-read is what actually empties the list: Dispatch, Products and
+  // session re-read is what actually empties the list: Orders, Products and
   // Theme all scope themselves through the same `stores` list.
   const removeStore = async (entry) => {
     const storeId = entry.store?._id || entry.store?.id;

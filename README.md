@@ -134,7 +134,7 @@ when `AUTO_SEED=true`) and the demo chips on the portal login page
 is an ordinary account + an accepted `StoreRider{ role: 'admin', status:
 'active' }` row (seeded via `DEMO_MEMBERSHIPS`). The platform admin joins a
 store exactly the same way — a store owner invites `ada.admin` by username,
-the admin accepts under `/admin/invitations` — and the whole panel (Dispatch,
+the admin accepts under `/admin/invitations` — and the whole panel (Orders,
 Products, Theme) is scoped to those stores only. Each row under **Stores you
 run** has a **Remove store** button (`DELETE /riders/stores/:storeId`) that
 revokes the membership again; the store can re-invite the account later.
@@ -230,7 +230,7 @@ no-response network failure into *"Cannot reach the API server at
 | `POST` | `/payment/cancel` | SSLCommerz / the banker's browser | mark `Cancelled`, 302 to `/payment-failed` |
 | `POST` | `/payment/ipn` | SSLCommerz's servers | async webhook: re-validate and settle, so a payment still lands even if the shopper never returned |
 | `GET` | `/payment/:tranId` | the buyer of that order | what actually happened - status, amount, paidAt, items. What `/payment-success` renders |
-| `GET` | `/orders` | admin | dispatch board (`status`, `page`) — only orders of stores the admin runs |
+| `GET` | `/orders` | admin | orders board (`status`, `page`) — only orders of stores the admin runs |
 | `GET` | `/orders/rider/analytics` | rider | how long each stage of *their* deliveries took |
 | `GET` | `/orders/store/analytics` | store staff (owner / appointed store admin) | the same timings for the whole store, rolled up per rider (`storeId` optional) |
 
@@ -289,7 +289,7 @@ join an order room you own, are delivering, or administer.
   catalogue, so a tampered cart cannot set its own price.
 - **Roles are enforced on the server**, not just hidden in the UI. Riders may
   only move an order along the happy path (or jump straight to `delivered`);
-  only admins dispatch and edit the catalogue.
+  only admins manage orders and edit the catalogue.
 - **Cash on delivery, plus SSLCommerz sandbox for online payment.** `checkout`
   offers both; `paymentMethod` on the order records which was chosen, and a
   `payment` sub-document on the order records how far that payment got

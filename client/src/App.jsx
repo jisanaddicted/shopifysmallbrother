@@ -216,7 +216,7 @@ export default function App() {
                 explains itself when the admin runs no store at all. */}
             <Route path={ROUTES.ADMIN_RIDERS} element={<RiderTracker />} />
             {/* Opened from the rider tracker: same view, same side rail, but
-                "back" returns to the tracker instead of Dispatch. */}
+                "back" returns to the tracker instead of the orders board. */}
             <Route
               path={ROUTES.ADMIN_RIDER_ORDER}
               element={
