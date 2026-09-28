@@ -63,20 +63,6 @@
   height: auto;
 }
 
-.portal__eyebrow {
-  margin: 0;
-  display: inline-flex;
-  align-self: flex-start;
-  padding: 0.3rem 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  background: rgba(255, 255, 255, 0.12);
-}
-
 /* The name itself is carried by the logo above, so the heading only has to
    carry "Supershop Online Portal" — a shorter, calmer line. */
 .portal__title {
@@ -138,12 +124,6 @@
 .portal__role-dot--store { background: #fbbf24; }
 .portal__role-dot--rider { background: #34d399; }
 .portal__role-dot--admin { background: #f472b6; }
-
-.portal__hint {
-  margin: 0.5rem 0 0;
-  font-size: 0.86rem;
-  color: #cbd5e1;
-}
 
 /* ---- Right: form side --------------------------------------------------- */
 .portal__form-side {

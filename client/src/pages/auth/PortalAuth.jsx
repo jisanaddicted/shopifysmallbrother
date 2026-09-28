@@ -32,7 +32,6 @@ export default function PortalAuth({ mode, children }) {
               height="200"
             />
           </div>
-          <p className="portal__eyebrow">Supershop online portal</p>
           <h1 className="portal__title">Supershop Online Portal</h1>
           <p className="portal__desc">
             One login for every role that keeps the supershop moving — store
@@ -62,10 +61,6 @@ export default function PortalAuth({ mode, children }) {
               </div>
             </li>
           </ul>
-          <p className="portal__hint">
-            Shopping with us? Customers sign in from their store&rsquo;s own
-            page — no account needed to browse.
-          </p>
         </div>
       </aside>
 

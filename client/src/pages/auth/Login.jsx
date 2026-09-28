@@ -101,10 +101,6 @@ export default function Login() {
       <div className="auth-page">
         <form className="card auth-card" onSubmit={handleSubmit}>
           <h1 className="auth-card__title">Welcome back</h1>
-          <p className="muted">
-            Sign in as a store owner, rider, store admin or admin to open your
-            workspace.
-          </p>
 
           {storeName ? (
             <p className="alert alert--ok">
