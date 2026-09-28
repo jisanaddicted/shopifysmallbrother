@@ -185,9 +185,9 @@ export default function Register() {
   // Admin accounts are never self-created (seeder / existing admin only),
   // so the picker offers the three self-signup staff roles.
   const PORTAL_ROLES = [
-    { value: ROLES.STORE, label: 'Manager', hint: 'Sell & manage orders' },
-    { value: ROLES.RIDER, label: 'Rider', hint: 'Deliver orders' },
-    { value: ROLES.STORE_ADMIN, label: 'Store admin', hint: 'Manage a store' },
+    { value: ROLES.STORE, label: 'Manager' },
+    { value: ROLES.RIDER, label: 'Rider' },
+    { value: ROLES.STORE_ADMIN, label: 'Store admin' },
   ];
 
   const pickRole = (role) =>
@@ -198,7 +198,6 @@ export default function Register() {
       <div className="auth-page">
       <form className="card auth-card" onSubmit={handleSubmit}>
         <h1 className="auth-card__title">Create your account</h1>
-        <p className="muted">Join the Ronex Mart portal as staff.</p>
 
         {originStoreName ? (
           <p className="alert alert--ok">
@@ -238,15 +237,7 @@ export default function Register() {
 
         {needsUsername ? (
           <label className="field">
-            <span>
-              {isStore
-                ? 'Store username'
-                : form.role === ROLES.STORE_ADMIN
-                  ? 'Store admin username'
-                  : form.role === ROLES.RIDER
-                    ? 'Rider username'
-                    : 'Username (optional)'}
-            </span>
+            <span>Username</span>
             <input
               type="text"
               name="username"
@@ -271,13 +262,7 @@ export default function Register() {
                       ? usernameState.reason
                       : 'Usernames are 3-20 characters, starting with a letter.'}
               </span>
-            ) : (
-              <span className="muted small block">
-                {mustHaveUsername
-                  ? 'Stores and admins will find you by this handle.'
-                  : 'Optional - a store owner needs a handle or your email to appoint you a store admin.'}
-              </span>
-            )}
+            ) : null}
           </label>
         ) : null}
 
@@ -320,7 +305,6 @@ export default function Register() {
                     onClick={() => pickRole(option.value)}
                   >
                     <strong>{option.label}</strong>
-                    <small>{option.hint}</small>
                   </button>
                 ))}
               </div>
@@ -341,13 +325,6 @@ export default function Register() {
                   Store admin — I manage a store's products &amp; orders
                 </option>
               </select>
-              <span className="muted small block portal__role-note">
-                {form.role === ROLES.STORE
-                  ? 'Managers get a public page at /s/<your-store-name>.'
-                  : form.role === ROLES.RIDER
-                    ? 'Riders deliver orders and get found by username.'
-                    : 'Store admins are appointed by an owner after signing up.'}
-              </span>
             </div>
           </>
         )}

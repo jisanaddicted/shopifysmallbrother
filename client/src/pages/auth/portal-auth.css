@@ -209,11 +209,6 @@
   color: var(--ink);
 }
 
-.portal__role-btn small {
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-
 .portal__role-btn:hover {
   border-color: var(--brand);
 }
@@ -222,11 +217,6 @@
   border-color: var(--brand);
   background: var(--brand-soft);
   box-shadow: var(--shadow-sm);
-}
-
-.portal__role-note {
-  margin: 0;
-  font-size: 0.82rem;
 }
 
 /* ---- Responsive: stack brand on top on small screens -------------------- */
