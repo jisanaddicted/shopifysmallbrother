@@ -72,6 +72,11 @@ const paymentSchema = new mongoose.Schema(
       enum: Object.values(PAYMENT_PROVIDER),
       default: PAYMENT_PROVIDER.COD,
     },
+    // Which button the buyer pressed: bkash / nagad / rocket / card. Recorded
+    // separately from `paymentMethod` on the order (which says cash-vs-online)
+    // because this is what the store wants to report on: not "they paid online"
+    // but "they paid by bKash".
+    channel: { type: String, trim: true, default: '' },
     status: {
       type: String,
       enum: PAYMENT_STATUS_VALUES,

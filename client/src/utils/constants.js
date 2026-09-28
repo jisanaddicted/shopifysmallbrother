@@ -188,25 +188,61 @@ export const STORE_CUSTOMER_SOURCE_LABELS = {
 };
 
 // --- Payments --------------------------------------------------------------
-// Mirrors PAYMENT_METHODS / PAYMENT_STATUS in backend/src/utils/constants.js.
-// Cash on delivery is the default because it is the one that always works - no
-// gateway credentials, no card, no redirect.
+// Mirrors PAYMENT_METHODS in backend/src/utils/constants.js.
+//
+// The five ways to pay, in the order they are offered. `cod` is first and is the
+// default because it is the one that always works - no gateway credentials, no
+// card, no redirect.
+//
+// The four online channels are CHANNELS, not gateways: bKash/Nagad/Rocket are
+// mobile financial services. They are recorded faithfully on the order so a
+// store can report what people actually choose; see the README on what the
+// gateway does with them.
 export const PAYMENT_METHODS = {
   COD: 'cod',
   CARD: 'card',
+  BKASH: 'bkash',
+  NAGAD: 'nagad',
+  ROCKET: 'rocket',
 };
+
+// Everything except cash, in one list - the online channels, which is what the
+// gateway step is actually for.
+export const ONLINE_PAYMENT_CHANNELS = [
+  PAYMENT_METHODS.BKASH,
+  PAYMENT_METHODS.NAGAD,
+  PAYMENT_METHODS.ROCKET,
+  PAYMENT_METHODS.CARD,
+];
 
 export const PAYMENT_METHOD_LABELS = {
   [PAYMENT_METHODS.COD]: 'Cash on delivery',
-  [PAYMENT_METHODS.CARD]: 'Pay online',
+  [PAYMENT_METHODS.CARD]: 'Card',
+  [PAYMENT_METHODS.BKASH]: 'bKash',
+  [PAYMENT_METHODS.NAGAD]: 'Nagad',
+  [PAYMENT_METHODS.ROCKET]: 'Rocket',
 };
 
 export const PAYMENT_METHOD_HINTS = {
-  [PAYMENT_METHODS.COD]:
-    'Pay the rider in cash when they hand the order over. Nothing to do now.',
-  [PAYMENT_METHODS.CARD]:
-    'Pay by card, mobile banking or wallet through our secure checkout.',
+  [PAYMENT_METHODS.COD]: 'Pay the rider in cash when they hand the order over.',
+  [PAYMENT_METHODS.CARD]: 'Visa, Mastercard or Amex.',
+  [PAYMENT_METHODS.BKASH]: 'Pay from your bKash wallet.',
+  [PAYMENT_METHODS.NAGAD]: 'Pay from your Nagad wallet.',
+  [PAYMENT_METHODS.ROCKET]: 'Pay from your Rocket wallet.',
 };
+
+// Brand colours, used for the channel's chip. Kept here rather than in the
+// component so the same swatch is used wherever a channel is named.
+export const PAYMENT_METHOD_COLORS = {
+  [PAYMENT_METHODS.BKASH]: '#e2136e',
+  [PAYMENT_METHODS.NAGAD]: '#ee7623',
+  [PAYMENT_METHODS.ROCKET]: '#8c3494',
+  [PAYMENT_METHODS.CARD]: '#1a1f71',
+  [PAYMENT_METHODS.COD]: '#64748b',
+};
+
+export const isOnlinePayment = (method) =>
+  ONLINE_PAYMENT_CHANNELS.includes(method);
 
 export const PAYMENT_STATUS = {
   PENDING: 'Pending',

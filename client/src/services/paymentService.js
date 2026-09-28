@@ -7,20 +7,29 @@ import {
 
 /**
  * POST /payment/init
- * body: { orderId }   (guests also send { guestToken })
+ * body: { orderId, paymentMethod }   (guests also send { guestToken })
  *
  * Asks the server to open an SSLCommerz sandbox session for an order that
- * ALREADY EXISTS, and resolves to `{ url, tran_id, amount, currency }` - `url`
- * being the gateway page the shopper must be sent to.
+ * ALREADY EXISTS, and resolves to
+ * `{ url, tran_id, amount, currency, channel, multi_card_name }` - `url` being
+ * the gateway page the shopper must be sent to.
+ *
+ * `paymentMethod` is the channel the buyer picked on the checkout form (card,
+ * bkash, nagad, rocket). It is sent as-is; the server validates it against the
+ * same list the Order model enforces, and decides what to do with it.
  *
  * Note what is NOT here: no amount, no items, no total. The order was priced
  * server-side when it was created, and the gateway is charged that figure, so
  * there is nothing in this call a tampered client could change.
  */
-export const initPayment = async (orderId) => {
+export const initPayment = async (orderId, paymentMethod) => {
   const token = getGuestToken(orderId) || null;
   const data = await api
-    .post('/payment/init', { orderId, ...(token ? { guestToken: token } : {}) })
+    .post('/payment/init', {
+      orderId,
+      paymentMethod,
+      ...(token ? { guestToken: token } : {}),
+    })
     .then((res) => res.data || {});
 
   // The gateway will hand the browser back a transaction id and nothing else,

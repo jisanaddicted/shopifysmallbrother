@@ -224,7 +224,7 @@ no-response network failure into *"Cannot reach the API server at
 | `DELETE` | `/orders/:id/review` | the customer who placed it | withdraw your own review |
 | `GET` | `/stores/:id/reviews` | store staff (owner / appointed store admin) | every review left on this store's deliveries, newest first, with the average and a 1–5 histogram |
 | `PATCH` | `/orders/:id/location` | assigned rider | GPS fallback ping |
-| `POST` | `/payment/init` | the buyer (customer, or guest with their `guestToken`) | open an SSLCommerz sandbox session for an order that **already exists**; returns `{ url, tran_id, amount }` |
+| `POST` | `/payment/init` | the buyer (customer, or guest with their `guestToken`) | open an SSLCommerz sandbox session for an order that **already exists**; `body: { orderId, paymentMethod }` where `paymentMethod` is `card` / `bkash` / `nagad` / `rocket` (`cod` is refused - it never involves the gateway). Returns `{ url, tran_id, amount, channel, multi_card_name }` |
 | `POST` | `/payment/success` | SSLCommerz / the banker's browser | validate `val_id`, mark the payment `Paid`, then 302 to `${CLIENT_URL}/payment-success` |
 | `POST` | `/payment/fail` | SSLCommerz / the banker's browser | mark `Failed` (never downgrading one already `Paid`), 302 to `/payment-failed` |
 | `POST` | `/payment/cancel` | SSLCommerz / the banker's browser | mark `Cancelled`, 302 to `/payment-failed` |
@@ -315,6 +315,21 @@ join an order room you own, are delivering, or administer.
   separately, by `assertOrderOwner()`: seeing an order is not owning it, so the
   assigned rider and store staff - whom `canAccessOrder` deliberately admits -
   cannot charge a customer for their own basket.
+- **The checkout offers five channels, and only `card` really filters the
+  gateway.** A Rokomari-style custom list — Cash on delivery, bKash, Nagad,
+  Rocket, Card — is rendered from `PAYMENT_METHOD_LABELS` + the brand swatches
+  in `PAYMENT_METHOD_COLORS`, and the chosen channel is sent as
+  `paymentMethod` and stored on `order.payment.channel` so a store can report
+  what people actually pick. But `multi_card_name` is SSLCommerz's **CARD-BRAND**
+  filter: `card` maps to `visa-mastercard` (a real, documented value that
+  genuinely narrows the page), while `bkash` / `nagad` / `rocket` are sent as
+  themselves — verified against the sandbox to be **accepted without error, but
+  not to deep-link** to that MFS's number-entry screen. The gateway still shows
+  its own channel list, because those are mobile financial services that
+  SSLCommerz surfaces under its mobile-banking option, not card brands.
+  Genuine one-tap bKash/Nagad requires that MFS's own tokenised checkout API —
+  a separate integration, not a `multi_card_name` value. The mapping is in
+  `PAYMENT_CHANNEL_MULTI_CARD` (backend) and is the single place to change it.
 - **`payment.transactionId` is uniquely indexed with a `partialFilterExpression`,
   not `sparse`.** Every cash order stores `null` there, and a sparse index only
   skips *missing* fields - not explicit nulls - so the second COD order in the

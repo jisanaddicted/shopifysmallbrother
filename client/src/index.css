@@ -2979,6 +2979,15 @@ ol {
   pointer-events: none;
 }
 
+/* The "Added ✓" state on a product card's button. Green, because the cart
+   really did change - but it is the button's own label that swaps, so it can
+   never cover the product the shopper is looking at. */
+.product-card__footer .btn.is-added {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+
 /* --- Payments: the checkout method picker + the result receipts ------------ */
 
 /* Two routes that mean genuinely different things to a shopper (pay now vs pay
@@ -3030,10 +3039,21 @@ ol {
   font-style: normal;
 }
 
-.pay-method__icon {
-  font-size: 1.3rem;
-  flex: none;
+/* The brand mark: a coloured square with the channel's initial. Reads as a
+   logo at a glance without shipping four logo files, and the colour comes from
+   PAYMENT_METHOD_COLORS so the swatch matches the real brand. */
+.pay-method__logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
   line-height: 1;
+  flex: none;
 }
 
 /* --- Result pages --------------------------------------------------------- */

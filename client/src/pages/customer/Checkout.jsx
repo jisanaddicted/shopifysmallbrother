@@ -9,12 +9,16 @@ import paymentService from '../../services/paymentService';
 import { getPublicStore } from '../../services/storeService';
 import { initials } from '../../utils/formatters';
 import {
+  ONLINE_PAYMENT_CHANNELS,
+  PAYMENT_METHOD_COLORS,
   PAYMENT_METHOD_HINTS,
+  PAYMENT_METHOD_LABELS,
   PAYMENT_METHODS,
   ROUTES,
   STORAGE_KEYS,
   checkoutPath,
   customerPath,
+  isOnlinePayment,
   lastStoreVisit,
   orderTrackerPath,
   rememberStoreVisit,
@@ -174,7 +178,7 @@ export default function Checkout() {
       // Pay online. The basket is deliberately NOT cleared yet: if the gateway
       // refuses to start, the shopper must come back to a cart that is still
       // full rather than an empty one and a "your cart is empty" page.
-      const { url } = await paymentService.initPayment(orderId);
+      const { url } = await paymentService.initPayment(orderId, paymentMethod);
       if (!url) {
         throw new Error('The payment gateway did not return a payment page.');
       }
@@ -183,7 +187,7 @@ export default function Checkout() {
       // the gateway's own page, and the gateway brings the shopper back to
       // /payment-success or /payment-failed afterwards.
       clearCart();
-      window.location.assign(url);
+      window.location.href = url;
     } catch (err) {
       setError(err.message || 'Could not place your order.');
     } finally {
@@ -350,9 +354,10 @@ export default function Checkout() {
           <AddressPickerMap value={point} onChange={setPoint} />
         </section>
 
-        {/* How to pay. A radio group rather than a dropdown: there are exactly
-            two routes, they mean very different things to the shopper (pay now
-            vs pay at the door), and one of them leaves this site entirely. */}
+        {/* How to pay. Five tappable cards rather than a dropdown: the channel is
+            the single most consequential choice on the form, it is chosen on a
+            phone, and one of the options (cash) means something completely
+            different from the other four (leaves this site for the gateway). */}
         <section className="panel">
           <h2 className="panel__title">Payment</h2>
 
@@ -361,7 +366,7 @@ export default function Checkout() {
             role="radiogroup"
             aria-label="How would you like to pay?"
           >
-            {[PAYMENT_METHODS.COD, PAYMENT_METHODS.CARD].map((method) => (
+            {[PAYMENT_METHODS.COD, ...ONLINE_PAYMENT_CHANNELS].map((method) => (
               <label
                 key={method}
                 className={`pay-method${paymentMethod === method ? ' is-on' : ''}`}
@@ -374,28 +379,33 @@ export default function Checkout() {
                   onChange={() => setPaymentMethod(method)}
                 />
 
+                <span
+                  className="pay-method__logo"
+                  style={{
+                    background: PAYMENT_METHOD_COLORS[method],
+                  }}
+                  aria-hidden="true"
+                >
+                  {method === PAYMENT_METHODS.COD
+                    ? '💵'
+                    : (PAYMENT_METHOD_LABELS[method][0] || '').toUpperCase()}
+                </span>
+
                 <span className="pay-method__text">
-                  <strong>
-                    {method === PAYMENT_METHODS.COD
-                      ? 'Cash on delivery'
-                      : 'Pay online'}
-                  </strong>
+                  <strong>{PAYMENT_METHOD_LABELS[method]}</strong>
                   <em className="muted small">
                     {PAYMENT_METHOD_HINTS[method]}
                   </em>
-                </span>
-
-                <span className="pay-method__icon" aria-hidden="true">
-                  {method === PAYMENT_METHODS.COD ? '💵' : '💳'}
                 </span>
               </label>
             ))}
           </div>
 
-          {paymentMethod === PAYMENT_METHODS.CARD ? (
+          {isOnlinePayment(paymentMethod) ? (
             <p className="muted small">
-              You will be taken to our secure payment page to pay by card, mobile
-              banking or wallet, and brought straight back here afterwards.
+              You will be taken to our secure payment page to pay by{' '}
+              <strong>{PAYMENT_METHOD_LABELS[paymentMethod]}</strong>, and
+              brought straight back here afterwards.
             </p>
           ) : null}
         </section>
@@ -405,13 +415,13 @@ export default function Checkout() {
           onPlaceOrder={handlePlaceOrder}
           placing={placing}
           ctaLabel={
-            paymentMethod === PAYMENT_METHODS.CARD
-              ? 'Pay online'
+            isOnlinePayment(paymentMethod)
+              ? `Pay with ${PAYMENT_METHOD_LABELS[paymentMethod]}`
               : 'Place order'
           }
         >
           <p className="muted small">
-            {paymentMethod === PAYMENT_METHODS.CARD
+            {isOnlinePayment(paymentMethod)
               ? 'You will be redirected to the payment page after this.'
               : 'Payment is collected in cash on delivery.'}
           </p>

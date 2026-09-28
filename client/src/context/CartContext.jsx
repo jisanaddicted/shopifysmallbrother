@@ -63,7 +63,17 @@ export function CartProvider({ children }) {
       ];
     });
 
-    setIsOpen(true);
+    // Deliberately does NOT open the drawer.
+    //
+    // It used to, and that was wrong: a shopper browsing a grid is tapping "Add"
+    // on item after item, and having a panel slide over the catalogue on every
+    // single tap meant the next tap landed on the drawer instead of the product
+    // they were looking at. Adding to a basket is not a request to review it -
+    // the Cart button in the navbar, the store header and the storefront all
+    // open it on purpose, and the item count is visible in each of them.
+    //
+    // Feedback is the button's job instead: ProductCard flashes "Added ✓" on
+    // itself, which confirms the tap without covering the page.
   }, []);
 
   const removeItem = useCallback((id) => {

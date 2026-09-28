@@ -166,7 +166,43 @@ export const ADMIN_STATUS_STEPS = {
   [ORDER_STATUS.PREPARING]: ORDER_STATUS.READY_FOR_PICKUP,
 };
 
-export const PAYMENT_METHODS = ['cod', 'card'];
+// How the buyer intends to pay. `cod` needs no gateway; the rest are online
+// channels, chosen from the custom radio list on the checkout form.
+//
+// NOTE: these are CHANNELS, not gateways. bKash/Nagad/Rocket are mobile
+// financial services; SSLCommerz surfaces them under its mobile-banking option
+// rather than as card brands. They are stored faithfully on the order either
+// way, so the store can see what people actually choose.
+export const PAYMENT_METHODS = [
+  'cod',
+  'card',
+  'bkash',
+  'nagad',
+  'rocket',
+];
+
+/**
+ * Which `multi_card_name` to send for each channel.
+ *
+ * `multi_card_name` is SSLCommerz's CARD-BRAND filter, and its documented
+ * values are things like `visa-mastercard`, `visa`, `master`, `amex`. Verified
+ * against the sandbox: sending `bkash` / `nagad` / `rocket` is ACCEPTED without
+ * an error, but it is not a card brand and it does not reliably deep-link to
+ * that MFS's number-entry screen - the gateway still renders its own channel
+ * list.
+ *
+ * So the mapping is honest rather than hopeful: the card channel gets a real,
+ * valid value that genuinely filters, and the mobile channels are passed
+ * through as themselves (accepted, recorded, and the right thing to send if a
+ * store later enables them as mobile-banking options) rather than pretending
+ * `visa-mastercard` means bKash.
+ */
+export const PAYMENT_CHANNEL_MULTI_CARD = {
+  card: 'visa-mastercard',
+  bkash: 'bkash',
+  nagad: 'nagad',
+  rocket: 'rocket',
+};
 
 // ---------------------------------------------------------------------------
 // Payments (SSLCommerz sandbox + cash on delivery)
@@ -231,6 +267,7 @@ export default {
   ADMIN_STATUS_STEPS,
   CANCELLABLE_STATUSES,
   PAYMENT_METHODS,
+  PAYMENT_CHANNEL_MULTI_CARD,
   PAYMENT_STATUS,
   PAYMENT_STATUS_VALUES,
   PAYMENT_PROVIDER,

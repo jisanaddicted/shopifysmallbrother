@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import paymentService from '../../services/paymentService';
-import { ROUTES, PAYMENT_STATUS, lastStoreVisit, shopPath } from '../../utils/constants';
+import {
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_STATUS,
+  ROUTES,
+  lastStoreVisit,
+  shopPath,
+} from '../../utils/constants';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
 
 /**
@@ -115,6 +121,15 @@ export default function PaymentSuccess() {
             <dt>Status</dt>
             <dd>{payment?.status || '—'}</dd>
           </div>
+          {/* Which button they pressed on the checkout form. Worth showing: a
+              shopper who thinks they paid by bKash and sees "card" here has
+              something to query about. */}
+          {payment?.channel ? (
+            <div>
+              <dt>Paid by</dt>
+              <dd>{PAYMENT_METHOD_LABELS[payment.channel] || payment.channel}</dd>
+            </div>
+          ) : null}
           <div>
             <dt>Amount</dt>
             <dd>

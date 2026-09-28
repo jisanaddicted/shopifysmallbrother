@@ -38,6 +38,20 @@ const DATE_OPTIONS = [
   { value: 'custom', label: 'Custom range' },
 ];
 
+// What the console OPENS on: today, and confirmed.
+//
+// This used to be "All statuses / Any date", which is the widest possible net
+// and the least useful one - a rider's list is every order they have ever been
+// given, so they landed on a wall of months-old deliveries with the one job
+// they actually needed to collect buried in the middle. "Confirmed, today" is
+// the queue: what came in today and is waiting to be picked up.
+//
+// Both are still one dropdown away from everything else, and the "Clear
+// filters" button returns here rather than to "everything", because that is
+// what "clear" means to somebody who arrived on this screen.
+const DEFAULT_STATUS_FILTER = ORDER_STATUS.CONFIRMED;
+const DEFAULT_DATE_FILTER = 'today';
+
 /** A status the rider is done with - "in progress" means none of these. That
  *  includes `received`: once the customer has confirmed the parcel, the job is
  *  over even though the rider never set that status themselves. */
@@ -130,13 +144,34 @@ export default function RiderConsole() {
   // Status and date picking for the assigned-deliveries list. The server hands
   // over every order this rider has, so this is a local pass - no round trip,
   // and the list never flickers while filters change.
-  const [statusFilter, setStatusFilter] = useState(ALL_STATUSES);
-  const [dateFilter, setDateFilter] = useState(ANY_DATE);
+  const [statusFilter, setStatusFilter] = useState(DEFAULT_STATUS_FILTER);
+  const [dateFilter, setDateFilter] = useState(DEFAULT_DATE_FILTER);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
   const watchIdRef = useRef(null);
   const lastPingRef = useRef(0);
+
+  // The current filters, readable from loadOrders below WITHOUT making that
+  // callback depend on them - depending on them would refetch the whole list
+  // every time a dropdown changed, which the local-filter design exists to
+  // avoid. Synced by an effect declared before the loading one, so the values
+  // are already up to date on mount.
+  const filtersRef = useRef({
+    status: DEFAULT_STATUS_FILTER,
+    date: DEFAULT_DATE_FILTER,
+    from: '',
+    to: '',
+  });
+
+  useEffect(() => {
+    filtersRef.current = {
+      status: statusFilter,
+      date: dateFilter,
+      from: fromDate,
+      to: toDate,
+    };
+  }, [statusFilter, dateFilter, fromDate, toDate]);
 
   const activeOrder =
     orders.find((order) => (order._id || order.id) === activeId) || null;
@@ -157,11 +192,17 @@ export default function RiderConsole() {
     });
   }, [orders, statusFilter, dateFilter, fromDate, toDate]);
 
-  const hasFilters = statusFilter !== ALL_STATUSES || dateFilter !== ANY_DATE;
+  // "Has the rider narrowed the list from the view they arrived on?" - measured
+  // against the defaults, not against "all", so the Clear button only lights up
+  // when there is genuinely something to clear.
+  const hasFilters =
+    statusFilter !== DEFAULT_STATUS_FILTER ||
+    dateFilter !== DEFAULT_DATE_FILTER ||
+    Boolean(fromDate || toDate);
 
   const resetFilters = () => {
-    setStatusFilter(ALL_STATUSES);
-    setDateFilter(ANY_DATE);
+    setStatusFilter(DEFAULT_STATUS_FILTER);
+    setDateFilter(DEFAULT_DATE_FILTER);
     setFromDate('');
     setToDate('');
   };
@@ -178,9 +219,33 @@ export default function RiderConsole() {
       const list = await orderService.getRiderOrders();
       const safeList = Array.isArray(list) ? list : [];
       setOrders(safeList);
-      setActiveId(
-        (current) => current ?? safeList[0]?._id ?? safeList[0]?.id ?? null,
-      );
+
+      // Open on the first order the rider can actually SEE.
+      //
+      // This used to just take the newest order in the list, which is invisible
+      // from where the console now starts: a rider whose most recent delivery is
+      // from last week would open the page to a detail pane for a job that is
+      // not in the list under it, with an empty-looking queue beside it.
+      //
+      // Falls back to the newest order regardless, so the pane is never blank
+      // when there ARE deliveries - the filters narrow what is *listed*, they
+      // must not hide the fact that work exists.
+      const f = filtersRef.current;
+      const range = dateWindow(f.date, f.from, f.to);
+
+      const firstVisible = safeList.find((order) => {
+        if (!matchesStatus(order.status, f.status)) return false;
+        if (!range) return true;
+
+        const at = new Date(order.createdAt);
+        if (Number.isNaN(at.getTime())) return true; // undated: keep it visible
+        return at >= range.from && at <= range.to;
+      });
+
+      const first =
+        firstVisible ?? safeList[0] ?? null;
+
+      setActiveId((current) => current ?? first?._id ?? first?.id ?? null);
     } catch (err) {
       setError(err.message || 'Could not load your deliveries.');
     } finally {

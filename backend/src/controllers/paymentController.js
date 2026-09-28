@@ -5,6 +5,8 @@ import Order from '../models/Order.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import {
   ORDER_STATUS,
+  PAYMENT_CHANNEL_MULTI_CARD,
+  PAYMENT_METHODS,
   PAYMENT_PROVIDER,
   PAYMENT_STATUS,
   TRANSACTION_PREFIX,
@@ -182,12 +184,21 @@ const buildInitData = (order) => ({
   value_a: String(order._id),
   value_b: order.store?.slug || '',
 
+  // The buyer's chosen channel, as the gateway's card-brand filter. `card`
+  // maps to a real documented value that genuinely narrows the page to
+  // Visa/Mastercard; the mobile channels are sent as themselves, which the
+  // gateway accepts (verified against the sandbox). See
+  // PAYMENT_CHANNEL_MULTI_CARD for what this does and does not achieve.
+  multi_card_name:
+    PAYMENT_CHANNEL_MULTI_CARD[order.payment.channel] ||
+    PAYMENT_CHANNEL_MULTI_CARD.card,
+
   ...callbackUrls(order.payment.transactionId),
 });
 
 /**
  * POST /api/payment/init
- * body: { orderId }        (guests also send { guestToken })
+ * body: { orderId, paymentMethod }   (guests also send { guestToken })
  *
  * Opens a sandbox session and hands back the gateway page to send the shopper
  * to. The order must already exist and must belong to the caller - a guest
@@ -218,14 +229,27 @@ export const initPayment = asyncHandler(async (req, res) => {
     throw new HttpError(400, 'This order has already been paid.');
   }
 
+  // The channel the buyer picked on the checkout form (bkash / nagad / rocket /
+  // card). Validated against the same list the Order model enforces, so a
+  // hand-made request cannot invent a channel; `cod` is not accepted here
+  // because it never involves the gateway at all.
+  const channel = String(req.body?.paymentMethod || '').trim().toLowerCase();
+  if (!PAYMENT_METHODS.includes(channel) || channel === 'cod') {
+    throw new HttpError(
+      400,
+      'Pick how you want to pay online: card, bKash, Nagad or Rocket.',
+    );
+  }
+
   const client = gateway();
 
   // Flip the order to "pay online, pending" and stamp a fresh transaction id.
   // A retry after a failed or cancelled attempt reuses the order but gets a new
   // id, so the two attempts never collide in the unique index or in the
   // gateway's own records.
-  order.paymentMethod = 'card';
+  order.paymentMethod = channel;
   order.payment.provider = PAYMENT_PROVIDER.SSLCOMMERZ;
+  order.payment.channel = channel;
   order.payment.status = PAYMENT_STATUS.PENDING;
   order.payment.transactionId = makeTransactionId(order);
   order.payment.amount = toAmount(order.total);
@@ -297,6 +321,11 @@ export const initPayment = asyncHandler(async (req, res) => {
     tran_id: order.payment.transactionId,
     amount: order.payment.amount,
     currency: order.payment.currency,
+    // Echoed so the caller can show "paying by bKash…" while the gateway loads.
+    channel: order.payment.channel,
+    // What was actually sent to the gateway, which is NOT always the channel
+    // verbatim - see PAYMENT_CHANNEL_MULTI_CARD.
+    multi_card_name: PAYMENT_CHANNEL_MULTI_CARD[order.payment.channel],
   });
 });
 
@@ -502,6 +531,7 @@ export const getPayment = asyncHandler(async (req, res) => {
   res.json({
     tran_id: order.payment.transactionId,
     status: order.payment.status,
+    channel: order.payment.channel,
     amount: order.payment.amount,
     currency: order.payment.currency,
     message: order.payment.message,
