@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import storeService from '../../services/storeService';
@@ -9,6 +9,72 @@ const TARGET_TYPES = [
   { value: 'product', label: 'Product' },
   { value: 'url', label: 'Web address' },
 ];
+
+/**
+ * Menu row icons, as inline SVG rather than glyphs.
+ *
+ * The first version of this used characters - the braille grip "?", a caret,
+ * a pencil, a bin, a circled plus. They rendered as literal "?" boxes on a
+ * machine with no font covering them, and they cannot be styled: a glyph takes
+ * its colour from the font, not the element, so the hover state on the delete
+ * button could not be made to work. Inline SVG inherits currentColor, scales
+ * with the row, and renders the same on every machine.
+ */
+const Icon = ({ name, className = '' }) => {
+  const paths = {
+    // Six dots in two columns - the "grab me" handle.
+    grip: (
+      <>
+        <circle cx="6" cy="5" r="1.4" />
+        <circle cx="6" cy="9" r="1.4" />
+        <circle cx="6" cy="13" r="1.4" />
+        <circle cx="11" cy="5" r="1.4" />
+        <circle cx="11" cy="9" r="1.4" />
+        <circle cx="11" cy="13" r="1.4" />
+      </>
+    ),
+    // Points down; the row rotates this to point up when open.
+    caret: <path d="M4 6l4 4 4-4" />,
+    pencil: (
+      <>
+        <path d="M2.5 13.5l.6-2.6 7-7 2 2-7 7-2.6.6z" />
+        <path d="M9.4 4.6l2 2" />
+      </>
+    ),
+    trash: (
+      <>
+        <path d="M3 4.5h10" />
+        <path d="M6.5 4.5V3h3v1.5" />
+        <path d="M4.5 4.5l.6 8.2a.9.9 0 0 0 .9.8h4a.9.9 0 0 0 .9-.8l.6-8.2" />
+      </>
+    ),
+    plus: (
+      <>
+        <circle cx="8" cy="8" r="6.2" />
+        <path d="M8 5.4v5.2M5.4 8h5.2" />
+      </>
+    ),
+  };
+
+  return (
+    <svg
+      className={'menu-icon ' + className}
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {paths[name] || null}
+    </svg>
+  );
+};
+
 
 /** Builds a nested tree from the flat item list (each node gains `children`). */
 function buildTree(items) {
@@ -52,6 +118,22 @@ export default function ThemeBuilder() {
   const [successMsg, setSuccess] = useState('');
   const [logoPreview, setLogoPreview] = useState('');
   const [logoBusy, setLogoBusy] = useState(false);
+
+  // Which menu rows are showing their children, and which are showing their
+  // edit form. Two separate sets on purpose: browsing the tree and editing an
+  // item are different intentions, and collapsing a parent must never throw
+  // away what was typed into one of its children.
+  const [openIds, setOpenIds] = useState(() => new Set());
+  const [editingIds, setEditingIds] = useState(() => new Set());
+  // The row currently being dragged. React state rather than the DataTransfer
+  // itself, so a drop can read the id without parsing a payload back out.
+  // The row currently being dragged. Held in BOTH a ref and state on purpose:
+  // the drop handler needs the value synchronously, and a ref is read at drag
+  // time while state would only be visible after the next render - a drop that
+  // lands in the same tick as the dragstart saw a stale null and did nothing.
+  // The state copy is only for the `is-dragging` class.
+  const dragIdRef = useRef(null);
+  const [dragId, setDragId] = useState(null);
 
   /* --- Load initial data --- */
   const applyStore = useCallback((s) => {
@@ -216,6 +298,105 @@ export default function ThemeBuilder() {
     ]);
   };
 
+  /* --- Collapse / expand --- */
+  // Sets are replaced rather than mutated: React compares by reference, so
+  // toggling in place would not re-render the row at all.
+  const toggleIn = (setter, id) =>
+    setter((prev) => {
+      const next = new Set(prev);
+      const key = String(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const toggleOpen = (id) => toggleIn(setOpenIds, id);
+  const toggleEditing = (id) => toggleIn(setEditingIds, id);
+
+  /* --- Drag to reorder --- */
+  /**
+   * Move `dragId` to sit where `dropId` is, among the siblings they share.
+   *
+   * Only within one level, deliberately: a drag that could re-parent an item
+   * would make "reorder" and "nest" the same gesture, and a mis-drop would
+   * silently move an item under a different parent. Nesting stays an explicit
+   * action, so this only ever rewrites `position` between siblings.
+   *
+   * Positions are renumbered 0..n-1 for the whole sibling group rather than
+   * swapped, so dropping onto a neighbour lands exactly where the row under
+   * the cursor is, instead of after it.
+   */
+  const reorderTo = (dragId, dropId) => {
+    setItems((prev) => {
+      const dragKey = String(dragId);
+      const dropKey = String(dropId);
+      if (dragKey === dropKey) return prev;
+
+      const dragged = prev.find((i) => String(i.id) === dragKey);
+      const dropped = prev.find((i) => String(i.id) === dropKey);
+      if (!dragged || !dropped) return prev;
+
+      const sameParent =
+        String(dragged.parentId || null) === String(dropped.parentId || null);
+      if (!sameParent) return prev;
+
+      const parentKey = String(dragged.parentId || null);
+      const siblings = prev
+        .filter((i) => String(i.parentId || null) === parentKey)
+        .sort((a, b) => (a.position || 0) - (b.position || 0));
+
+      const from = siblings.findIndex((s) => String(s.id) === dragKey);
+      const to = siblings.findIndex((s) => String(s.id) === dropKey);
+      if (from < 0 || to < 0) return prev;
+
+      const moved = [...siblings];
+      moved.splice(to, 0, moved.splice(from, 1)[0]);
+
+      // Renumber the whole group, then write those positions back.
+      const positionById = new Map(
+        moved.map((s, index) => [String(s.id), index]),
+      );
+      return prev.map((i) =>
+        positionById.has(String(i.id))
+          ? { ...i, position: positionById.get(String(i.id)) }
+          : i,
+      );
+    });
+  };
+
+  /* --- Duplicate the whole menu --- */
+  /**
+   * Copy every item once, keeping each copy under the same parent as its
+   * original.
+   *
+   * The nesting is rebuilt through an old-id -> new-id map rather than by
+   * pointing copies at the originals, which would produce two parents
+   * sharing one set of children and lose the original rows on the next save.
+   * New rows land after the originals so the menu still reads in order.
+   */
+  const duplicateMenu = () => {
+    if (!items.length) return;
+
+    const stamp = Date.now();
+    const newIdFor = new Map(
+      items.map((item, index) => [String(item.id), `copy_${stamp}_${index}`]),
+    );
+
+    const copies = items.map((item, index) => ({
+      ...item,
+      id: newIdFor.get(String(item.id)),
+      parentId: item.parentId
+        ? (newIdFor.get(String(item.parentId)) ?? null)
+        : null,
+      // Pushed past every original so the duplicate reads as an appended
+      // copy rather than interleaving with the menu it came from.
+      position: (Number(item.position) || 0) + 1000,
+      isNew: true,
+    }));
+
+    setItems((prev) => [...prev, ...copies]);
+  };
+
   const handleSave = async () => {
     if (!store) return;
     const storeId = store._id || store.id;
@@ -259,115 +440,244 @@ export default function ThemeBuilder() {
     loadMenu(storeId);
   };
 
-  /* --- Tree rendering --- */
+  /* --- Tree rendering -------------------------------------------------
+     * One collapsed row per item, exactly as the reference: a drag handle, an
+     * expand caret, and the label. The editing form lives BELOW the row and only
+     * exists while that row is open.
+     *
+     * This is the whole reason the screen reads as a menu rather than a form.
+     * Previously every item rendered its label field, target type, target
+     * picker, visibility checkbox and four buttons all at once, so a menu with
+     * twelve items was a wall of controls with no shape to it. Now the shape is
+     * the content: you can see the menu, and you open one row to change it.
+     * ------------------------------------------------------------------- */
   function renderBranch(nodes, depth = 0) {
     return nodes.map((item) => {
-      const topLevel = depth === 0;
+      const key = String(item.id);
+      const isOpen = openIds.has(key);
+      const isEditing = editingIds.has(key);
+      const children = item.children || [];
+      const hasChildren = children.length > 0;
       const siblingCount = items.filter(
         (i) => String(i.parentId || null) === String(item.parentId || null)
       ).length;
 
       return (
-        <div
-          key={item.id}
-          className={`theme-item ${topLevel ? 'theme-item--top' : 'theme-item--sub'}`}
-          style={{ '--depth': depth }}
-        >
-          <div className="theme-item__row">
-            <input
-              type="text"
-              className="field field--sm"
-              placeholder="Label"
-              value={item.label || ''}
-              onChange={(e) => updateItem(item.id, 'label', e.target.value)}
-            />
+        <div key={key} className={'menu-node' + (depth ? ' menu-node--child' : '')}>
+          <div
+            className={
+              'menu-row' +
+              (isEditing ? ' is-editing' : '') +
+              (dragId === key ? ' is-dragging' : '')
+            }
+            draggable
+            onDragStart={() => {
+              dragIdRef.current = key;
+              setDragId(key);
+            }}
+            onDragEnd={() => {
+              dragIdRef.current = null;
+              setDragId(null);
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragIdRef.current) reorderTo(dragIdRef.current, key);
+              dragIdRef.current = null;
+              setDragId(null);
+            }}
+          >
+            <span className="menu-row__grip" aria-hidden="true">
+              <Icon name="grip" />
+            </span>
 
-            <select
-              className="field field--sm"
-              value={item.targetType || 'category'}
-              onChange={(e) => {
-                updateItem(item.id, 'targetType', e.target.value);
-                updateItem(item.id, 'target', '');
-              }}
+            {/* The caret only appears on a row that HAS children - an always-there
+                caret on a leaf promises a submenu that does not exist. */}
+            {hasChildren ? (
+              <button
+                type="button"
+                className={'menu-row__caret' + (isOpen ? ' is-open' : '')}
+                onClick={() => toggleOpen(key)}
+                aria-expanded={isOpen}
+                aria-label={isOpen ? 'Hide sub-items' : 'Show sub-items'}
+              >
+                <Icon name="caret" />
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              className="menu-row__label"
+              onClick={() => toggleEditing(key)}
+              aria-expanded={isEditing}
             >
-              {TARGET_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
+              {String(item.label || '').trim() || (
+                <span className="menu-row__untitled">Untitled</span>
+              )}
+            </button>
 
-            {item.targetType === 'category' ? (
-              <select
-                className="field field--sm"
-                value={item.target || ''}
-                onChange={(e) => updateItem(item.id, 'target', e.target.value)}
+            {item.isVisible === false ? (
+              <span className="menu-row__hidden" title="Hidden from the storefront">
+                Hidden
+              </span>
+            ) : null}
+
+            <div className="menu-row__actions">
+              <button
+                type="button"
+                className="menu-row__action"
+                onClick={() => toggleEditing(key)}
+                title="Edit"
+                aria-label={'Edit ' + (item.label || 'menu item')}
               >
-                <option value="">Pick a category</option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-                {item.target && !categories.includes(item.target) ? (
-                  <option value={item.target}>&ldquo;{item.target}&rdquo;</option>
-                ) : null}
-              </select>
-            ) : item.targetType === 'product' ? (
-              <select
-                className="field field--sm"
-                value={item.target || ''}
-                onChange={(e) => updateItem(item.id, 'target', e.target.value)}
+                <Icon name="pencil" />
+              </button>
+              <button
+                type="button"
+                className="menu-row__action menu-row__action--danger"
+                onClick={() => removeItem(key)}
+                title="Delete"
+                aria-label={'Delete ' + (item.label || 'menu item')}
               >
-                <option value="">Pick a product</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="url"
-                className="field field--sm"
-                placeholder="/path or https://…"
-                value={item.target || ''}
-                onChange={(e) => updateItem(item.id, 'target', e.target.value)}
-              />
-            )}
-
-            <label className="checkbox-inline">
-              <input
-                type="checkbox"
-                checked={item.isVisible !== false}
-                onChange={(e) => updateItem(item.id, 'isVisible', e.target.checked)}
-              />
-              Visible
-            </label>
-
-            <div className="theme-item__actions">
-              {topLevel && siblingCount > 1 ? (
-                <>
-                  <button type="button" className="btn btn-ghost btn-xs"
-                    onClick={() => moveItem(item.id, 'up')} title="Move up">↑</button>
-                  <button type="button" className="btn btn-ghost btn-xs"
-                    onClick={() => moveItem(item.id, 'down')} title="Move down">↓</button>
-                </>
-              ) : null}
-
-              {depth === 0 ? (
-                <button type="button" className="btn btn-ghost btn-xs"
-                  onClick={() => addItem(item.id)} title="Add sub-item">+</button>
-              ) : null}
-
-              <button type="button" className="btn btn-ghost btn-xs btn-danger"
-                onClick={() => removeItem(item.id)} title="Remove">✕</button>
+                <Icon name="trash" />
+              </button>
             </div>
           </div>
 
-          {item.children && item.children.length > 0 ? (
-            <div className="theme-item__children">
-              {renderBranch(item.children, depth + 1)}
+          {isEditing ? (
+            <div className="menu-row__editor">
+              <label className="field field--sm">
+                <span>Label</span>
+                <input
+                  type="text"
+                  value={item.label || ''}
+                  placeholder="Menu item name"
+                  onChange={(e) => updateItem(item.id, 'label', e.target.value)}
+                />
+              </label>
+
+              <label className="field field--sm">
+                <span>Links to</span>
+                <select
+                  value={item.targetType || 'category'}
+                  onChange={(e) => {
+                    updateItem(item.id, 'targetType', e.target.value);
+                    updateItem(item.id, 'target', '');
+                  }}
+                >
+                  {TARGET_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </label>
+
+              {item.targetType === 'category' ? (
+                <label className="field field--sm">
+                  <span>Category</span>
+                  <select
+                    value={item.target || ''}
+                    onChange={(e) => updateItem(item.id, 'target', e.target.value)}
+                  >
+                    <option value="">Pick a category</option>
+                    {categories.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                    {item.target && !categories.includes(item.target) ? (
+                      <option value={item.target}>&ldquo;{item.target}&rdquo;</option>
+                    ) : null}
+                  </select>
+                </label>
+              ) : item.targetType === 'product' ? (
+                <label className="field field--sm">
+                  <span>Product</span>
+                  <select
+                    value={item.target || ''}
+                    onChange={(e) => updateItem(item.id, 'target', e.target.value)}
+                  >
+                    <option value="">Pick a product</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label className="field field--sm">
+                  <span>Address</span>
+                  <input
+                    type="url"
+                    placeholder="/path or https://…"
+                    value={item.target || ''}
+                    onChange={(e) => updateItem(item.id, 'target', e.target.value)}
+                  />
+                </label>
+              )}
+
+              <label className="checkbox-inline menu-row__visible">
+                <input
+                  type="checkbox"
+                  checked={item.isVisible !== false}
+                  onChange={(e) => updateItem(item.id, 'isVisible', e.target.checked)}
+                />
+                Visible
+              </label>
+
+              <div className="menu-row__editor-actions">
+                {siblingCount > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs"
+                      onClick={() => moveItem(item.id, 'up')}
+                    >
+                      Move up
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs"
+                      onClick={() => moveItem(item.id, 'down')}
+                    >
+                      Move down
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => toggleEditing(key)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {hasChildren && isOpen ? (
+            <div className="menu-children">
+              {renderBranch(children, depth + 1)}
+
+              {/* "Add menu item to <PARENT>", named for the parent it will land
+                  under. A generic "+" would not say where the new row goes. */}
+              <button
+                type="button"
+                className="menu-row menu-row--add"
+                onClick={() => {
+                  addItem(key);
+                  toggleOpen(key);
+                }}
+              >
+                <span className="menu-row__grip" aria-hidden="true" />
+                <span className="menu-row__plus" aria-hidden="true">
+                  <Icon name="plus" />
+                </span>
+                Add menu item to {String(item.label || '').trim() || 'this item'}
+              </button>
             </div>
           ) : null}
         </div>
       );
     });
   }
+
 
   const topLevel = useMemo(() => buildTree(items), [items]);
 
@@ -402,10 +712,11 @@ export default function ThemeBuilder() {
           <button
             type="button"
             className="btn btn-outline btn-sm"
-            onClick={() => addItem(null)}
-            disabled={!store}
+            onClick={duplicateMenu}
+            disabled={!store || !items.length}
+            title="Copy every item in this menu"
           >
-            + Top-level item
+            Duplicate
           </button>
           <button
             type="button"
@@ -481,16 +792,40 @@ export default function ThemeBuilder() {
             : 'Select a store to edit its menu.'}
         </p>
       ) : (
-        <div className="theme-list">
-          {topLevel.length === 0 ? (
-            <p className="muted">
-              No menu items yet. Click “+ Top-level item” to add one, or use a
-              category link so customers can filter products.
-            </p>
-          ) : (
-            renderBranch(topLevel)
-          )}
-        </div>
+        <section className="menu-editor">
+          <h2 className="menu-editor__title">Menu items</h2>
+
+          {/* The list sits in one bordered card, as in the reference. The
+              heading stays OUTSIDE it: the card is the menu, the heading is
+              the page. */}
+          <div className="menu-editor__card">
+            {topLevel.length === 0 ? (
+              <p className="muted menu-editor__empty">
+                No menu items yet. Add one below to start building your
+                storefront navigation.
+              </p>
+            ) : (
+              renderBranch(topLevel)
+            )}
+
+            {/* The always-present "Add menu item" row, as in the reference. It
+                sits at the bottom of the card so the list has a closing edge
+                and the next item is always one click away, rather than a
+                button in the page header that scrolls out of reach. */}
+            <button
+              type="button"
+              className="menu-row menu-row--add menu-row--add-root"
+              onClick={() => addItem(null)}
+              disabled={!store}
+            >
+              <span className="menu-row__grip" aria-hidden="true" />
+              <span className="menu-row__plus" aria-hidden="true">
+                <Icon name="plus" />
+              </span>
+              Add menu item
+            </button>
+          </div>
+        </section>
       )}
     </div>
   );
