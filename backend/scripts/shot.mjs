@@ -130,23 +130,34 @@ await sleep(9000);
 // `scroll:<selector>` scrolls an element into view, for the merchant form where
 // the matrix sits well below the fold.
 // argv: [node, script, url, out, width, height, fullPage, click, scroll]
+// Several targets may be chained with `|`, applied in order with a pause
+// between each: proving a flow that needs two clicks (tick a row, then open the
+// bulk editor) is not something a single click can reach.
 const clickArg = process.argv[7];
 const scrollArg = process.argv[8];
 if (clickArg) {
-  const wanted = clickArg.replace(/^click:/, '');
-  const clicked = await send('Runtime.evaluate', {
-    expression: `(() => {
-      const nodes = [...document.querySelectorAll('button')];
-      const byText = nodes.find(n => n.textContent.trim() === ${JSON.stringify(wanted)});
-      const target = byText || document.querySelector(${JSON.stringify(wanted)});
-      if (!target) return 'NOT FOUND';
-      target.click();
-      return 'clicked "' + (target.textContent || '').trim() + '"';
-    })()`,
-    returnByValue: true,
-  });
-  await sleep(1500);
-  console.log(`  click ${wanted}: ${clicked.result?.value}`);
+  // Only the FIRST segment carries the `click:` prefix; the rest are bare
+  // targets, so `click:a|b` is two clicks and not one click on "a|b".
+  const wanted = clickArg
+    .replace(/^click:/, '')
+    .split('|')
+    .map((one, i) => (i === 0 ? one : one.replace(/^click:/, '')))
+    .filter(Boolean);
+  for (const one of wanted) {
+    const clicked = await send('Runtime.evaluate', {
+      expression: `(() => {
+        const nodes = [...document.querySelectorAll('button')];
+        const byText = nodes.find(n => n.textContent.trim() === ${JSON.stringify(one)});
+        const target = byText || document.querySelector(${JSON.stringify(one)});
+        if (!target) return 'NOT FOUND';
+        target.click();
+        return 'clicked "' + (target.textContent || '').trim() + '"';
+      })()`,
+      returnByValue: true,
+    });
+    await sleep(1500);
+    console.log(`  click ${one}: ${clicked.result?.value}`);
+  }
 }
 // Scrolling happens AFTER the click on purpose: clicking "Edit" swaps the form
 // in, so the matrix only exists afterwards. Scrolling first would find nothing.

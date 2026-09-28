@@ -12,7 +12,8 @@
     "backfill:customers": "node scripts/backfillStoreCustomers.mjs",
     "test:smoke": "node scripts/smokeTest.mjs",
     "test:variants": "node scripts/testVariants.mjs && node scripts/testProductModel.mjs && node scripts/testVariantParity.mjs",
-    "test:variants:db": "node scripts/testVariantIntegration.mjs"
+    "test:variants:db": "node scripts/testVariantIntegration.mjs",
+    "test:bulk": "node scripts/testBulkEdit.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

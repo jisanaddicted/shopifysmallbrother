@@ -591,10 +591,316 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   res.json({ deleted: true, id: String(product._id) });
 });
 
+// ---------------------------------------------------------------------------
+// Bulk editing
+// ---------------------------------------------------------------------------
+
+// Enough to be useful, small enough that one request cannot stall the server.
+// A merchant ticking "select all" on a large catalogue is asking for the
+// obvious thing, and a merchant who somehow submits 5000 ids has a bug.
+const MAX_BULK_IDS = 200;
+
+/** How a bulk price edit should be applied to each product. */
+const PRICE_MODES = ['set', 'increase_percent', 'decrease_percent'];
+/** How a bulk stock edit should be applied to each product. */
+const STOCK_MODES = ['set', 'increase', 'decrease'];
+
+/**
+ * The partial update a bulk edit describes.
+ *
+ * A PATCH, not a PUT: every field here is OPTIONAL and an absent one means
+ * "leave this product's value alone". That is the whole reason this endpoint
+ * exists rather than the client looping over PUT /products/:id - a full
+ * replace would have to echo every field of every product back, so a stale
+ * list in the browser would silently wipe a description or a whole variant
+ * matrix that had been edited somewhere else in the meantime.
+ *
+ * Returns `null` when nothing was actually asked for, so "apply" with an empty
+ * form is a no-op the caller can detect rather than an error.
+ */
+function readBulkChanges(body = {}) {
+  const changes = {};
+  const present = (key) => body[key] !== undefined && body[key] !== null;
+
+  // --- Publishing / organisation ------------------------------------------
+  if (present('status')) {
+    const status = String(body.status).trim();
+    if (!PRODUCT_STATUS_VALUES.includes(status)) {
+      throw new HttpError(
+        400,
+        `“${status || '(blank)'}” is not a product status. Use ${PRODUCT_STATUS_VALUES.join(', ')}.`,
+      );
+    }
+    changes.status = status;
+  }
+
+  if (present('trackInventory')) {
+    changes.trackInventory = toBoolean(body.trackInventory, true);
+  }
+
+  if (present('productType')) changes.productType = String(body.productType).trim().slice(0, 60);
+  if (present('vendor')) changes.vendor = String(body.vendor).trim().slice(0, 80);
+  if (present('category')) changes.category = String(body.category).trim();
+  if (present('rack')) changes.rack = String(body.rack).trim().slice(0, 20);
+  if (present('shelf')) changes.shelf = String(body.shelf).trim().slice(0, 20);
+
+  // Collections are ADDED to rather than replaced. A bulk edit that set them
+  // would silently drop "Best Sellers" off every product that had it, which is
+  // the opposite of what somebody tidying up a category wants.
+  if (Array.isArray(body.addCollections)) {
+    const added = body.addCollections
+      .map((entry) => String(entry ?? '').trim().slice(0, 40))
+      .filter(Boolean);
+    if (added.length) changes.addCollections = added;
+  }
+
+  // --- Price ---------------------------------------------------------------
+  if (present('price') && body.price !== '') {
+    const mode = String(body.priceMode || 'set').trim();
+    if (!PRICE_MODES.includes(mode)) {
+      throw new HttpError(400, `“${mode}” is not a way to change the price.`);
+    }
+
+    const value = toNumber(body.price, 0);
+    // A percentage of 0 is a no-op that reads as a mistake, and a negative one
+    // would take money off in the wrong direction for a "decrease".
+    if (mode !== 'set' && value <= 0) {
+      throw new HttpError(400, 'Enter how much to change the price by.');
+    }
+
+    changes.price = { mode, value };
+  }
+
+  // --- Stock ---------------------------------------------------------------
+  if (present('stock') && body.stock !== '') {
+    const mode = String(body.stockMode || 'set').trim();
+    if (!STOCK_MODES.includes(mode)) {
+      throw new HttpError(400, `“${mode}” is not a way to change the stock.`);
+    }
+
+    const value = toNumber(body.stock, 0);
+    if (value < 0) throw new HttpError(400, 'Stock cannot be negative.');
+
+    changes.stock = { mode, value };
+  }
+
+  return Object.keys(changes).length ? changes : null;
+}
+
+/**
+ * One product's new price under a bulk price edit.
+ *
+ * Percentages are applied to EACH VARIANT, not only to the product's seed
+ * price. That seed is just the default a brand-new matrix row starts from - a
+ * shopper pays the row's own price - so a "mark everything up 10%" that moved
+ * only the seed would leave the shelf exactly as expensive as it was before,
+ * while reporting success.
+ *
+ * Rounded to 2dp because a percentage of an odd price produces values like
+ * 12.345000000000001, which would then print as a price with six decimals.
+ */
+function bulkPrice(product, { mode, value }) {
+  const apply = (current) => {
+    const from = toNumber(current, 0);
+    const next =
+      mode === 'set'
+        ? value
+        : mode === 'increase_percent'
+          ? from * (1 + value / 100)
+          : from * (1 - value / 100);
+
+    return Math.max(0, Math.round(next * 100) / 100);
+  };
+
+  // A product with no matrix is priced by its own top-level number.
+  if (!Array.isArray(product.variants) || !product.variants.length) {
+    return { price: apply(product.price) };
+  }
+
+  const variants = product.variants.map((variant) => ({
+    ...(variant.toObject ? variant.toObject() : variant),
+    price: apply(variant.price),
+  }));
+
+  return { variants, price: apply(product.price) };
+}
+
+/** One product's new stock under a bulk stock edit, clamped at zero. */
+function bulkStock(product, { mode, value }, trackInventory) {
+  const apply = (current) => {
+    const from = toNumber(current, 0);
+    const next = mode === 'set' ? value : mode === 'increase' ? from + value : from - value;
+    // Never negative: the schema forbids it, and "reduce by 100" on something
+    // with 3 left means zero, not a validation error for the whole batch.
+    return Math.max(0, next);
+  };
+
+  // Nothing to count means nothing to change. A made-to-order product is not
+  // quietly given a stock level by a bulk edit.
+  if (!trackInventory) return {};
+
+  if (!Array.isArray(product.variants) || !product.variants.length) {
+    return { stock: apply(product.stock) };
+  }
+
+  const variants = product.variants.map((variant) => ({
+    ...(variant.toObject ? variant.toObject() : variant),
+    stock: apply(variant.stock),
+  }));
+
+  return { variants, stock: apply(product.stock) };
+}
+
+/**
+ * PATCH /api/products/bulk
+ * body: { ids: [...], ...changes } -> { updated, skipped, failed, total }
+ *
+ * Applies one set of changes to many products in a single request.
+ *
+ * Two things it deliberately does NOT do:
+ *
+ * 1. It cannot move a product between stores. `store` is not in the change
+ *    set, so a bulk edit can never plant another merchant's catalogue here -
+ *    the same guarantee loadEditableProduct gives one product at a time.
+ * 2. It does not stop at the first failure. Each product is checked and
+ *    applied independently, so one product the caller does not own - or one
+ *    deleted a second ago - cannot block the other ninety-nine. The response
+ *    reports exactly what happened to each, so the UI can say "97 updated,
+ *    3 could not be" rather than a bare success.
+ */
+export const bulkUpdateProducts = asyncHandler(async (req, res) => {
+  const ids = Array.isArray(req.body?.ids)
+    ? [...new Set(req.body.ids.map((id) => String(id)).filter(Boolean))]
+    : [];
+
+  if (!ids.length) throw new HttpError(400, 'Choose at least one product to edit.');
+  if (ids.length > MAX_BULK_IDS) {
+    throw new HttpError(400, `That is more than ${MAX_BULK_IDS} products at once.`);
+  }
+
+  // Throws a 400 when the form asks for nothing, so a merchant who opened the
+  // panel and pressed Apply is told rather than watching a spinner.
+  const changes = readBulkChanges(req.body);
+  if (!changes) throw new HttpError(400, 'Nothing to change — pick at least one field.');
+
+  // One query for the whole selection, filtered by the stores this account
+  // actually runs. Same rule as loadEditableProduct, applied in bulk.
+  const allowed = (await managedStoreIds(req.user)).map(String);
+  const found = await Product.find({ _id: { $in: ids } });
+  const byId = new Map(found.map((product) => [String(product._id), product]));
+
+  const updated = [];
+  const skipped = [];
+  const failed = [];
+
+  for (const id of ids) {
+    const product = byId.get(id);
+
+    if (!product) {
+      skipped.push({ id, reason: 'That product no longer exists.' });
+      continue;
+    }
+
+    if (!product.store || !allowed.includes(String(product.store))) {
+      // Reported, not thrown: the caller learns the product was left alone
+      // without this becoming a way to probe for other stores' product ids.
+      skipped.push({ id, reason: 'That product does not belong to your store.' });
+      continue;
+    }
+
+    try {
+      if (changes.status !== undefined) product.status = changes.status;
+      if (changes.trackInventory !== undefined) {
+        product.trackInventory = changes.trackInventory;
+      }
+      if (changes.productType !== undefined) product.productType = changes.productType;
+      if (changes.vendor !== undefined) product.vendor = changes.vendor;
+      if (changes.category !== undefined) product.category = changes.category;
+      if (changes.rack !== undefined) product.rack = changes.rack;
+      if (changes.shelf !== undefined) product.shelf = changes.shelf;
+
+      if (Array.isArray(changes.addCollections)) {
+        const merged = [...(product.collections || [])];
+        for (const name of changes.addCollections) {
+          if (!merged.some((entry) => entry.toLowerCase() === name.toLowerCase())) {
+            merged.push(name);
+          }
+        }
+        product.collections = merged;
+      }
+
+      // `trackInventory` is read AFTER the assignment above, so "stop tracking
+      // inventory" and "set stock to 50" in the same request is a no-op - which
+      // is right, because there is nothing left to count.
+      const tracks = product.trackInventory !== false;
+
+      if (changes.price) Object.assign(product, bulkPrice(product, changes.price));
+      if (changes.stock) Object.assign(product, bulkStock(product, changes.stock, tracks));
+
+      // eslint-disable-next-line no-await-in-loop
+      await product.save();
+      updated.push({ id, name: product.name });
+    } catch (err) {
+      // One product failing (a validation error, say) must not abandon the
+      // rest, so it is recorded and the loop carries on.
+      failed.push({ id, reason: err.message || 'Could not save that product.' });
+    }
+  }
+
+  res.json({ updated, skipped, failed, total: ids.length });
+});
+
+/** POST /api/products/bulk/delete -> { deleted, skipped, names } */
+export const bulkDeleteProducts = asyncHandler(async (req, res) => {
+  const ids = Array.isArray(req.body?.ids)
+    ? [...new Set(req.body.ids.map((id) => String(id)).filter(Boolean))]
+    : [];
+
+  if (!ids.length) throw new HttpError(400, 'Choose at least one product to delete.');
+  if (ids.length > MAX_BULK_IDS) {
+    throw new HttpError(400, `That is more than ${MAX_BULK_IDS} products at once.`);
+  }
+
+  const allowed = (await managedStoreIds(req.user)).map(String);
+  const found = await Product.find({ _id: { $in: ids } });
+  const byId = new Map(found.map((product) => [String(product._id), product]));
+
+  const deletable = [];
+  const skipped = [];
+
+  for (const id of ids) {
+    const product = byId.get(id);
+
+    if (!product) {
+      skipped.push({ id, reason: 'That product no longer exists.' });
+      continue;
+    }
+
+    if (!product.store || !allowed.includes(String(product.store))) {
+      skipped.push({ id, reason: 'That product does not belong to your store.' });
+      continue;
+    }
+
+    deletable.push(product);
+  }
+
+  // Deleted in one operation rather than N round trips - the per-product store
+  // check has already happened above, so there is nothing left to verify.
+  const result = await Product.deleteMany({ _id: { $in: deletable.map((p) => p._id) } });
+
+  res.json({
+    deleted: result.deletedCount || 0,
+    skipped,
+    names: deletable.map((product) => product.name),
+  });
+});
+
 export default {
   listProducts,
   getProduct,
   createProduct,
   updateProduct,
   deleteProduct,
+  bulkUpdateProducts,
+  bulkDeleteProducts,
 };

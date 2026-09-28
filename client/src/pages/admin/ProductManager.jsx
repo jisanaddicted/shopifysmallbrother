@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import BulkEditPanel from '../../components/store/BulkEditPanel';
 import { useAuth } from '../../context/AuthContext';
 import productService from '../../services/productService';
 import {
@@ -69,6 +70,10 @@ export default function ProductManager({ basePath = '/merchant/products' }) {
   // arrive from a re-render and a list must not care about order.
   const [selected, setSelected] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Whether the bulk edit form is showing. Kept open across a selection
+  // change so a merchant who ticks one more box does not lose what they
+  // typed - the form holds its own state, not the list.
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   // Default the target store: the primary one from the session.
   useEffect(() => {
@@ -199,32 +204,50 @@ export default function ProductManager({ basePath = '/merchant/products' }) {
   };
 
   /**
-   * Apply one change to every ticked product.
+   * Apply one set of changes to every ticked product, in a single request.
    *
-   * Sequential rather than parallel on purpose: these are writes to the same
-   * store's catalogue, and firing forty of them at once against one Mongo
-   * gives a merchant a wall of failures they cannot act on. Stopping at the
-   * first failure is deliberate too - the ones that already saved are saved,
-   * and the message names the product that did not.
+   * This used to loop over PUT /products/:id. One PATCH instead is not just
+   * faster: a PUT is a full replace, so the old loop had to echo every field
+   * of every product back from the browser copy. If one had been edited
+   * anywhere else since the list loaded, that round trip would silently
+   * revert it. The bulk endpoint is a partial update, so nothing outside
+   * `changes` can be touched.
+   *
+   * The server answers with what happened to EACH product rather than a bare
+   * ok, so a partial success is reported honestly - three products it cannot
+   * touch must not read as "everything was saved".
    */
-  const runBulk = async (label, action) => {
+  const runBulkEdit = async (changes) => {
     const ids = [...selected];
     if (!ids.length) return;
-
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(`${label} ${ids.length} product(s)?`)) return;
 
     setBulkBusy(true);
     setError('');
     setNotice('');
 
     try {
-      for (const id of ids) {
-        // eslint-disable-next-line no-await-in-loop
-        await action(id);
+      const result = await productService.bulkUpdateProducts(ids, changes);
+
+      const updated = result.updated?.length || 0;
+      const problems = [...(result.skipped || []), ...(result.failed || [])];
+
+      // Closed and cleared only on a clean run, so a partial failure leaves
+      // the merchant looking at the products that did not change and able to
+      // retry exactly those.
+      if (updated === ids.length) {
+        setBulkOpen(false);
+        setSelected(new Set());
+        setNotice(`Updated ${updated} product${updated === 1 ? '' : 's'}.`);
+      } else if (updated > 0) {
+        setNotice(`Updated ${updated} of ${ids.length}.`);
       }
-      setNotice(`${label} ${ids.length} product(s).`);
-      setSelected(new Set());
+
+      if (problems.length) {
+        setError(
+          `${problems.length} product(s) could not be changed: ${problems[0].reason}`,
+        );
+      }
+
       await loadProducts();
     } catch (err) {
       setError(err.message || 'Could not update those products.');
@@ -233,42 +256,60 @@ export default function ProductManager({ basePath = '/merchant/products' }) {
     }
   };
 
-  const bulkStatus = (status) =>
-    runBulk(`Set to ${PRODUCT_STATUS_LABELS[status]}:`, async (id) => {
-      const target = products.find((p) => (p._id || p.id) === id);
-      // The PUT is a full replace, so the whole product has to go back with
-      // the new status - not just the status. Sending only `status` would
-      // blank the name and price.
-      await productService.updateProduct(id, {
-        name: target?.name,
-        price: target?.price,
-        category: target?.category,
-        stock: target?.stock,
-        rack: target?.rack,
-        shelf: target?.shelf,
-        image: target?.image,
-        description: target?.description,
-        status,
-        trackInventory: target?.trackInventory !== false,
-        productType: target?.productType,
-        vendor: target?.vendor,
-        collections: target?.collections || [],
-        options: target?.options || [],
-        variants: (target?.variants || []).map((variant) => ({
-          ...(variant._id ? { _id: variant._id } : {}),
-          optionValues: variant.optionValues,
-          price: variant.price,
-          compareAtPrice: variant.compareAtPrice ?? null,
-          stock: variant.stock,
-          sku: variant.sku,
-          image: variant.image,
-          enabled: variant.enabled !== false,
-        })),
-      });
-    });
+  /**
+   * Delete every ticked product.
+   *
+   * One confirmation for the whole batch, naming a few of them: deleting
+   * thirty products is not undoable, and a dialog that only said
+   * "delete 30?" would not let anybody check they had ticked the right ones.
+   */
+  const runBulkDelete = async () => {
+    const ids = [...selected];
+    if (!ids.length) return;
 
-  const bulkDelete = () =>
-    runBulk('Delete', (id) => productService.deleteProduct(id));
+    const names = visibleProducts
+      .filter((product) => ids.includes(product._id || product.id))
+      .map((product) => product.name);
+    const preview = names.slice(0, 3).join(', ');
+    const more = names.length > 3 ? ` and ${names.length - 3} more` : '';
+
+    // eslint-disable-next-line no-alert
+    if (
+      !window.confirm(
+        `Delete ${ids.length} product(s)?\n\n${preview}${more}\n\nThis cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    setBulkBusy(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const result = await productService.bulkDeleteProducts(ids);
+      const deleted = result.deleted || 0;
+
+      if (deleted === ids.length) {
+        setBulkOpen(false);
+        setSelected(new Set());
+      }
+
+      setNotice(`Deleted ${deleted} product${deleted === 1 ? '' : 's'}.`);
+
+      if (result.skipped?.length) {
+        setError(
+          `${result.skipped.length} could not be deleted: ${result.skipped[0].reason}`,
+        );
+      }
+
+      await loadProducts();
+    } catch (err) {
+      setError(err.message || 'Could not delete those products.');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   if (loading) return <LoadingSpinner fullPage label="Loading catalogue…" />;
 
@@ -388,39 +429,43 @@ export default function ProductManager({ basePath = '/merchant/products' }) {
         </div>
 
         {selected.size > 0 ? (
-          <div className="bulkbar">
-            <strong>{selected.size} selected</strong>
+          <div className="bulkwrap">
+            <div className="bulkbar">
+              <strong>
+                {selected.size} product{selected.size === 1 ? '' : 's'} selected
+              </strong>
 
-            <div className="button-row">
-              {PRODUCT_STATUS_VALUES.map((status) => (
+              <div className="button-row">
                 <button
-                  key={status}
                   type="button"
-                  className="btn btn-outline btn-sm"
-                  disabled={bulkBusy}
-                  onClick={() => bulkStatus(status)}
+                  className="btn btn-primary btn-sm"
+                  aria-expanded={bulkOpen}
+                  onClick={() => setBulkOpen((open) => !open)}
                 >
-                  {PRODUCT_STATUS_LABELS[status]}
+                  {bulkOpen ? 'Close editor' : 'Bulk edit'}
                 </button>
-              ))}
 
-              <button
-                type="button"
-                className="btn btn-danger btn-sm"
-                disabled={bulkBusy}
-                onClick={bulkDelete}
-              >
-                {bulkBusy ? 'Working…' : 'Delete'}
-              </button>
-
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setSelected(new Set())}
-              >
-                Clear
-              </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setSelected(new Set());
+                    setBulkOpen(false);
+                  }}
+                >
+                  Clear selection
+                </button>
+              </div>
             </div>
+
+            {bulkOpen ? (
+              <BulkEditPanel
+                count={selected.size}
+                onApply={runBulkEdit}
+                onDelete={runBulkDelete}
+                busy={bulkBusy}
+              />
+            ) : null}
           </div>
         ) : null}
 
