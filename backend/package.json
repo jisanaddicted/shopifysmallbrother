@@ -19,7 +19,8 @@
     "express": "^4.22.2",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.24.4",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "sslcommerz-lts": "^1.2.0"
   },
   "engines": {
     "node": ">=20"

@@ -38,16 +38,22 @@ async function api(method, path, { token, body } = {}) {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
+    // Manual, so the 302s from the payment callbacks stay visible instead of
+    // being silently followed to the SPA page. Nothing else in this API
+    // redirects, so nothing else is affected.
+    redirect: 'manual',
   });
 
   let data = null;
   try {
     data = await res.json();
   } catch {
+    // A 302 from the payment callbacks has no body to parse - that is normal,
+    // not a failure, and `headers` below is what those checks read.
     data = null;
   }
 
-  return { status: res.status, data };
+  return { status: res.status, data, headers: res.headers };
 }
 
 async function main() {
@@ -1490,6 +1496,89 @@ async function main() {
       'the admin can remove an invited store from their panel',
       leave.status === 200 && leave.data?.removed === true,
       `got ${why(leave)}`,
+    );
+
+
+    // --- Payments: cash on delivery + the SSLCommerz sandbox ----------------
+    // Only the paths that do NOT need real gateway credentials, so this stays
+    // runnable on a clean checkout. The happy path through the gateway itself
+    // is a manual sandbox test, not something to fake in CI: pretending to
+    // settle a payment would be worse than not testing it.
+    const payNoOrder = await api('POST', '/payment/init', { body: {} });
+    check(
+      'starting a payment without an order is refused',
+      payNoOrder.status === 400,
+      `got ${why(payNoOrder)}`,
+    );
+
+    const payUnknown = await api('GET', '/payment/txn_not_a_real_one');
+    check(
+      'an unknown transaction reads as 404',
+      payUnknown.status === 404,
+      `got ${why(payUnknown)}`,
+    );
+
+    // A rider is signed in but did not place the order, so they may not open a
+    // payment session for it. The same rule as every other order action.
+    const payNotMine = await api('POST', '/payment/init', {
+      token: sessions.rider,
+      body: { orderId },
+    });
+    check(
+      'somebody else cannot start a payment for an order',
+      payNotMine.status === 403,
+      `got ${why(payNotMine)}`,
+    );
+
+    // The gateway callbacks are unauthenticated by necessity - they come from
+    // SSLCommerz and from a browser we do not control - but with nothing
+    // recognisable they must bounce the shopper to the failure page rather than
+    // credit anybody.
+    //
+    // `headers` is a fetch Headers object, so the Location header has to be read
+    // with .get() rather than as a property.
+    const straySuccess = await api('POST', '/payment/success', { body: {} });
+    check(
+      'a success callback with no transaction bounces to the failure page',
+      straySuccess.status === 302 &&
+        String(straySuccess.headers?.get?.('location') || '').includes(
+          '/payment-failed',
+        ),
+      `got ${why(straySuccess)}`,
+    );
+
+    const strayFail = await api('POST', '/payment/fail', {
+      body: { error: 'Card declined' },
+    });
+    check(
+      'a fail callback with no transaction still lands on the failure page',
+      strayFail.status === 302 &&
+        String(strayFail.headers?.get?.('location') || '').includes(
+          '/payment-failed',
+        ),
+      `got ${why(strayFail)}`,
+    );
+
+    // A malformed IPN is acknowledged with a 200 so SSLCommerz stops retrying,
+    // rather than answered with an error that would make it hammer us.
+    const strayIpn = await api('POST', '/payment/ipn', { body: {} });
+    check(
+      'a malformed IPN is acknowledged and ignored',
+      strayIpn.status === 200 && strayIpn.data?.settled === false,
+      `got ${why(strayIpn)}`,
+    );
+
+    // The order's payment state is carried on the order itself, so the tracker
+    // and the store dashboard can read it. A cash-on-delivery order is Pending
+    // with no transaction id - never null-collides in the unique index.
+    const afterOrders = await api('GET', `/orders/${orderId}`, {
+      token: sessions.customer,
+    });
+    check(
+      'a cash order carries a payment record with no transaction yet',
+      afterOrders.data?.order?.payment?.status === 'Pending' &&
+        !afterOrders.data?.order?.payment?.transactionId,
+      `${why(afterOrders)}/${afterOrders.data?.order?.payment?.status}`,
     );
 
     const leftMe = await api('GET', '/auth/me', { token: sessions.admin });

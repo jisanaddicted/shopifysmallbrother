@@ -65,8 +65,16 @@ const toFiniteNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-/** Loads an order by id, or throws the right 400/404/403. */
-async function loadOrderFor(orderId, user, guestTokenRaw = null) {
+/**
+ * Loads an order by id, or throws the right 400/404/403.
+ *
+ * Exported because the payment routes need to answer exactly the same question
+ * ("may this caller act on this order?") as the order routes - including the
+ * guestToken path, since a guest can pay online just as they can cancel or
+ * confirm a delivery. Re-implementing that check in the payment controller is
+ * how the two would eventually disagree.
+ */
+export async function loadOrderFor(orderId, user, guestTokenRaw = null) {
   if (!mongoose.isValidObjectId(orderId)) {
     throw new HttpError(400, 'That order id is not valid.');
   }
@@ -104,6 +112,39 @@ async function loadOrderFor(orderId, user, guestTokenRaw = null) {
   }
 
   return order;
+}
+
+/**
+ * "Is this caller the person who PLACED this order?" - throws 401/403 if not.
+ *
+ * Needed by every action only the buyer may take: cancelling, confirming
+ * receipt, and starting a payment.
+ *
+ * It cannot be answered by `canAccessOrder`, and this is the important part:
+ * that function deliberately admits the ASSIGNED RIDER and the store staff,
+ * because they need to see the order they are working on. But seeing an order
+ * is not the same as owning it, and a rider who can open a payment session for
+ * somebody else's basket is a real hole - the smoke test caught exactly that.
+ *
+ * A guest counts as the buyer when they hold the token, which `loadOrderFor` has
+ * already verified by the time this runs.
+ *
+ * NOTE: cancelOrder still spells its own version out longhand, because it also
+ * lets a platform admin through. Left alone rather than refactored, so a
+ * long-standing message other code may assert on does not change.
+ */
+export function assertOrderOwner(order, user) {
+  const isGuestCaller = !user && !order.customer;
+  if (isGuestCaller) return;
+
+  if (!user) throw new HttpError(401, 'You need to sign in to do that.');
+
+  if (String(order.customer?._id || order.customer) === String(user._id)) return;
+
+  throw new HttpError(
+    403,
+    'Only the customer who placed this order can do that.',
+  );
 }
 
 /** Appends to the audit trail, saves, and tells the tracker over the socket. */
@@ -409,22 +450,10 @@ export const confirmReceived = asyncHandler(async (req, res) => {
 
   const order = await loadOrderFor(req.params.id, req.user, guestToken);
 
-  // A guest caller is exactly who loadOrderFor just let through: no session,
-  // and an order with no customer on it. Anything else has to be the signed-in
-  // customer who placed this order.
-  const isGuestOrder = !order.customer;
-  const isGuestCaller = !req.user && isGuestOrder;
-
-  if (!isGuestCaller) {
-    if (!req.user) throw new HttpError(401, 'You need to sign in to do that.');
-
-    if (String(order.customer?._id || order.customer) !== String(req.user._id)) {
-      throw new HttpError(
-        403,
-        'Only the customer can confirm this order.',
-      );
-    }
-  }
+  // loadOrderFor has already proved a guest token; this narrows it to "you are
+  // the buyer", so a signed-in rider or admin viewing the order cannot close it
+  // on the customer's behalf.
+  assertOrderOwner(order, req.user);
 
   // Already confirmed - answering 200 makes a double tap, or a retry after the
   // response was lost on the tunnel, harmless.

@@ -2978,3 +2978,105 @@ ol {
   opacity: 0.6;
   pointer-events: none;
 }
+
+/* --- Payments: the checkout method picker + the result receipts ------------ */
+
+/* Two routes that mean genuinely different things to a shopper (pay now vs pay
+   at the door), so they are cards you tap rather than a dropdown. The whole card
+   is the label, which gives the radio a real touch target on a phone. */
+.pay-methods {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.pay-method {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.8rem 0.9rem;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.pay-method:hover {
+  border-color: var(--brand);
+}
+
+/* The selected state is the border AND the tinted fill, not colour alone. */
+.pay-method.is-on {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.pay-method input {
+  margin: 0;
+  flex: none;
+  accent-color: var(--brand);
+}
+
+.pay-method__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.pay-method__text em {
+  font-style: normal;
+}
+
+.pay-method__icon {
+  font-size: 1.3rem;
+  flex: none;
+  line-height: 1;
+}
+
+/* --- Result pages --------------------------------------------------------- */
+.receipt {
+  max-width: 34rem;
+  margin: 1.5rem auto;
+  text-align: center;
+}
+
+/* A big ✓ / ✕ rather than a small icon: this is the one thing the shopper is
+   looking for when they come back from the gateway. */
+.receipt__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 0.6rem;
+  border-radius: 50%;
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.receipt__mark--bad {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.receipt__rows {
+  text-align: left;
+  margin: 1.1rem 0;
+}
+
+.receipt__rows code {
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
+.receipt .button-row {
+  justify-content: center;
+  margin-top: 1.1rem;
+}
+

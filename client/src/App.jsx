@@ -15,6 +15,8 @@ import Register from './pages/auth/Register';
 import ProfilePage from './pages/profile/ProfilePage';
 import Checkout from './pages/customer/Checkout';
 import OrderTracker from './pages/customer/OrderTracker';
+import PaymentFailed from './pages/customer/PaymentFailed';
+import PaymentSuccess from './pages/customer/PaymentSuccess';
 import ShopPage from './pages/customer/ShopPage';
 import Storefront from './pages/customer/Storefront';
 import MerchantDashboard from './pages/store/MerchantDashboard';
@@ -136,6 +138,15 @@ export default function App() {
           <Route path={ROUTES.STORE_CHECKOUT} element={<Checkout />} />
           <Route path={ROUTES.CHECKOUT} element={<Checkout />} />
           <Route path={ROUTES.ORDER_TRACKER} element={<OrderTracker />} />
+
+          {/* Payment result pages. The BACKEND redirects here after the
+              gateway sends the shopper back, so these paths are generated on the
+              server (CLIENT_URL + /payment-success) and must stay exactly as
+              they are - they are not store-scoped, because the gateway knows
+              nothing about which store the basket came from. Both read
+              ?tran_id=… and verify it against the API. */}
+          <Route path={ROUTES.PAYMENT_SUCCESS} element={<PaymentSuccess />} />
+          <Route path={ROUTES.PAYMENT_FAILED} element={<PaymentFailed />} />
 
           {/* Rider - the whole rider area is a side-navbar shell, so the console,
               their analytics and a single delivery opened from either of them all

@@ -5,9 +5,12 @@ import OrderSummary from '../../components/store/OrderSummary';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import orderService from '../../services/orderService';
+import paymentService from '../../services/paymentService';
 import { getPublicStore } from '../../services/storeService';
 import { initials } from '../../utils/formatters';
 import {
+  PAYMENT_METHOD_HINTS,
+  PAYMENT_METHODS,
   ROUTES,
   STORAGE_KEYS,
   checkoutPath,
@@ -58,6 +61,10 @@ export default function Checkout() {
   const [point, setPoint] = useState(null);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
+  // Which route the shopper wants to pay by. Cash on delivery is the default
+  // because it is the one that always works - no gateway credentials, no card,
+  // no redirect, and it is what this checkout has always done.
+  const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHODS.COD);
   // The visiting store's logo + name for the header (no generic default).
   const [store, setStore] = useState(null);
   const [logoBroken, setLogoBroken] = useState(false);
@@ -141,7 +148,7 @@ export default function Checkout() {
           notes: address.notes,
         },
         location: { lat: dropOff.lat, lng: dropOff.lng },
-        paymentMethod: 'cod',
+        paymentMethod,
         // Signed-in buyers order as themselves; guests attach a contact.
         ...(!isAuthenticated
           ? { guest: { name: guest.name.trim(), email: guest.email.trim() } }
@@ -150,13 +157,33 @@ export default function Checkout() {
 
       const orderId = order?._id || order?.id;
       if (guestToken && orderId) saveGuestToken(orderId, guestToken);
-      clearCart();
 
-      if (orderId) {
-        navigate(orderTrackerPath(orderId), { replace: true });
-      } else {
+      if (!orderId) {
+        clearCart();
         navigate(shopTarget, { replace: true });
+        return;
       }
+
+      // Cash on delivery: the order is the end of it, go track it.
+      if (paymentMethod === PAYMENT_METHODS.COD) {
+        clearCart();
+        navigate(orderTrackerPath(orderId), { replace: true });
+        return;
+      }
+
+      // Pay online. The basket is deliberately NOT cleared yet: if the gateway
+      // refuses to start, the shopper must come back to a cart that is still
+      // full rather than an empty one and a "your cart is empty" page.
+      const { url } = await paymentService.initPayment(orderId);
+      if (!url) {
+        throw new Error('The payment gateway did not return a payment page.');
+      }
+
+      // A full navigation, not a router push: this leaves the SPA entirely for
+      // the gateway's own page, and the gateway brings the shopper back to
+      // /payment-success or /payment-failed afterwards.
+      clearCart();
+      window.location.assign(url);
     } catch (err) {
       setError(err.message || 'Could not place your order.');
     } finally {
@@ -323,14 +350,70 @@ export default function Checkout() {
           <AddressPickerMap value={point} onChange={setPoint} />
         </section>
 
+        {/* How to pay. A radio group rather than a dropdown: there are exactly
+            two routes, they mean very different things to the shopper (pay now
+            vs pay at the door), and one of them leaves this site entirely. */}
+        <section className="panel">
+          <h2 className="panel__title">Payment</h2>
+
+          <div
+            className="pay-methods"
+            role="radiogroup"
+            aria-label="How would you like to pay?"
+          >
+            {[PAYMENT_METHODS.COD, PAYMENT_METHODS.CARD].map((method) => (
+              <label
+                key={method}
+                className={`pay-method${paymentMethod === method ? ' is-on' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value={method}
+                  checked={paymentMethod === method}
+                  onChange={() => setPaymentMethod(method)}
+                />
+
+                <span className="pay-method__text">
+                  <strong>
+                    {method === PAYMENT_METHODS.COD
+                      ? 'Cash on delivery'
+                      : 'Pay online'}
+                  </strong>
+                  <em className="muted small">
+                    {PAYMENT_METHOD_HINTS[method]}
+                  </em>
+                </span>
+
+                <span className="pay-method__icon" aria-hidden="true">
+                  {method === PAYMENT_METHODS.COD ? '💵' : '💳'}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          {paymentMethod === PAYMENT_METHODS.CARD ? (
+            <p className="muted small">
+              You will be taken to our secure payment page to pay by card, mobile
+              banking or wallet, and brought straight back here afterwards.
+            </p>
+          ) : null}
+        </section>
+
         <OrderSummary
           address={address}
           onPlaceOrder={handlePlaceOrder}
           placing={placing}
-          ctaLabel="Place order"
+          ctaLabel={
+            paymentMethod === PAYMENT_METHODS.CARD
+              ? 'Pay online'
+              : 'Place order'
+          }
         >
           <p className="muted small">
-            Payment is collected in cash on delivery.
+            {paymentMethod === PAYMENT_METHODS.CARD
+              ? 'You will be redirected to the payment page after this.'
+              : 'Payment is collected in cash on delivery.'}
           </p>
         </OrderSummary>
       </div>

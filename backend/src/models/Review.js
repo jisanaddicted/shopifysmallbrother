@@ -23,7 +23,9 @@ const reviewSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Order',
       required: true,
-      index: true,
+      // Deliberately NOT `index: true`: the unique index declared below already
+      // creates it, and declaring both makes Mongoose warn on every boot about a
+      // duplicate schema index.
     },
     // Copied from the order so the store dashboard can list "my reviews"
     // without joining back through the order for every row.

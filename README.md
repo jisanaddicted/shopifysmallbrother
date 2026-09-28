@@ -224,6 +224,12 @@ no-response network failure into *"Cannot reach the API server at
 | `DELETE` | `/orders/:id/review` | the customer who placed it | withdraw your own review |
 | `GET` | `/stores/:id/reviews` | store staff (owner / appointed store admin) | every review left on this store's deliveries, newest first, with the average and a 1–5 histogram |
 | `PATCH` | `/orders/:id/location` | assigned rider | GPS fallback ping |
+| `POST` | `/payment/init` | the buyer (customer, or guest with their `guestToken`) | open an SSLCommerz sandbox session for an order that **already exists**; returns `{ url, tran_id, amount }` |
+| `POST` | `/payment/success` | SSLCommerz / the banker's browser | validate `val_id`, mark the payment `Paid`, then 302 to `${CLIENT_URL}/payment-success` |
+| `POST` | `/payment/fail` | SSLCommerz / the banker's browser | mark `Failed` (never downgrading one already `Paid`), 302 to `/payment-failed` |
+| `POST` | `/payment/cancel` | SSLCommerz / the banker's browser | mark `Cancelled`, 302 to `/payment-failed` |
+| `POST` | `/payment/ipn` | SSLCommerz's servers | async webhook: re-validate and settle, so a payment still lands even if the shopper never returned |
+| `GET` | `/payment/:tranId` | the buyer of that order | what actually happened - status, amount, paidAt, items. What `/payment-success` renders |
 | `GET` | `/orders` | admin | dispatch board (`status`, `page`) — only orders of stores the admin runs |
 | `GET` | `/orders/rider/analytics` | rider | how long each stage of *their* deliveries took |
 | `GET` | `/orders/store/analytics` | store staff (owner / appointed store admin) | the same timings for the whole store, rolled up per rider (`storeId` optional) |
@@ -284,6 +290,62 @@ join an order room you own, are delivering, or administer.
 - **Roles are enforced on the server**, not just hidden in the UI. Riders may
   only move an order along the happy path (or jump straight to `delivered`);
   only admins dispatch and edit the catalogue.
+- **Cash on delivery, plus SSLCommerz sandbox for online payment.** `checkout`
+  offers both; `paymentMethod` on the order records which was chosen, and a
+  `payment` sub-document on the order records how far that payment got
+  (`Pending` / `Paid` / `Failed` / `Cancelled`, plus `transactionId`, `val_id`
+  and the amount charged). Payment state is deliberately a SEPARATE axis from
+  `ORDER_STATUS`: an online payment settles long before the parcel moves, and a
+  cash one is only settled by the rider in person.
+- **The gateway is charged the order's total, never a number from the client.**
+  The brief this was built from has `POST /api/payment/init` create its own order
+  from `orderData`; here the order already exists (created by `POST /api/orders`,
+  priced server-side, store derived from the products) and `init` takes an
+  `orderId`. Otherwise a client could POST `total_amount: 1` and the server would
+  cheerfully open a one-taka session for a five-hundred-taka basket.
+- **Nothing is marked Paid without asking SSLCommerz.** Every callback path -
+  `/success` and the `/ipn` webhook - goes through `settlePayment()`, which
+  calls `sslcz.validate(val_id)` and additionally refuses a payment whose amount
+  the gateway reports differs from the amount we asked for. The browser redirect
+  is a convenience; the IPN is the part that makes this trustworthy, because a
+  redirect can be blocked, closed or forged and a webhook cannot.
+- **The gateway callbacks are deliberately NOT behind a JWT.** They are made by
+  SSLCommerz and by a browser we do not control, so requiring a login would make
+  it impossible to ever confirm a payment. Who may *start* a payment is decided
+  separately, by `assertOrderOwner()`: seeing an order is not owning it, so the
+  assigned rider and store staff - whom `canAccessOrder` deliberately admits -
+  cannot charge a customer for their own basket.
+- **`payment.transactionId` is uniquely indexed with a `partialFilterExpression`,
+  not `sparse`.** Every cash order stores `null` there, and a sparse index only
+  skips *missing* fields - not explicit nulls - so the second COD order in the
+  database would fail with a duplicate-key 409. The filter narrows the index to
+  documents where the field is actually a string, which is exactly the set of
+  orders that went through the gateway.
+- **Two gateway traps, both found by testing against the real sandbox, both worth
+  knowing before this goes live.**
+  1. *The library swallows errors.* `sslcommerz-lts`'s `httpCall` ends in
+     `.catch(err => err)`, so a network failure or an unparseable body **resolves**
+     with the Error object instead of rejecting. A `try/catch` around
+     `client.init()` never fires, and the failure looks exactly like a successful
+     response with no `GatewayPageURL`. The controller therefore checks
+     `response instanceof Error` and treats that as a gateway failure.
+  2. *A missing required field returns an EMPTY body, not a readable error.*
+     Bisecting the payload showed `cus_city` / `ship_city` (and the rest of the
+     `ship_*` block) are all mandatory at the gateway — but `city` is **optional
+     in this app's checkout form**. A shopper who leaves it blank used to get
+     "invalid json response body", which reads as "the gateway is unreachable"
+     and is nothing of the sort. Every gateway-required field now goes through
+     `required()`, which falls back address → store → a default, and through
+     `line()`, which strips newlines and non-ASCII (the library builds a
+     `form-data` body from raw bytes, so a two-line address corrupts the request
+     before it leaves the machine).
+- **`BACKEND_URL` and `CLIENT_URL` must be publicly reachable, and the same
+  host.** They default to `http://localhost:5000` because this app serves its
+  own client from the API. When demoing through the Cloudflare tunnel, set BOTH
+  to the tunnel URL - left on localhost, the gateway redirects the customer's
+  phone to an address it cannot open. Until `SSLCOMMERZ_STORE_PASSWORD` is
+  filled in, `/payment/init` answers 503 with that sentence and cash on delivery
+  keeps working.
 - **An admin owns the kitchen, not the delivery.** From an order page the admin
   can move it `confirmed` → `preparing` → `ready_for_pickup` and no further: the
   button appears only while the order is sitting at a status they may actually

@@ -4,6 +4,9 @@ import {
   ORDER_STATUS,
   ORDER_STATUS_VALUES,
   PAYMENT_METHODS,
+  PAYMENT_PROVIDER,
+  PAYMENT_STATUS,
+  PAYMENT_STATUS_VALUES,
 } from '../utils/constants.js';
 
 // ---------------------------------------------------------------------------
@@ -43,6 +46,51 @@ const pointSchema = new mongoose.Schema(
   {
     lat: { type: Number },
     lng: { type: Number },
+  },
+  { _id: false },
+);
+
+/**
+ * How this order gets paid for.
+ *
+ * A SUB-DOCUMENT of Order rather than a separate payments collection, on
+ * purpose: the spec this was built from describes its own standalone Order
+ * schema, but this app already HAS an order - with items, a store, a rider, a
+ * status history and a live tracker. A second, parallel "payment order" would be
+ * a second source of truth for the same basket, and the two would drift. So the
+ * payment hangs off the real order instead, and `order.total` is the amount the
+ * gateway is asked to charge - the server prices the basket, never the client.
+ *
+ * Cash on delivery is a payment too: `provider: 'cod'` with no transaction id,
+ * settled by the rider in person. It is a status, not the absence of one, so the
+ * store dashboard can still answer "was this paid?".
+ */
+const paymentSchema = new mongoose.Schema(
+  {
+    provider: {
+      type: String,
+      enum: Object.values(PAYMENT_PROVIDER),
+      default: PAYMENT_PROVIDER.COD,
+    },
+    status: {
+      type: String,
+      enum: PAYMENT_STATUS_VALUES,
+      default: PAYMENT_STATUS.PENDING,
+    },
+    // Unique per payment attempt; the gateway echoes it back on every callback,
+    // and it is what the shopper sees on the success page.
+    transactionId: { type: String, default: null },
+    // SSLCommerz's own handle for the session. Stored on success so a refund
+    // or a later dispute can be traced back to the gateway.
+    val_id: { type: String, default: null },
+    // Snapshot of what was charged. Kept alongside the order total because the
+    // two are allowed to differ (a discount applied after checkout), and the
+    // receipt must show what was actually taken.
+    amount: { type: Number, min: 0, default: 0 },
+    currency: { type: String, default: 'BDT' },
+    paidAt: { type: Date, default: null },
+    // Why a payment failed, in words the shopper can be shown.
+    message: { type: String, trim: true, default: '' },
   },
   { _id: false },
 );
@@ -110,6 +158,10 @@ const orderSchema = new mongoose.Schema(
     location: { type: pointSchema, default: undefined },
 
     paymentMethod: { type: String, enum: PAYMENT_METHODS, default: 'cod' },
+    // How it is being paid for - see paymentSchema above. `paymentMethod` says
+    // WHICH route the shopper picked (cash vs gateway); this says how far that
+    // payment has actually got.
+    payment: { type: paymentSchema, default: () => ({}) },
 
     status: {
       type: String,
@@ -134,6 +186,27 @@ const orderSchema = new mongoose.Schema(
 orderSchema.virtual('id').get(function getId() {
   return this._id?.toString();
 });
+
+/**
+ * One transaction id per payment attempt, enforced by the database rather than
+ * by application code - two checkouts must never be able to claim the same
+ * transaction, or a callback could credit the wrong order.
+ *
+ * `partialFilterExpression` is doing real work here, and `sparse: true` is NOT
+ * enough. A sparse index only skips documents where the field is MISSING; an
+ * order with `payment.transactionId` explicitly set to `null` still gets
+ * indexed, and the second cash-on-delivery order in the database would fail with
+ * a duplicate-key 409. Every COD order carries that null, so the filter is
+ * narrowed to documents where the field is actually a string - which is exactly
+ * the set of orders that went through the gateway.
+ */
+orderSchema.index(
+  { 'payment.transactionId': 1 },
+  {
+    unique: true,
+    partialFilterExpression: { 'payment.transactionId': { $type: 'string' } },
+  },
+);
 
 /** Shorthand used across the controllers: is this order still in play? */
 orderSchema.virtual('isOpen').get(function isOpen() {

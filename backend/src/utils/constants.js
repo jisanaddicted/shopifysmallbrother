@@ -168,6 +168,37 @@ export const ADMIN_STATUS_STEPS = {
 
 export const PAYMENT_METHODS = ['cod', 'card'];
 
+// ---------------------------------------------------------------------------
+// Payments (SSLCommerz sandbox + cash on delivery)
+// ---------------------------------------------------------------------------
+
+// How a payment attempt ended. Capitalised exactly as the spec asked for, and
+// deliberately a DIFFERENT axis from ORDER_STATUS: an order is "delivered" or
+// not, a payment is "Paid" or not. They are tracked independently, because
+// cash-on-delivery orders are only ever marked paid when the rider hands over
+// the money, whereas an online payment is settled long before the parcel moves.
+export const PAYMENT_STATUS = {
+  PENDING: 'Pending',
+  PAID: 'Paid',
+  FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
+};
+
+export const PAYMENT_STATUS_VALUES = Object.values(PAYMENT_STATUS);
+
+// Who processed it. `cod` is not a gateway - it is the deliberate absence of one.
+export const PAYMENT_PROVIDER = {
+  COD: 'cod',
+  SSLCOMMERZ: 'sslc',
+};
+
+// Short prefixes for the transaction id. `txn_` for anything a customer placed,
+// so a demo database is readable at a glance.
+export const TRANSACTION_PREFIX = {
+  GUEST: 'txn_guest_',
+  CUSTOMER: 'txn_',
+};
+
 // Pricing rules - must match client/src/utils/constants.js + CartContext.
 export const DELIVERY_FEE = 2.5;
 export const FREE_DELIVERY_OVER = 50;
@@ -200,6 +231,10 @@ export default {
   ADMIN_STATUS_STEPS,
   CANCELLABLE_STATUSES,
   PAYMENT_METHODS,
+  PAYMENT_STATUS,
+  PAYMENT_STATUS_VALUES,
+  PAYMENT_PROVIDER,
+  TRANSACTION_PREFIX,
   DELIVERY_FEE,
   FREE_DELIVERY_OVER,
   SOCKET_EVENTS,
