@@ -1,10 +1,11 @@
 import mongoose from 'mongoose';
+import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import Store from '../models/Store.js';
 import StoreRider from '../models/StoreRider.js';
 import User from '../models/User.js';
 import { HttpError } from '../middleware/errorHandler.js';
-import { ROLES, STORE_RIDER_STATUS } from '../utils/constants.js';
+import { CANCELLED_STATUSES, ROLES, STORE_RIDER_STATUS } from '../utils/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { normaliseUsername, slugify, uniqueSlug } from '../utils/slug.js';
 import {
@@ -16,20 +17,62 @@ import {
 import { customersForStore } from '../utils/storeCustomer.js';
 
 /**
- * GET /api/stores/:id/customers -> { customers, total }
+ * GET /api/stores/:id/customers -> { customers, total, newThisWeek }
  *
  * Every account that signed up at, signed in at, or ordered from this store.
  * Open to the owner, every store admin they appointed, and platform admins -
  * exactly the same people who can already see the store's orders.
+ *
+ * Each entry also carries `orders`, `spent` and `location`, which is what the
+ * customers table ranks people by. They are rolled up from the store's own
+ * orders in ONE aggregation rather than a query per customer: the list page
+ * shows every customer, so the N+1 version was a query per row, and it was the
+ * count on screen, not a limit.
+ *
+ * Cancelled orders are left out of the count and the spend on purpose - money
+ * that was never taken is not revenue, and counting it would tell a merchant
+ * their best customer is somebody who cancelled twice.
  */
 export const listStoreCustomers = asyncHandler(async (req, res) => {
   const { store } = await loadManageableStore(req.params.id, req.user);
 
   const customers = await customersForStore(store._id);
 
+  // One pass over this store's orders, grouped by who placed them.
+  const spendByCustomer = await Order.aggregate([
+    { $match: { store: store._id, customer: { $ne: null } } },
+    {
+      $group: {
+        _id: '$customer',
+        orders: { $sum: 1 },
+        spent: {
+          $sum: {
+            $cond: [{ $in: ['$status', CANCELLED_STATUSES] }, 0, '$total'],
+          },
+        },
+        // The most recent delivery address on file, for the Location column.
+        location: { $first: '$address.city' },
+      },
+    },
+  ]);
+
+  const rollup = new Map(
+    spendByCustomer.map((row) => [String(row._id), row]),
+  );
+
+  const enriched = customers.map((entry) => {
+    const row = rollup.get(String(entry.customer?._id));
+    return {
+      ...entry,
+      orders: row?.orders || 0,
+      spent: row?.spent || 0,
+      location: row?.location || '',
+    };
+  });
+
   res.json({
-    customers,
-    total: customers.length,
+    customers: enriched,
+    total: enriched.length,
     // Handy for a "N new this week" badge on the dashboard.
     newThisWeek: customers.filter(
       (entry) =>

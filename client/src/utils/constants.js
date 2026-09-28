@@ -205,6 +205,11 @@ export const STORE_CUSTOMER_STATUS = {
   BLOCKED: 'blocked',
 };
 
+export const STORE_CUSTOMER_STATUS_LABELS = {
+  [STORE_CUSTOMER_STATUS.ACTIVE]: 'Active',
+  [STORE_CUSTOMER_STATUS.BLOCKED]: 'Blocked',
+};
+
 // How the customer first arrived at the store. Set once, never overwritten.
 export const STORE_CUSTOMER_SOURCE = {
   SIGNUP: 'signup',
@@ -287,6 +292,17 @@ export const PAYMENT_STATUS_TONE = {
   [PAYMENT_STATUS.PAID]: 'success',
   [PAYMENT_STATUS.FAILED]: 'danger',
   [PAYMENT_STATUS.CANCELLED]: 'danger',
+};
+
+// The wording for the payment-status pills. The values are already
+// display-cased ('Paid', not 'paid'), so this is mostly here to keep the
+// orders board and the order detail reading the same way, and to give a new
+// status one place to be named instead of a `formatStatus` call per screen.
+export const PAYMENT_STATUS_LABELS = {
+  [PAYMENT_STATUS.PENDING]: 'Pending',
+  [PAYMENT_STATUS.PAID]: 'Paid',
+  [PAYMENT_STATUS.FAILED]: 'Failed',
+  [PAYMENT_STATUS.CANCELLED]: 'Cancelled',
 };
 
 // --- Order lifecycle -------------------------------------------------------
@@ -440,6 +456,16 @@ export const ROUTES = {
   // How long this store's deliveries take, per rider. Same numbers the rider
   // sees about themselves, read off the orders' own status history.
   MERCHANT_ANALYTICS: '/merchant/analytics',
+  // The store's order book and its customer list, as two full pages in the side
+  // rail rather than two more tables stacked on the dashboard. Both used to
+  // live inside "My store", where they were squeezed under the team and
+  // storefront panels; each deserves the whole content area to itself.
+  MERCHANT_ORDERS: '/merchant/orders',
+  // One order opened from the orders board. Mounted INSIDE the merchant shell,
+  // like the product form, so the side rail survives - a customer-facing
+  // /track/:orderId would drop the merchant out of the dashboard entirely.
+  MERCHANT_ORDER_DETAIL: '/merchant/orders/:orderId',
+  MERCHANT_CUSTOMERS: '/merchant/customers',
   // Live map of every delivery in progress. Reached from the ADMIN panel now
   // (/admin/riders) - it is an operations view across the stores an admin runs,
   // so it sits beside the orders board rather than in the store dashboard.

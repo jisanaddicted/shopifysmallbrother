@@ -10,7 +10,8 @@ import { initials } from '../../utils/formatters';
  * panel). Replaces the top <Navbar/> on those routes so the merchant and the
  * admin get a persistent left rail instead of top links.
  *
- * variant="merchant" -> My store, Products, Rider tracker, Rider analytics, Theme
+ * variant="merchant" -> My store, Orders, Customers, Products, Rider tracker,
+ *                      Rider analytics, Theme
  * variant="rider"    -> My deliveries, Analytics
  * variant="admin"    -> Orders, Products, Invitations, Theme
  *
@@ -64,6 +65,12 @@ export default function DashboardLayout({ variant = 'merchant' }) {
   // to carry across the top.
   const merchantLinks = [
     { to: ROUTES.MERCHANT_DASHBOARD, label: 'My store', icon: '🏪', end: true },
+    // The order book and the customer list used to be two tables at the bottom
+    // of "My store". They are pages of their own now: both are things a
+    // merchant comes back to and searches, and neither is something you scroll
+    // past once on the way to the team panel.
+    { to: ROUTES.MERCHANT_ORDERS, label: 'Orders', icon: '🧾', end: false },
+    { to: ROUTES.MERCHANT_CUSTOMERS, label: 'Customers', icon: '👥', end: false },
     { to: ROUTES.MERCHANT_PRODUCTS, label: 'Products', icon: '📦', end: false },
     // How long deliveries take here, split by who owned each wait.
     {

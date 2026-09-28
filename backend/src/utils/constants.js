@@ -125,6 +125,13 @@ export const ORDER_STATUS = {
 
 export const ORDER_STATUS_VALUES = Object.values(ORDER_STATUS);
 
+// Statuses that mean the order will never be fulfilled. Named as a list rather
+// than left as `status === CANCELLED` at each use site because "does this order
+// still count as revenue?" is a question more than one screen asks, and a new
+// terminal status should have to be added here to be counted correctly
+// everywhere.
+export const CANCELLED_STATUSES = [ORDER_STATUS.CANCELLED];
+
 // The happy path in order - used to validate rider status transitions.
 //
 // `received` is NOT in here on purpose: this table is what a RIDER may walk an

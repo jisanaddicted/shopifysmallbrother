@@ -22,6 +22,8 @@ import ShopPage from './pages/customer/ShopPage';
 import Storefront from './pages/customer/Storefront';
 import MerchantDashboard from './pages/store/MerchantDashboard';
 import StoreRiderAnalytics from './pages/store/StoreRiderAnalytics';
+import StoreOrders from './pages/store/StoreOrders';
+import StoreCustomers from './pages/store/StoreCustomers';
 import RiderTracker from './pages/store/RiderTracker';
 import ThemeBuilder from './pages/store/ThemeBuilder';
 import RiderConsole from './pages/rider/RiderConsole';
@@ -239,6 +241,24 @@ export default function App() {
             <Route
               path={ROUTES.MERCHANT_ANALYTICS}
               element={<StoreRiderAnalytics />}
+            />
+            {/* The store's order book and customer list - two full pages of
+                their own, mounted in the same shell so the side rail survives
+                when a merchant hops between them. */}
+            <Route path={ROUTES.MERCHANT_ORDERS} element={<StoreOrders />} />
+            <Route
+              path={ROUTES.MERCHANT_ORDER_DETAIL}
+              element={
+                <OrderTracker
+                  variant="merchant"
+                  backTo={ROUTES.MERCHANT_ORDERS}
+                  backLabel="Back to orders"
+                />
+              }
+            />
+            <Route
+              path={ROUTES.MERCHANT_CUSTOMERS}
+              element={<StoreCustomers />}
             />
             <Route path={ROUTES.MERCHANT_THEME} element={<ThemeBuilder />} />
           </Route>

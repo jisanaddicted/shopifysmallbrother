@@ -403,6 +403,23 @@ ol {
   color: var(--danger);
 }
 
+/* A deliberately quiet badge - "not delivered yet" is the normal state of a
+   live order, not something to flag. Without this a `badge--muted` falls back
+   to `.badge`'s solid brand blue, which shouts about the most boring cell in
+   the table. */
+.badge--muted {
+  background: var(--surface-alt);
+  color: var(--muted);
+}
+
+/* Inside a table cell the badge IS the cell, not a trailing marker after some
+   text, so it must not carry the base rule's indent - and it must not wrap
+   mid-phrase onto a second line. */
+.table .badge {
+  margin-left: 0;
+  white-space: nowrap;
+}
+
 .chip {
   display: inline-block;
   padding: 0.15rem 0.55rem;
@@ -3692,4 +3709,186 @@ ol {
   .bulkedit__grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* --- Orders + customers pages ---------------------------------------------
+   Two list pages that sit in the same content area, so they share one set of
+   pieces: a page header with its actions on the right, a filter bar, a wide
+   table, and (orders only) a row of stat tiles. */
+
+.orders,
+.customers {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.orders__head,
+.customers__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.orders__title,
+.customers__title {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.orders__head-actions,
+.customers__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.orders__store {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* A bare select outside a `.field`, so it needs the field's own treatment.
+   `.table select` covers selects INSIDE a table; these sit above one. */
+.input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font: inherit;
+}
+
+/* A row's primary identifier - the order number. Anchors are already styled
+   globally, so this only has to stop it stretching across the cell. */
+.link {
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+/* Right-aligned numeric column: the amounts and the counts. */
+.orders__num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* The five figures across the top of the orders page. */
+.orders__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.orders__stat {
+  padding: 0.85rem 1rem;
+  border-right: 1px solid var(--line);
+}
+
+.orders__stat:last-child {
+  border-right: none;
+}
+
+.orders__stat-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.orders__stat-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin-top: 0.15rem;
+}
+
+.orders__stat-hint {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.1rem;
+}
+
+/* Filter bar: a status picker and a search box, side by side. */
+.orders__filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.orders__search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 16rem;
+  min-width: 0;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.orders__search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+}
+
+.orders__count {
+  margin: 0;
+}
+
+/* Avatar sized for a table row, next to a customer's name. */
+.avatar--sm {
+  width: 30px;
+  height: 30px;
+  font-size: 0.75rem;
+}
+
+.customers__who {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+@media (max-width: 700px) {
+  /* The stat tiles stack instead of shrinking into unreadable slivers, and the
+     divider has to move onto the bottom edge or it cuts through a row. */
+  .orders__stats {
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  }
+
+  .orders__stat {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+/* A stat tile that is also a link into the page holding that data in full.
+   The dashboard keeps the numbers; the Orders and Customers pages keep the
+   detail. Anchors are coloured globally, so the hover has to pull the text
+   back towards the ink colour or the tile turns blue on hover. */
+.stat--link {
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.stat--link:hover {
+  color: inherit;
+  border-color: var(--brand);
+  box-shadow: var(--shadow);
 }

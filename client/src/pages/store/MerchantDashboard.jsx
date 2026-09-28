@@ -7,18 +7,11 @@ import storeService from '../../services/storeService';
 import {
   CLOSED_STATUSES,
   ORDER_STATUS,
-  ORDER_STATUS_TONE,
-  STORE_CUSTOMER_SOURCE_LABELS,
-  STORE_CUSTOMER_STATUS,
   STORE_RIDER_STATUS,
   STORE_RIDER_STATUS_LABELS,
+  ROUTES,
   shopPath,
 } from '../../utils/constants';
-import {
-  formatCurrency,
-  formatDateTime,
-  formatStatus,
-} from '../../utils/formatters';
 
 const BLANK_FORM = {
   name: '',
@@ -50,11 +43,13 @@ export default function MerchantDashboard() {
   const [myStores, setMyStores] = useState([]);
   const [riders, setRiders] = useState([]);
   const [members, setMembers] = useState([]);
-  // Customers who signed up at / signed in at / ordered from this store.
-  // Each entry: { customer, status, source, joinedAt, lastSeenAt }.
-  const [customers, setCustomers] = useState([]);
-  const [customersMeta, setCustomersMeta] = useState({ total: 0, newThisWeek: 0 });
-  const [customersError, setCustomersError] = useState('');
+  // Only the two customer COUNTS the stat tiles show. The list itself moved to
+  // its own page (the Customers tab), so this page deliberately does not keep a
+  // second copy of the rows to maintain alongside it.
+  const [customersMeta, setCustomersMeta] = useState({
+    total: 0,
+    newThisWeek: 0,
+  });
   const [orders, setOrders] = useState([]);
   const [form, setForm] = useState(BLANK_FORM);
   const [loading, setLoading] = useState(true);
@@ -100,28 +95,24 @@ export default function MerchantDashboard() {
     }
   }, []);
 
-  // The store's customers - who signed up at, signed in at, or ordered from
-  // the public page. Loaded alongside the roster; a failure here must never
-  // take the whole dashboard down, so it keeps its own error state.
-  const loadCustomers = useCallback(async (storeId) => {
+  // The customer COUNTS for the stat tile. The list behind that number is on the
+  // Customers page now; this still fetches it because the endpoint returns both,
+  // and a failed fetch here just leaves the tile at zero rather than taking the
+  // whole dashboard down.
+  const loadCustomerCounts = useCallback(async (storeId) => {
     if (!storeId) {
-      setCustomers([]);
       setCustomersMeta({ total: 0, newThisWeek: 0 });
-      setCustomersError('');
       return;
     }
 
     try {
       const data = await storeService.listStoreCustomers(storeId);
-      setCustomers(Array.isArray(data?.customers) ? data.customers : []);
       setCustomersMeta({
         total: data?.total ?? 0,
         newThisWeek: data?.newThisWeek ?? 0,
       });
-      setCustomersError('');
-    } catch (err) {
-      setCustomers([]);
-      setCustomersError(err.message || 'Could not load customers.');
+    } catch {
+      setCustomersMeta({ total: 0, newThisWeek: 0 });
     }
   }, []);
 
@@ -180,7 +171,7 @@ export default function MerchantDashboard() {
         setOrders(orderList);
         // The store's customers, for the "Customers" panel below. Uses the
         // ACTIVE store, so switching stores re-scopes the list.
-        loadCustomers(storeIdRef.current);
+        loadCustomerCounts(storeIdRef.current);
 
         setForm({
           name: nextStore?.name || '',
@@ -199,7 +190,7 @@ export default function MerchantDashboard() {
         setLoading(false);
       }
     },
-    [loadInvites, loadRoster, loadCustomers],
+    [loadInvites, loadRoster, loadCustomerCounts],
   );
 
   // Switch the whole dashboard (orders, roster, storefront form) to another
@@ -478,87 +469,31 @@ export default function MerchantDashboard() {
 
       <div className="stats">
         <div className="stat">
-          <strong>{orders.length}</strong>
-          <span className="stat__label">Total orders</span>
-        </div>
-        <div className="stat stat--warn">
-          <strong>{liveOrders.length}</strong>
-          <span className="stat__label">In progress</span>
-        </div>
-        <div className="stat stat--ok">
-          <strong>
-            {riders.filter((r) => r.status === STORE_RIDER_STATUS.ACTIVE).length}
-          </strong>
-          <span className="stat__label">Riders delivering</span>
-        </div>
-        <div className="stat">
-          <strong>{customersMeta.total}</strong>
-          <span className="stat__label">
-            Customers
-            {customersMeta.newThisWeek > 0
-              ? ` (+${customersMeta.newThisWeek} this week)`
-              : ''}
-          </span>
-        </div>
+          <Link className="stat stat--link" to={ROUTES.MERCHANT_ORDERS}>
+            <strong>{orders.length}</strong>
+            <span className="stat__label">Total orders</span>
+          </Link>
+          <div className="stat stat--warn">
+            <strong>{liveOrders.length}</strong>
+            <span className="stat__label">In progress</span>
+          </div>
+          <div className="stat stat--ok">
+            <strong>
+              {riders.filter((r) => r.status === STORE_RIDER_STATUS.ACTIVE).length}
+            </strong>
+            <span className="stat__label">Riders delivering</span>
+          </div>
+          <Link className="stat stat--link" to={ROUTES.MERCHANT_CUSTOMERS}>
+            <strong>{customersMeta.total}</strong>
+            <span className="stat__label">
+              Customers
+              {customersMeta.newThisWeek > 0
+                ? ` (+${customersMeta.newThisWeek} this week)`
+                : ''}
+            </span>
+          </Link>
       </div>
-
-      {/* ---- Customers: every account that signed up at this store's page -- */}
-      <section className="panel">
-        <div className="panel__header">
-          <h2 className="panel__title">Customers</h2>
-          <span className="muted small">
-            Accounts created at <code>/s/{store.slug}</code>
-          </span>
-        </div>
-
-        {customersError ? (
-          <p className="alert alert--warn">{customersError}</p>
-        ) : null}
-
-        {!customersError && customers.length === 0 ? (
-          <p className="muted">
-            No customers yet. Shoppers who sign up at{' '}
-            <Link to={shopPath(store.slug)}>/s/{store.slug}</Link> will be
-            listed here automatically.
-          </p>
-        ) : null}
-
-        {customers.length > 0 ? (
-          <ul className="rider-list">
-            {customers.map((entry) => {
-              const person = entry.customer || {};
-              const key = person._id || person.id || entry._id;
-              const blocked = entry.status === STORE_CUSTOMER_STATUS.BLOCKED;
-
-              return (
-                <li key={key}>
-                  <div className="rider-list__item">
-                    <span className="rider-list__id">
-                      {person.name || 'Customer'}
-                    </span>
-                    <span className="muted small">
-                      {person.email || ''}
-                      {entry.source
-                        ? ` · ${STORE_CUSTOMER_SOURCE_LABELS[entry.source] || entry.source}`
-                        : ''}
-                      {entry.joinedAt
-                        ? ` · joined ${formatDateTime(entry.joinedAt)}`
-                        : ''}
-                    </span>
-                    <div className="button-row">
-                      <span
-                        className={`badge badge--${blocked ? 'danger' : 'success'}`}
-                      >
-                        {blocked ? 'Blocked' : 'Active'}
-                      </span>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
-      </section>
+      </div>
 
       {/* ---- Pending store-admin invitations ----------------------------- */}
       {invites.length > 0 ? (
@@ -748,84 +683,6 @@ export default function MerchantDashboard() {
         </div>
       </section>
       ) : null}
-
-      {/* ---- Orders ------------------------------------------------------ */}
-      <section className="panel">
-        <div className="panel__header">
-          <h2 className="panel__title">Orders</h2>
-          <span className="muted small">
-            A rider appears here once they take the delivery.
-          </span>
-        </div>
-
-        {orders.length === 0 ? (
-          <p className="empty">
-            No orders yet. Share your store link to start selling.
-          </p>
-        ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Order</th>
-                  <th>Placed</th>
-                  <th>Total</th>
-                  <th>Status</th>
-                  <th>Rider</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.map((order) => {
-                  const id = order._id || order.id;
-                  // Live socket status wins over the last REST fetch, so the
-                  // row updates the moment the rider accepts / advances.
-                  // `?? ORDER_STATUS.PENDING` guarantees the badge never
-                  // renders "undefined" even if the payload lacks `status`.
-                  const liveStatus =
-                    statusUpdates[String(id)]?.status ??
-                    order.status ??
-                    ORDER_STATUS.PENDING;
-                  const riderHandle =
-                    order.rider?.username ||
-                    order.rider?.name ||
-                    order.rider?.email ||
-                    null;
-                  return (
-                    <tr key={id}>
-                      <td className="table__product">
-                        <strong>#{String(id).slice(-6).toUpperCase()}</strong>
-                        <span className="muted small">
-                          {order.items?.length || 0} item(s)
-                        </span>
-                      </td>
-                      <td className="muted small">
-                        {new Date(order.createdAt).toLocaleString()}
-                      </td>
-                      <td className="price">{formatCurrency(order.total)}</td>
-                      <td>
-                        <span
-                          className={`badge badge--${
-                            ORDER_STATUS_TONE[liveStatus] || 'info'
-                          }`}
-                        >
-                          {formatStatus(liveStatus)}
-                        </span>
-                      </td>
-                      <td>
-                        {order.rider
-                          ? riderHandle
-                            ? `@${riderHandle}`
-                            : 'Assigned'
-                          : 'Unclaimed'}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
 
       {/* ---- Storefront details - owner only ------------------------------ */}
       {isOwner ? (
