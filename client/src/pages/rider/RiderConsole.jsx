@@ -5,6 +5,7 @@ import { useSocket } from '../../context/SocketContext';
 import orderService from '../../services/orderService';
 import storeService from '../../services/storeService';
 import {
+  CLOSED_STATUSES,
   ORDER_STATUS,
   ORDER_STATUS_FLOW,
   ORDER_STATUS_TONE,
@@ -37,9 +38,10 @@ const DATE_OPTIONS = [
   { value: 'custom', label: 'Custom range' },
 ];
 
-/** A status the rider is done with - "in progress" means neither of these. */
-const isClosed = (status) =>
-  status === ORDER_STATUS.DELIVERED || status === ORDER_STATUS.CANCELLED;
+/** A status the rider is done with - "in progress" means none of these. That
+ *  includes `received`: once the customer has confirmed the parcel, the job is
+ *  over even though the rider never set that status themselves. */
+const isClosed = (status) => CLOSED_STATUSES.includes(status);
 
 /**
  * Parses a <input type="date"> value ("2026-09-26") into a *local* midnight.

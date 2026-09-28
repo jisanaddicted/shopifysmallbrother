@@ -154,11 +154,23 @@ export const ORDER_STATUS = {
   READY_FOR_PICKUP: 'ready_for_pickup',
   PICKED_UP: 'picked_up',
   OUT_FOR_DELIVERY: 'out_for_delivery',
+  // The rider has handed it over. The order is not over yet though - see
+  // RECEIVED below.
   DELIVERED: 'delivered',
+  // The customer pressed "Confirm delivery received". This is the only state in
+  // which a review may be written, so it is a real status rather than a
+  // cosmetic rename of `delivered`.
+  RECEIVED: 'received',
   CANCELLED: 'cancelled',
 };
 
-// The happy path in order - used by the tracker timeline and rider buttons.
+// The happy path in order - used by the rider console's "next step" button and
+// by the server to validate rider transitions.
+//
+// `received` is deliberately absent: a rider's job ends at the doorstep. Only the
+// customer can close the loop (PATCH /orders/:id/receive), which is what stops a
+// rider from marking a parcel received on the customer's behalf. Mirror of
+// ORDER_STATUS_FLOW in backend/src/utils/constants.js - keep both in sync.
 export const ORDER_STATUS_FLOW = [
   ORDER_STATUS.PENDING,
   ORDER_STATUS.CONFIRMED,
@@ -167,6 +179,20 @@ export const ORDER_STATUS_FLOW = [
   ORDER_STATUS.PICKED_UP,
   ORDER_STATUS.OUT_FOR_DELIVERY,
   ORDER_STATUS.DELIVERED,
+];
+
+// What the Progress timeline draws. Same as the rider's flow plus the one stop
+// only the customer can reach, so a shopper watching the tracker sees the final
+// step light up when they confirm. Mirror of TRACKER_FLOW in the backend.
+export const TRACKER_FLOW = [...ORDER_STATUS_FLOW, ORDER_STATUS.RECEIVED];
+
+// A status nothing more will happen to. Used wherever a "live"/"in progress"
+// list is built (rider console, merchant dashboard, dispatch boards) so a
+// received order stops being counted as unfinished work.
+export const CLOSED_STATUSES = [
+  ORDER_STATUS.DELIVERED,
+  ORDER_STATUS.RECEIVED,
+  ORDER_STATUS.CANCELLED,
 ];
 
 // The ONLY status moves the admin panel may make from an order page: a confirmed
@@ -188,6 +214,11 @@ export const ORDER_STATUS_LABELS = {
   [ORDER_STATUS.PICKED_UP]: 'Picked up',
   [ORDER_STATUS.OUT_FOR_DELIVERY]: 'Out for delivery',
   [ORDER_STATUS.DELIVERED]: 'Delivered',
+  // "Delivery received" rather than another "delivered": the rider's `delivered`
+  // means they dropped it off, and this means it is in the customer's hands. The
+  // two words are kept distinct on purpose so the timeline reads as two
+  // different facts instead of the same one stated twice.
+  [ORDER_STATUS.RECEIVED]: 'Delivery received',
   [ORDER_STATUS.CANCELLED]: 'Cancelled',
 };
 
@@ -200,6 +231,7 @@ export const ORDER_STATUS_TONE = {
   [ORDER_STATUS.PICKED_UP]: 'active',
   [ORDER_STATUS.OUT_FOR_DELIVERY]: 'active',
   [ORDER_STATUS.DELIVERED]: 'success',
+  [ORDER_STATUS.RECEIVED]: 'success',
   [ORDER_STATUS.CANCELLED]: 'danger',
 };
 

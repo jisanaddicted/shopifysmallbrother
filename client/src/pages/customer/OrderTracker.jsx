@@ -2,14 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import DeliveryMap from '../../components/maps/DeliveryMap';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import OrderReview from '../../components/store/OrderReview';
 import { useSocket } from '../../context/SocketContext';
+import { useAuth } from '../../context/AuthContext';
 import orderService from '../../services/orderService';
 import {
   ADMIN_STATUS_STEPS,
   ORDER_STATUS,
-  ORDER_STATUS_FLOW,
   ORDER_STATUS_TONE,
   ROUTES,
+  TRACKER_FLOW,
+  customerPath,
+  getGuestToken,
+  shopPath,
 } from '../../utils/constants';
 import {
   formatCurrency,
@@ -48,12 +53,19 @@ export default function OrderTracker({
   const { orderId } = useParams();
   const { joinOrder, leaveOrder, getRiderLocation, statusUpdates, connected } =
     useSocket();
+  const { user } = useAuth();
 
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [advancing, setAdvancing] = useState(false);
   const [advanceError, setAdvanceError] = useState('');
+  const [receiving, setReceiving] = useState(false);
+  const [receiveError, setReceiveError] = useState('');
+  // Did this customer already leave a review? Drives the wording of the
+  // "what next" panel below, so a finished order can nudge them to order again
+  // instead of looking like a dead end.
+  const [hasReview, setHasReview] = useState(false);
 
   const loadOrder = useCallback(async () => {
     setLoading(true);
@@ -112,6 +124,27 @@ export default function OrderTracker({
     }
   };
 
+  // --- Customer: close the loop --------------------------------------------
+  // The rider's "Mark delivered" says they left the parcel; this says it arrived.
+  // Adopting the response straight away (like the admin's advance above) means
+  // the button swaps to the review form without waiting for a refresh or for the
+  // socket to catch up.
+  const confirmReceived = async () => {
+    if (receiving) return;
+
+    setReceiving(true);
+    setReceiveError('');
+
+    try {
+      const updated = await orderService.confirmOrderReceived(orderId);
+      setOrder(updated);
+    } catch (err) {
+      setReceiveError(err.message || 'Could not confirm the delivery.');
+    } finally {
+      setReceiving(false);
+    }
+  };
+
   const customerLocation = order?.location || order?.address?.location || null;
   const riderLocation =
     getRiderLocation(orderId) ||
@@ -119,10 +152,13 @@ export default function OrderTracker({
     order?.rider?.location ||
     null;
 
+  // The customer's timeline runs to the one step the rider's cannot: "Delivery
+  // received" only lights up once they have confirmed it themselves, which is
+  // exactly the moment the review form appears below.
   const timeline = useMemo(() => {
-    const currentIndex = ORDER_STATUS_FLOW.indexOf(status);
+    const currentIndex = TRACKER_FLOW.indexOf(status);
 
-    return ORDER_STATUS_FLOW.map((step, index) => ({
+    return TRACKER_FLOW.map((step, index) => ({
       step,
       done: currentIndex >= index && currentIndex !== -1,
       current: index === currentIndex,
@@ -213,6 +249,69 @@ export default function OrderTracker({
   // The customer tracker is full-bleed (it has the navbar above it); every
   // shell-mounted view uses the standard back-office page padding.
   const pageClass = isStaffView ? 'page' : 'page page--customer';
+
+  // --- The customer's end of the order -------------------------------------
+  // Everything below is for the shopper only - the admin and rider variants of
+  // this page are back-office views and must not offer to "confirm" or "review"
+  // somebody else's delivery on their behalf.
+  //
+  // The gate is WHO placed the order, not the role. Two ways to be that person:
+  // a signed-in account matching the order's customer, or a guest holding the
+  // guestToken this device was given at checkout (the same proof /cancel uses).
+  // Comparing the ids also keeps a signed-in rider or admin from being offered
+  // the button on an order they can merely view.
+  const isOrderOwner = Boolean(
+    order?.customer?._id && String(order.customer._id) === String(user?._id),
+  );
+  // A guest order: no account on it at all. The stored token is what proves this
+  // device placed it, so a guest gets the confirm button too - they still
+  // received the parcel, so they still get the last word on it.
+  const isGuestOrder = !order?.customer;
+  const hasGuestToken = Boolean(getGuestToken(orderId));
+  // May press "Confirm delivery received" - a signed-in owner, or a guest with
+  // the token. Reviews stay account-only (see OrderReview below).
+  const canConfirmReceived = isOrderOwner || (isGuestOrder && hasGuestToken);
+  const isCancelled = status === ORDER_STATUS.CANCELLED;
+  // "Start a new order" only makes sense once this one is done being tracked -
+  // i.e. after the review step - and it goes back to the storefront this order
+  // came from, falling back to the store picker for a legacy order with no
+  // merchant attached.
+  const startNewOrderPath = order?.store?.slug
+    ? shopPath(order.store.slug)
+    : ROUTES.STORE;
+  // A customer signs in at their own store's page, which is also where the slug
+  // comes from - so the "sign in to finish this order" link lands them exactly
+  // where a review can be attributed to an account afterwards.
+  const storeSignInPath = order?.store?.slug
+    ? customerPath(order.store.slug, 'login')
+    : ROUTES.LOGIN;
+
+  // The closing sequence, shown from the moment the order is placed rather than
+  // only once it is delivered. Hiding the panel until the last step meant a
+  // shopper watching a fresh order had no idea the step existed, and a guest saw
+  // nothing at all with no explanation. Both are now explicit states of the same
+  // panel: the button is always the same button, just armed or not.
+  const deliveredIndex = TRACKER_FLOW.indexOf(ORDER_STATUS.DELIVERED);
+  const receivedIndex = TRACKER_FLOW.indexOf(ORDER_STATUS.RECEIVED);
+  const flowIndex = TRACKER_FLOW.indexOf(status);
+  const riderHasDelivered = flowIndex >= deliveredIndex;
+  const customerHasReceived = flowIndex >= receivedIndex;
+
+  // The three checkpoints, so the panel reads as "where am I in this?" rather
+  // than as an unexplained form. Exactly one is `current` - the first one not
+  // done yet - which is the whole point: it names the step the customer is
+  // actually waiting on. Derived from the same status the server enforces, never
+  // from local state.
+  const closingSteps = [
+    { key: 'delivered', label: 'Delivered by the rider', done: riderHasDelivered },
+    {
+      key: 'received',
+      label: 'You confirm you received it',
+      done: customerHasReceived,
+    },
+    { key: 'review', label: 'Rate the delivery', done: false },
+  ];
+  const currentStepKey = (closingSteps.find((step) => !step.done) || {}).key;
 
   if (error) {
     return (
@@ -407,6 +506,116 @@ export default function OrderTracker({
             </ol>
           )}
         </section>
+
+        {/* The customer's closing sequence, present from the moment the order is
+            placed - not just once it is delivered. A shopper watching a fresh
+            order can see that confirming receipt is coming, and a guest is told
+            why they cannot do it yet instead of being shown nothing. The admin
+            and rider variants of this page never get it: they must not close or
+            review somebody else's delivery on the customer's behalf. */}
+        {!isStaffView && !isCancelled ? (
+          <section className="panel receive">
+            <h2 className="panel__title">Confirm your delivery</h2>
+            <p className="panel__subtitle">
+              {customerHasReceived
+                ? 'Thanks for confirming. Tell the store how it went.'
+                : riderHasDelivered
+                  ? 'Your rider has delivered this order. Confirm it once it is in your hands, then rate the delivery.'
+                  : 'When your rider delivers this order, the button below turns on so you can confirm it reached you.'}
+            </p>
+
+            {/* Where the order is in the hand-off, so the button is never a
+                mystery. Mirrors the Progress timeline above in words. */}
+            <ol className="close-steps">
+              {closingSteps.map((step) => (
+                <li
+                  key={step.key}
+                  className={`close-steps__item${step.done ? ' is-done' : ''}${
+                    step.key === currentStepKey ? ' is-current' : ''
+                  }`}
+                >
+                  <span className="close-steps__dot" aria-hidden="true" />
+                  {step.label}
+                </li>
+              ))}
+            </ol>
+
+            {receiveError ? (
+              <p className="alert alert--danger">{receiveError}</p>
+            ) : null}
+
+            {/* The one button the user asked for. It is always in the same
+                place; only its label and enabled state change. */}
+            {customerHasReceived ? (
+              isOrderOwner ? (
+                <>
+                  <OrderReview
+                    orderId={orderId}
+                    onSaved={(saved) => setHasReview(Boolean(saved))}
+                  />
+
+                  {/* The way out of a finished order, offered whether or not the
+                      shopper got round to reviewing - nobody should be stranded
+                      on a dead tracker. */}
+                  <div className="button-row">
+                    <Link className="btn btn-outline" to={startNewOrderPath}>
+                      Start a new order
+                    </Link>
+                    <span className="muted small">
+                      {hasReview
+                        ? 'Thanks for reviewing.'
+                        : 'You can review any time — this page keeps your order.'}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                /* A guest confirmed their own delivery - the button above did
+                   that for them, token and all - but a rating has to belong to an
+                   account, so this is the one step they cannot finish here.
+                   Offered without blocking anything: they can order again now. */
+                <div className="button-row">
+                  <Link className="btn btn-outline" to={startNewOrderPath}>
+                    Start a new order
+                  </Link>
+                  <span className="muted small">
+                    <Link to={storeSignInPath}>Sign in</Link> to rate this
+                    delivery.
+                  </span>
+                </div>
+              )
+            ) : riderHasDelivered ? (
+              canConfirmReceived ? (
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={confirmReceived}
+                    disabled={receiving}
+                  >
+                    {receiving
+                      ? 'Confirming…'
+                      : 'Confirm delivery received'}
+                  </button>
+                </div>
+              ) : (
+                <p className="alert alert--warn">
+                  This order has been delivered.{' '}
+                  <Link to={storeSignInPath}>Sign in</Link> to confirm you
+                  received it and leave a review.
+                </p>
+              )
+            ) : (
+              <div className="button-row">
+                <button type="button" className="btn" disabled>
+                  Confirm delivery received
+                </button>
+                <span className="muted small">
+                  Waiting for your rider to deliver.
+                </span>
+              </div>
+            )}
+          </section>
+        ) : null}
 
         {/*
           Back office only. A customer watching their own delivery sees the

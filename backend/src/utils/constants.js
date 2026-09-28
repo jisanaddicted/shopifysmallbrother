@@ -92,13 +92,24 @@ export const ORDER_STATUS = {
   READY_FOR_PICKUP: 'ready_for_pickup',
   PICKED_UP: 'picked_up',
   OUT_FOR_DELIVERY: 'out_for_delivery',
+  // The rider has handed the parcel over. Not the end of the story: the order is
+  // only really finished once the CUSTOMER says it turned up.
   DELIVERED: 'delivered',
+  // The customer confirmed receipt. This is the step a review hangs off, so it
+  // is deliberately a separate status rather than a rename of `delivered` -
+  // "the rider dropped it" and "the customer got it" are two different claims.
+  RECEIVED: 'received',
   CANCELLED: 'cancelled',
 };
 
 export const ORDER_STATUS_VALUES = Object.values(ORDER_STATUS);
 
 // The happy path in order - used to validate rider status transitions.
+//
+// `received` is NOT in here on purpose: this table is what a RIDER may walk an
+// order along, and the last thing a rider does is drop the parcel off. Closing
+// the loop is the customer's move, through PATCH /orders/:id/receive. Leave it
+// out and a rider can neither reach nor skip to it.
 export const ORDER_STATUS_FLOW = [
   ORDER_STATUS.PENDING,
   ORDER_STATUS.CONFIRMED,
@@ -108,6 +119,27 @@ export const ORDER_STATUS_FLOW = [
   ORDER_STATUS.OUT_FOR_DELIVERY,
   ORDER_STATUS.DELIVERED,
 ];
+
+// What the tracker draws, and the only place `received` appears in a sequence.
+// The rider's progress bar stops at "delivered" (that is as far as they can
+// take it); the customer's bar has one more stop, which only lights up once they
+// have pressed the button. Mirror of TRACKER_FLOW in client/src/utils/constants.js.
+export const TRACKER_FLOW = [...ORDER_STATUS_FLOW, ORDER_STATUS.RECEIVED];
+
+// A status nothing more will happen to. Anything counting "live" orders, or
+// deciding whether a rider still owns a job, must use this list rather than
+// comparing against `delivered` alone - otherwise a received order looks like
+// unfinished work forever.
+export const CLOSED_STATUSES = [
+  ORDER_STATUS.DELIVERED,
+  ORDER_STATUS.RECEIVED,
+  ORDER_STATUS.CANCELLED,
+];
+
+// The statuses a customer may confirm receipt FROM. Only once the rider has
+// actually delivered - confirming a parcel that is still on the road (or
+// cancelling one that has not left) would be a lie the review then inherits.
+export const RECEIVABLE_STATUSES = [ORDER_STATUS.DELIVERED];
 
 // A customer may cancel while the parcel is still with the store.
 export const CANCELLABLE_STATUSES = [
@@ -162,6 +194,9 @@ export default {
   ORDER_STATUS,
   ORDER_STATUS_VALUES,
   ORDER_STATUS_FLOW,
+  TRACKER_FLOW,
+  CLOSED_STATUSES,
+  RECEIVABLE_STATUSES,
   ADMIN_STATUS_STEPS,
   CANCELLABLE_STATUSES,
   PAYMENT_METHODS,

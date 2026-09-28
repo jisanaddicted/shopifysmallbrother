@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import storeService from '../../services/storeService';
 import {
+  CLOSED_STATUSES,
   ORDER_STATUS,
   ORDER_STATUS_TONE,
   ROUTES,
@@ -32,15 +33,13 @@ const ROSTER_TONE = {
   [STORE_RIDER_STATUS.REVOKED]: 'danger',
 };
 
-/** An order worth watching: a rider is on it and it is still in play. */
+/** An order worth watching: a rider is on it and it is still in play. A
+ *  customer-confirmed `received` counts as finished - the rider's job ended at
+ *  the doorstep, so the pin stops being followed. */
 const isOnTheRoad = (order) =>
-  Boolean(order?.rider) &&
-  order.status !== ORDER_STATUS.DELIVERED &&
-  order.status !== ORDER_STATUS.CANCELLED;
+  Boolean(order?.rider) && !CLOSED_STATUSES.includes(order?.status);
 
-const isOpen = (order) =>
-  order?.status !== ORDER_STATUS.DELIVERED &&
-  order?.status !== ORDER_STATUS.CANCELLED;
+const isOpen = (order) => !CLOSED_STATUSES.includes(order?.status);
 
 const orderIdOf = (order) => String(order?._id || order?.id || '');
 

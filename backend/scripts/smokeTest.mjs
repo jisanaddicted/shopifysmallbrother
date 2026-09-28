@@ -317,6 +317,20 @@ async function main() {
     });
     check('a customer cannot set the status', customerStatus.status === 403, `got ${why(customerStatus)}`);
 
+    // Closing the loop is a different question from setting the status, and it
+    // has a different answer: the customer may not drive a delivery, but they do
+    // get the last word. Checked here while the order is only `confirmed`, which
+    // is exactly the state where pressing "Confirm delivery received" early must
+    // be refused - otherwise a review could describe a parcel still in transit.
+    const earlyReceive = await api('PATCH', `/orders/${orderId}/receive`, {
+      token: sessions.customer,
+    });
+    check(
+      'the customer cannot confirm a delivery that has not been delivered',
+      earlyReceive.status === 400 && /not been delivered/.test(String(earlyReceive.data?.message)),
+      `got ${why(earlyReceive)}`,
+    );
+
     // --- Admin panel: the kitchen, and only the kitchen ----------------------
     // A platform admin only ever reaches orders of stores they actually run
     // (see canAccessOrder), so appoint this one first - the owner invites
@@ -449,6 +463,173 @@ async function main() {
 
     const riderRead = await api('GET', `/orders/${orderId}`, { token: sessions.rider });
     check('an involved rider can read the order', riderRead.status === 200, `got ${why(riderRead)}`);
+
+    // --- Customer closes the loop, then reviews ------------------------------
+    // The rider's `delivered` only claims they dropped the parcel off. Turning
+    // that into "it is in the customer's hands" is deliberately the customer's
+    // own move, and it is what unlocks the review.
+
+    // A rider must not be able to do it for them.
+    const riderReceive = await api('PATCH', `/orders/${orderId}/status`, {
+      token: sessions.rider,
+      body: { status: 'received' },
+    });
+    check(
+      'a rider cannot mark an order received for the customer',
+      riderReceive.status === 400,
+      `got ${why(riderReceive)}`,
+    );
+
+    // ...and a review is refused while the order is merely `delivered`.
+    const earlyReview = await api('POST', `/orders/${orderId}/review`, {
+      token: sessions.customer,
+      body: { rating: 5, comment: 'written far too early' },
+    });
+    check(
+      'a review is refused until the customer confirms receipt',
+      earlyReview.status === 400 && /Confirm you received/.test(String(earlyReview.data?.message)),
+      `got ${why(earlyReview)}`,
+    );
+
+    const received = await api('PATCH', `/orders/${orderId}/receive`, {
+      token: sessions.customer,
+    });
+    check(
+      'the customer can confirm they received the order',
+      received.status === 200 && received.data?.order?.status === 'received',
+      `got ${why(received)}/${received.data?.order?.status}`,
+    );
+    check(
+      'the receipt is written into the order history',
+      (received.data?.order?.statusHistory || []).some(
+        (entry) => entry?.status === 'received',
+      ),
+    );
+
+    // A double tap, or a retry after the response was lost on the tunnel, must
+    // not error - and must not stack a second `received` entry either.
+    const receiveAgain = await api('PATCH', `/orders/${orderId}/receive`, {
+      token: sessions.customer,
+    });
+    check(
+      'confirming twice is harmless',
+      receiveAgain.status === 200 && receiveAgain.data?.order?.status === 'received',
+      `got ${why(receiveAgain)}/${receiveAgain.data?.order?.status}`,
+    );
+    check(
+      'confirming twice does not duplicate the history entry',
+      (receiveAgain.data?.order?.statusHistory || []).filter(
+        (entry) => entry?.status === 'received',
+      ).length === 1,
+    );
+
+    const badRating = await api('POST', `/orders/${orderId}/review`, {
+      token: sessions.customer,
+      body: { rating: 6 },
+    });
+    check('a rating outside 1-5 stars is refused', badRating.status === 400, `got ${why(badRating)}`);
+
+    const halfStars = await api('POST', `/orders/${orderId}/review`, {
+      token: sessions.customer,
+      body: { rating: 4.5 },
+    });
+    check('half stars are refused', halfStars.status === 400, `got ${why(halfStars)}`);
+
+    const review = await api('POST', `/orders/${orderId}/review`, {
+      token: sessions.customer,
+      body: { rating: 5, comment: 'Arrived early and well packed.' },
+    });
+    check(
+      'the customer can review an order they received',
+      review.status === 200 && review.data?.review?.rating === 5,
+      `got ${why(review)}/${review.data?.review?.rating}`,
+    );
+
+    // A review belongs to the customer who placed the order - the rider on the
+    // job cannot read it, edit it or answer it.
+    const riderReview = await api('GET', `/orders/${orderId}/review`, {
+      token: sessions.rider,
+    });
+    check(
+      'a rider cannot read the customer review',
+      riderReview.status === 403,
+      `got ${why(riderReview)}`,
+    );
+
+    const strangerReview = await api('POST', `/orders/${orderId}/review`, {
+      token: sessions.admin,
+      body: { rating: 1, comment: 'not my order' },
+    });
+    check(
+      'somebody else cannot review an order they did not place',
+      strangerReview.status === 403,
+      `got ${why(strangerReview)}`,
+    );
+
+    // One review per order: re-submitting edits the same one rather than
+    // stacking a second opinion on the same delivery.
+    await api('POST', `/orders/${orderId}/review`, {
+      token: sessions.customer,
+      body: { rating: 4, comment: 'Arrived early and well packed.' },
+    });
+    const readBack = await api('GET', `/orders/${orderId}/review`, {
+      token: sessions.customer,
+    });
+    check(
+      're-submitting edits the review instead of adding a second',
+      readBack.status === 200 && readBack.data?.review?.rating === 4,
+      `got ${why(readBack)}/${readBack.data?.review?.rating}`,
+    );
+
+    const withdrawn = await api('DELETE', `/orders/${orderId}/review`, {
+      token: sessions.customer,
+    });
+    check(
+      'the customer can withdraw their own review',
+      withdrawn.status === 200 && withdrawn.data?.removed === true,
+      `got ${why(withdrawn)}`,
+    );
+
+    // Leave one on the order so the store-side read below has something to find.
+    const finalReview = await api('POST', `/orders/${orderId}/review`, {
+      token: sessions.customer,
+      body: { rating: 5, comment: 'Arrived early and well packed.' },
+    });
+    check(
+      'a review can be written again after being withdrawn',
+      finalReview.status === 200 && finalReview.data?.review?.rating === 5,
+      `got ${why(finalReview)}`,
+    );
+
+    // And the store gets to read it.
+    const storeReviews = await api('GET', `/stores/${storeId}/reviews`, {
+      token: ownerToken,
+    });
+    check(
+      'the store owner can read the reviews left on their deliveries',
+      storeReviews.status === 200 &&
+        (storeReviews.data?.reviews || []).some(
+          (entry) => String(entry?.order?._id || entry?.order) === String(orderId),
+        ),
+      `got ${why(storeReviews)}`,
+    );
+    check(
+      'the store review list carries the average and histogram',
+      storeReviews.status === 200 &&
+        (storeReviews.data?.distribution || []).length === 5 &&
+        Number.isFinite(storeReviews.data?.average),
+      `got ${why(storeReviews)}`,
+    );
+
+    // A finished order must never look like live work again - the rider's pool
+    // and the store's board both filter on "not closed".
+    const poolAfter = await api('GET', '/orders/pool', { token: sessions.rider });
+    check(
+      'a received order is not offered in the rider pool again',
+      !(poolAfter.data?.orders || []).some(
+        (entry) => (entry._id || entry.id) === orderId,
+      ),
+    );
 
     // --- Store-side rider analytics ------------------------------------------
     // The store owner's view of the same timings, rolled up per rider. Derived
@@ -884,6 +1065,114 @@ async function main() {
 
   const customerPool = await api('GET', '/orders/pool', { token: sessions.customer });
   check('a customer cannot see the delivery pool', customerPool.status === 403, `got ${customerPool.status}`);
+
+  // --- A guest closes their own order, without an account ------------------
+  // The "Confirm delivery received" button must NOT be account-only. Somebody
+  // who ordered without signing up still received the parcel, so they still get
+  // the last word on it - the guestToken from checkout is the proof, exactly as
+  // it already is for cancelling. What they still cannot do is REVIEW it.
+  const guestBuyable =
+    pizzaProducts.find((p) => Number(p.stock) >= 1) || pizzaProducts[0];
+  const guestOrder = await api('POST', '/orders', {
+    body: {
+      items: [{ productId: guestBuyable._id, quantity: 1 }],
+      address: {
+        line1: '7 Guest Lane',
+        city: 'Kathmandu',
+        phone: '+1 555 011 2222',
+      },
+      location: { lat: 27.7172, lng: 85.324 },
+      storeId: pizzaStore._id,
+      guest: { name: 'Walk-in Shopper' },
+    },
+  });
+  const guestOrderId = guestOrder.data?.order?._id || guestOrder.data?.order?.id;
+  const guestToken = guestOrder.data?.guestToken;
+  check(
+    'a guest can place an order and is handed a guest token',
+    // 201, not 200 - a fresh order is a creation.
+    (guestOrder.status === 200 || guestOrder.status === 201) &&
+      Boolean(guestOrderId) &&
+      Boolean(guestToken),
+    `got ${why(guestOrder)}`,
+  );
+  check(
+    'a guest order carries no customer',
+    Boolean(guestOrderId) && !guestOrder.data?.order?.customer,
+    String(guestOrder.data?.order?.customer),
+  );
+
+  if (guestOrderId && guestToken) {
+    // Still too early - the rider has not delivered it.
+    const guestEarly = await api('PATCH', `/orders/${guestOrderId}/receive`, {
+      body: { guestToken },
+    });
+    check(
+      'a guest cannot confirm a delivery that has not been delivered',
+      guestEarly.status === 400 && /not been delivered/.test(String(guestEarly.data?.message)),
+      `got ${why(guestEarly)}`,
+    );
+
+    // No token at all proves nothing.
+    const guestNoToken = await api('PATCH', `/orders/${guestOrderId}/receive`);
+    check(
+      'a guest order cannot be confirmed without its token',
+      guestNoToken.status === 401,
+      `got ${why(guestNoToken)}`,
+    );
+
+    const guestWrongToken = await api('PATCH', `/orders/${guestOrderId}/receive`, {
+      body: { guestToken: 'not-the-real-token' },
+    });
+    check(
+      'a made-up guest token is refused',
+      guestWrongToken.status === 401,
+      `got ${why(guestWrongToken)}`,
+    );
+
+    // Walk it to the doorstep, then let the guest close it.
+    await api('POST', `/orders/${guestOrderId}/claim`, { token: sessions.rider });
+    await api('PATCH', `/orders/${guestOrderId}/status`, {
+      token: sessions.rider,
+      body: { status: 'delivered' },
+    });
+
+    const guestReceived = await api('PATCH', `/orders/${guestOrderId}/receive`, {
+      body: { guestToken },
+    });
+    check(
+      'a guest can confirm they received their delivery',
+      guestReceived.status === 200 && guestReceived.data?.order?.status === 'received',
+      `got ${why(guestReceived)}/${guestReceived.data?.order?.status}`,
+    );
+    check(
+      'the guest receipt lands in the order history',
+      (guestReceived.data?.order?.statusHistory || []).some(
+        (entry) => entry?.status === 'received',
+      ),
+    );
+
+    // Confirming is about a parcel; rating it is about a person, and a guest
+    // order has no account to attribute the rating to.
+    const guestReview = await api('POST', `/orders/${guestOrderId}/review`, {
+      body: { guestToken, rating: 5 },
+    });
+    check(
+      'a guest still cannot leave a review',
+      guestReview.status === 401,
+      `got ${why(guestReview)}`,
+    );
+
+    // ...and a signed-in account that did not place it is refused too.
+    const strangerConfirm = await api('PATCH', `/orders/${guestOrderId}/receive`, {
+      token: sessions.customer,
+    });
+    check(
+      'a signed-in customer cannot confirm a guest order they did not place',
+      strangerConfirm.status === 403,
+      `got ${why(strangerConfirm)}`,
+    );
+  }
 
   // --- A rider may not take an order from a store they are not bound to ---
   // Same care as the first order: the grocer's catalogue is served newest-first

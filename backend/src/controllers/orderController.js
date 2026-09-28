@@ -8,8 +8,10 @@ import { HttpError } from '../middleware/errorHandler.js';
 import { hashGuestToken, issueGuestToken } from '../middleware/auth.js';
 import {
   CANCELLABLE_STATUSES,
+  CLOSED_STATUSES,
   ORDER_STATUS,
   ORDER_STATUS_VALUES,
+  RECEIVABLE_STATUSES,
   ROLES,
   STORE_CUSTOMER_SOURCE,
 } from '../utils/constants.js';
@@ -374,9 +376,93 @@ export const cancelOrder = asyncHandler(async (req, res) => {
   res.json({ order: updated });
 });
 
-// ---------------------------------------------------------------------------
-// Rider
-// ---------------------------------------------------------------------------
+/**
+ * PATCH /api/orders/:id/receive -> { order }
+ * (guests: body/query guestToken, or the x-guest-token header)
+ *
+ * The customer closes the loop: the rider has dropped the parcel off
+ * (`delivered`), and now the person it was for says it is in their hands
+ * (`received`).
+ *
+ * A guest may do this, exactly as they may cancel. Someone who ordered without
+ * an account still received the parcel, so they still get the last word on it -
+ * they simply prove it with the `guestToken` handed out at checkout instead of
+ * a session. Verified in `loadOrderFor`, which only lets a token through for an
+ * order that has no customer of its own.
+ *
+ * What a guest still CANNOT do is review it (see reviewController): a rating has
+ * to be attributable to an account, and there is no account behind a guest
+ * order. The confirmation is about a parcel; the review is about a person.
+ *
+ * Only the customer who placed the order may do this, and only from a delivered
+ * order. A rider cannot mark a parcel received on the recipient's behalf, and a
+ * shopper cannot press the button while the order is still on the road - the
+ * review that hangs off this status is meant to describe something that turned
+ * up, not something that is expected to.
+ */
+export const confirmReceived = asyncHandler(async (req, res) => {
+  const guestToken =
+    req.body?.guestToken ||
+    req.query.guestToken ||
+    req.headers['x-guest-token'] ||
+    null;
+
+  const order = await loadOrderFor(req.params.id, req.user, guestToken);
+
+  // A guest caller is exactly who loadOrderFor just let through: no session,
+  // and an order with no customer on it. Anything else has to be the signed-in
+  // customer who placed this order.
+  const isGuestOrder = !order.customer;
+  const isGuestCaller = !req.user && isGuestOrder;
+
+  if (!isGuestCaller) {
+    if (!req.user) throw new HttpError(401, 'You need to sign in to do that.');
+
+    if (String(order.customer?._id || order.customer) !== String(req.user._id)) {
+      throw new HttpError(
+        403,
+        'Only the customer can confirm this order.',
+      );
+    }
+  }
+
+  // Already confirmed - answering 200 makes a double tap, or a retry after the
+  // response was lost on the tunnel, harmless.
+  if (order.status === ORDER_STATUS.RECEIVED) {
+    return res.json({ order });
+  }
+
+  if (!RECEIVABLE_STATUSES.includes(order.status)) {
+    throw new HttpError(
+      400,
+      order.status === ORDER_STATUS.CANCELLED
+        ? 'This order was cancelled, so there is nothing to receive.'
+        : 'This order has not been delivered yet.',
+    );
+  }
+
+  const updated = await applyStatus(order, ORDER_STATUS.RECEIVED, {
+    note: 'Delivery received by the customer',
+    // `req.user` is null for a guest caller, so this has to be optional - a bare
+    // req.user._id throws a 500 for exactly the people this route was opened up
+    // for. The history entry simply has no author id on a guest order, same as
+    // cancelOrder does.
+    by: req.user?._id || null,
+  });
+
+  // Same reason the rider's status change pings the store: the merchant's order
+  // list is not in the per-order room, so without this a confirmed delivery
+  // would sit stale on the dashboard until somebody hit Refresh.
+  if (updated.store) {
+    notifyStoreMembers(updated.store, {
+      orderId: String(updated._id),
+      kind: 'status',
+      status: ORDER_STATUS.RECEIVED,
+    }).catch(() => {});
+  }
+
+  res.json({ order: updated });
+});
 
 /** GET /api/orders/rider/assigned -> { orders } */
 export const listRiderOrders = asyncHandler(async (req, res) => {
@@ -523,7 +609,9 @@ export const listOrderPool = asyncHandler(async (req, res) => {
 
   const orders = await Order.find({
     rider: null,
-    status: { $nin: [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED] },
+    // Nothing finished may be re-claimed, and "finished" includes an order the
+    // customer has already confirmed receiving.
+    status: { $nin: CLOSED_STATUSES },
     $or: [{ store: { $in: storeIds } }, { store: null }],
   })
     // Oldest first: the order that has waited longest gets picked up first.
@@ -574,7 +662,7 @@ export const claimOrder = asyncHandler(async (req, res) => {
     {
       _id: existing._id,
       rider: null,
-      status: { $nin: [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED] },
+      status: { $nin: CLOSED_STATUSES },
     },
     {
       // Claiming IS accepting the delivery, so the order must move forward

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   cancelOrder,
   claimOrder,
+  confirmReceived,
   createOrder,
   getOrder,
   getRiderAnalytics,
@@ -14,6 +15,11 @@ import {
   updateOrderStatus,
   updateRiderLocation,
 } from '../controllers/orderController.js';
+import {
+  deleteOrderReview,
+  getOrderReview,
+  writeReview,
+} from '../controllers/reviewController.js';
 import { requireAuth, optionalAuth, requireRole, requireStoreStaff } from '../middleware/auth.js';
 import { ROLES } from '../utils/constants.js';
 
@@ -67,15 +73,32 @@ router.get(
 router.get('/', requireAuth, requireRole(ROLES.ADMIN), listAllOrders);
 
 // --- Guest checkout -------------------------------------------------------
-// Creating an order and viewing/cancelling it with the guestToken need NO
-// account.
+// Creating an order, and following/cancelling/confirming it with the
+// guestToken, need NO account. A guest who ordered without signing up still
+// receives the parcel, so they still get the last word on it - only the REVIEW
+// below needs an identity to attribute the rating to.
 router.post('/', optionalAuth, createOrder);
 router.get('/:id', optionalAuth, getOrder);
 router.patch('/:id/cancel', optionalAuth, cancelOrder);
+// The customer closing the loop. Deliberately its own route rather than
+// PATCH /:id/status, which stays rider/admin-only: a rider must not be able to
+// mark somebody else's parcel received. Registered up here (not below
+// requireAuth) so a guest can reach it with their token, exactly like /cancel.
+router.patch('/:id/receive', optionalAuth, confirmReceived);
 
 router.use(requireAuth);
 
 // --- One order ------------------------------------------------------------
+// --- Reviews --------------------------------------------------------------
+// requireAuth (not a role check) because the controller does the real test: it
+// loads the order and insists the signed-in account is the customer who placed
+// it. Guests are excluded on purpose - see the note above. One review per order,
+// so a second submit overwrites the first.
+router.get('/:id/review', getOrderReview);
+router.post('/:id/review', writeReview);
+router.put('/:id/review', writeReview);
+router.delete('/:id/review', deleteOrderReview);
+
 router.post('/:id/claim', requireRole(ROLES.RIDER), claimOrder);
 router.patch(
   '/:id/status',

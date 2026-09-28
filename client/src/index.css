@@ -1518,6 +1518,122 @@ ol {
   background: var(--surface);
 }
 
+/* --- Delivery confirmation & reviews ------------------------------------- */
+/* The customer's last two steps on an order: confirming the parcel arrived
+   (OrderTracker.jsx, section.receive) and rating it (OrderReview.jsx,
+   form.review). */
+
+/* Sits between the Progress timeline and the order details on the tracker, so
+   it gets a little breathing room rather than butting up against them. */
+.receive {
+  margin-top: 1rem;
+}
+
+/* The three closing checkpoints (delivered -> received -> rated). A compact
+   restatement of the Progress timeline, so the "confirm you received it" button
+   is never a surprise when it comes alive. */
+.close-steps {
+  list-style: none;
+  margin: 0.75rem 0 1rem;
+  padding: 0;
+}
+
+.close-steps__item {
+  position: relative;
+  padding: 0.3rem 0 0.3rem 1.6rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.close-steps__dot {
+  position: absolute;
+  left: 0;
+  top: 0.55rem;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.close-steps__item.is-done {
+  color: var(--ink-soft);
+}
+
+.close-steps__item.is-done .close-steps__dot {
+  border-color: var(--ok);
+  background: var(--ok);
+}
+
+/* The one step the customer is actually waiting on - called out in the ink
+   colour and at full weight, so the eye lands on it rather than scanning three
+   identical grey lines. */
+.close-steps__item.is-current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.close-steps__item.is-current .close-steps__dot {
+  border-color: var(--brand);
+  background: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.5rem;
+}
+
+.review .field {
+  margin-top: 0.6rem;
+}
+
+/* The star row. Big touch targets on purpose: this is pressed on a phone, and
+   a 1-5 rating picked with a fingertip should not need aiming. */
+.stars {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex-wrap: wrap;
+  margin: 0.35rem 0 0.1rem;
+}
+
+.stars__star {
+  background: none;
+  border: 0;
+  padding: 0.1rem 0.15rem;
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+  /* Dimmed by default; `.is-on` fills them. Not colour alone - the fill is the
+     state, so it survives a greyscale/high-contrast rendering. */
+  color: var(--line);
+  transition: color 120ms ease, transform 120ms ease;
+}
+
+.stars__star.is-on {
+  color: #f59e0b;
+}
+
+.stars__star:hover,
+.stars__star:focus-visible {
+  transform: scale(1.12);
+}
+
+.stars__star:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.stars__word {
+  margin-left: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
 /* --- Profile page --------------------------------------------------------- */
 .navbar__user {
   text-decoration: none;

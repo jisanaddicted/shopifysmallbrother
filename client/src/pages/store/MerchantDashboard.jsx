@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import storeService from '../../services/storeService';
 import {
+  CLOSED_STATUSES,
   ORDER_STATUS,
   ORDER_STATUS_TONE,
   STORE_CUSTOMER_SOURCE_LABELS,
@@ -398,10 +399,11 @@ export default function MerchantDashboard() {
     );
   }
 
+  // "Still live" means not finished, and an order the customer has confirmed
+  // receiving is finished - so it must drop off this board, not sit here
+  // looking like work still to do.
   const liveOrders = orders.filter(
-    (order) =>
-      order.status !== ORDER_STATUS.DELIVERED &&
-      order.status !== ORDER_STATUS.CANCELLED,
+    (order) => !CLOSED_STATUSES.includes(order.status),
   );
 
   const activeStoreId = storeIdRef.current

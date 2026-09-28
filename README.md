@@ -218,6 +218,11 @@ no-response network failure into *"Cannot reach the API server at
 | `PATCH` | `/orders/:id/cancel` | customer | cancel before pickup |
 | `GET` | `/orders/rider/assigned` | rider | this rider's deliveries |
 | `PATCH` | `/orders/:id/status` | assigned rider / admin | advance the status. A rider walks the happy path (or jumps to `delivered`); an admin may only do `confirmed` → `preparing` → `ready_for_pickup` |
+| `PATCH` | `/orders/:id/receive` | the buyer — signed-in customer, **or guest with their `guestToken`** | confirm the parcel arrived (`delivered` → `received`). Idempotent, and refused until the rider has actually delivered |
+| `GET` | `/orders/:id/review` | the customer who placed it | this delivery's review, or `null`. Only written once the order is `received` |
+| `POST` `PUT` | `/orders/:id/review` | the customer who placed it | write or overwrite the review `{ rating, comment }` — 1–5 whole stars, 500 chars max |
+| `DELETE` | `/orders/:id/review` | the customer who placed it | withdraw your own review |
+| `GET` | `/stores/:id/reviews` | store staff (owner / appointed store admin) | every review left on this store's deliveries, newest first, with the average and a 1–5 histogram |
 | `PATCH` | `/orders/:id/location` | assigned rider | GPS fallback ping |
 | `GET` | `/orders` | admin | dispatch board (`status`, `page`) — only orders of stores the admin runs |
 | `GET` | `/orders/rider/analytics` | rider | how long each stage of *their* deliveries took |
@@ -288,6 +293,33 @@ join an order room you own, are delivering, or administer.
   a rewind, or a self-declared `delivered` with a 403 even if the request is
   hand-made. Pushing it on the road stays the rider's job, and cancelling stays
   the customer's.
+- **`delivered` is the rider's claim, `received` is the buyer's.** The rider
+  pressing "Mark delivered" only says they dropped the parcel off. Turning that
+  into "it is in the buyer's hands" is a separate step *they* take with
+  `PATCH /orders/:id/receive` — a distinct status (`received`), not a rename, and
+  deliberately absent from `ORDER_STATUS_FLOW` so neither a rider nor the
+  server's own transition check can reach it on the rider's behalf. The tracker's
+  timeline uses `TRACKER_FLOW` (the rider's flow plus this one stop), while
+  everything counting live work filters on `CLOSED_STATUSES`, which treats
+  `received` as finished.
+- **A guest can confirm receipt, but not review.** Somebody who ordered without
+  an account still received the parcel, so `/receive` is `optionalAuth` and
+  accepts the `guestToken` from checkout — exactly as `PATCH /orders/:id/cancel`
+  already did. The token is the proof: `loadOrderFor` only accepts it for an
+  order that has no customer of its own, so a made-up token gets 401 and a
+  signed-in account that did not place the order gets 403. The *review* stays
+  `requireAuth`, because a rating is a public judgement on a merchant and has to
+  be attributable to an account somebody can be held to. The confirmation is
+  about a parcel; the review is about a person.
+- **A review can only describe a parcel that turned up.** `Review` is one row per
+  order (unique index on `order`, so re-submitting *edits* rather than stacking a
+  second opinion), and `reviewController.writeReview` refuses with 400 until the
+  order is `received` — the rating is evidence about a delivery, not an
+  expectation. Whole stars only: half stars are rejected rather than rounded,
+  because 4.5 means different things to two people reading a dashboard. Only the
+  customer who placed the order may write, read, edit or delete it. Reviews are
+  shown to the customer and the store dashboard only — nothing is served on the
+  public storefront yet.
 - **Every status change is timestamped, and that is the only source of the timing
   numbers.** `applyStatus` (and `claimOrder`) push `{ status, note, by, at }` onto
   `Order.statusHistory`, so a delivery finished last month still reports exactly
@@ -354,6 +386,8 @@ backend/src/
   middleware/auth.js             requireAuth / optionalAuth / requireRole / requireStoreStaff
   models/                        User.js, Store.js, StoreRider.js, StoreCustomer.js,
                                  Product.js, Order.js
+  controllers/reviewController.js write/overwrite/read/withdraw a customer's review,
+                                  plus the store's review list (average + histogram)
   utils/constants.js             ROLES, SELF_SIGNUP_ROLES, statuses (mirror of client!)
   utils/jwt.js                   signToken { sub, role } / verifyToken / bearerFromHeader
   utils/storeAccess.js           storesForUser, loadManageableStore (owner / accepted admin)

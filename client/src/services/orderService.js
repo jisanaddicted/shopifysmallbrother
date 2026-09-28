@@ -55,6 +55,52 @@ export const cancelOrder = (orderId, reason = '', { guestToken } = {}) => {
     .then((res) => res.data.order || res.data);
 };
 
+/**
+ * PATCH /orders/:id/receive - "Confirm delivery received".
+ *
+ * The buyer's half of the handoff: the rider has dropped the parcel off, and
+ * this is the shopper saying it is in their hands. Deliberately its own endpoint
+ * rather than updateOrderStatus(), which the server restricts to riders and
+ * admins - a rider must not be able to mark somebody else's parcel received.
+ *
+ * Works for a guest exactly as cancelOrder() does: the guestToken stored at
+ * checkout is attached automatically, so somebody who ordered without an account
+ * still gets the button and the same right to press it. They just cannot leave a
+ * review afterwards (the server needs an identity to attribute a rating to).
+ *
+ * This is what unlocks the review below, so it is the only status in which one
+ * can be written. Safe to call twice: the server answers 200 if already
+ * confirmed.
+ */
+export const confirmOrderReceived = (orderId) => {
+  const token = getGuestToken(orderId) || null;
+  return api
+    .patch(`/orders/${orderId}/receive`, token ? { guestToken: token } : {})
+    .then((res) => res.data.order || res.data);
+};
+
+// ---------------------------------------------------------------------------
+// Reviews
+//
+// One review per order, and only after the customer has confirmed receipt. The
+// form (components/store/OrderReview.jsx) is both "write a review" and "edit my
+// review" - re-submitting overwrites rather than stacking a second opinion.
+// ---------------------------------------------------------------------------
+
+/** GET /orders/:id/review - the review on this order, or null when there is none. */
+export const getOrderReview = (orderId) =>
+  api.get(`/orders/${orderId}/review`).then((res) => res.data.review || null);
+
+/** POST /orders/:id/review { rating, comment } - write or update the review. */
+export const submitOrderReview = (orderId, { rating, comment = '' }) =>
+  api
+    .post(`/orders/${orderId}/review`, { rating, comment })
+    .then((res) => res.data.review || res.data);
+
+/** DELETE /orders/:id/review - withdraw your own review. */
+export const deleteOrderReview = (orderId) =>
+  api.delete(`/orders/${orderId}/review`).then((res) => res.data);
+
 // ---------------------------------------------------------------------------
 // Rider endpoints
 // ---------------------------------------------------------------------------
@@ -113,6 +159,10 @@ export default {
   getMyOrders,
   getOrderById,
   cancelOrder,
+  confirmOrderReceived,
+  getOrderReview,
+  submitOrderReview,
+  deleteOrderReview,
   getRiderOrders,
   getRiderAnalytics,
   updateOrderStatus,

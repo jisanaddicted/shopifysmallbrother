@@ -11,6 +11,7 @@ import {
   updateMyStore,
 } from '../controllers/storeController.js';
 import { requireAuth, requireRole, requireStoreStaff } from '../middleware/auth.js';
+import { listStoreReviews } from '../controllers/reviewController.js';
 import { ROLES } from '../utils/constants.js';
 
 const router = Router();
@@ -45,6 +46,14 @@ router.delete('/:id/riders/:riderId', requireAuth, manageRoster, removeStoreRide
 // --- Customers who signed up at this store's public page. Anybody who can
 // work the store's orders may see them, so this is NOT owner-only. -----------
 router.get('/:id/customers', requireAuth, requireStoreStaff, listStoreCustomers);
+
+// --- What customers said about this store's deliveries. requireStoreStaff, not
+// owner-only, because an appointed store admin works the store's orders too and
+// the reviews are feedback on exactly those. The controller resolves the store
+// through loadManageableStore, so a platform admin who runs the store also
+// qualifies. Registered before "/:slug" below so "reviews" is never read as a
+// storefront slug.
+router.get('/:id/reviews', requireAuth, requireStoreStaff, listStoreReviews);
 
 // --- Public storefront: this is what /s/<slug> loads, no login required -----
 router.get('/:slug', getPublicStore);

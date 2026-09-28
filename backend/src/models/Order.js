@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import {
+  CLOSED_STATUSES,
   ORDER_STATUS,
   ORDER_STATUS_VALUES,
   PAYMENT_METHODS,
@@ -136,10 +137,10 @@ orderSchema.virtual('id').get(function getId() {
 
 /** Shorthand used across the controllers: is this order still in play? */
 orderSchema.virtual('isOpen').get(function isOpen() {
-  return (
-    this.status !== ORDER_STATUS.DELIVERED &&
-    this.status !== ORDER_STATUS.CANCELLED
-  );
+  // Closed means closed - `received` counts too. A customer-confirmed delivery
+  // is finished, even though its `status` is not `delivered` any more, and any
+  // list of live work that forgot that would show a done order forever.
+  return !CLOSED_STATUSES.includes(this.status);
 });
 
 export const Order = mongoose.model('Order', orderSchema);

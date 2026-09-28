@@ -123,6 +123,16 @@ export const listStoreRiders = (storeId) =>
 export const listStoreCustomers = (storeId) =>
   api.get(`/stores/${storeId}/customers`).then((res) => res.data);
 
+/**
+ * GET /stores/:id/reviews -> { store, role, reviews, total, average, distribution }
+ *
+ * Every customer's rating of this store's deliveries, newest first, plus the
+ * average and a 1-to-5 histogram. Scoped by the server to the store owner, an
+ * appointed store admin, or a platform admin running the store.
+ */
+export const listStoreReviews = (storeId) =>
+  api.get(`/stores/${storeId}/reviews`).then((res) => res.data || {});
+
 /** POST /stores/:id/riders { username, role } - invites a rider or store admin. */
 export const inviteRider = (storeId, username, role = 'rider') =>
   api
@@ -190,6 +200,7 @@ export default {
   lookupUser,
   listStoreRiders,
   listStoreCustomers,
+  listStoreReviews,
   inviteRider,
   removeStoreRider,
   listStores,
