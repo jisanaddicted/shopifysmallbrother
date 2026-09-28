@@ -148,10 +148,16 @@ export default function PaymentSuccess() {
           <>
             <h2 className="panel__subtitle">What you bought</h2>
             <ul className="summary__lines">
-              {payment.order.items.map((line) => (
-                <li key={line.name}>
+              {payment.order.items.map((line, index) => (
+                <li key={`${line.name}-${index}`}>
                   <span className="summary__line-name">
                     {line.name}
+                    {/* The key is now indexed because two lines can share a name
+                        - "Tee" bought in two sizes - and a name-only key would
+                        collide and make React drop one of them. */}
+                    {line.variantTitle ? (
+                      <em className="summary__line-variant"> {line.variantTitle}</em>
+                    ) : null}
                     <em>× {line.quantity}</em>
                   </span>
                   <span>{formatCurrency(line.price * line.quantity)}</span>

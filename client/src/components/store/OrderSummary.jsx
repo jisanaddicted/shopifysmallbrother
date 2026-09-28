@@ -36,6 +36,11 @@ export default function OrderSummary({
             <li key={line._id || line.name}>
               <span className="summary__line-name">
                 {line.name}
+                {/* Which option, so a shopper checking out two sizes of the same
+                    thing can tell the lines apart. Absent for a plain product. */}
+                {line.variantTitle ? (
+                  <em className="summary__line-variant"> {line.variantTitle}</em>
+                ) : null}
                 <em>× {line.quantity}</em>
               </span>
               <span>{formatCurrency(line.price * line.quantity)}</span>

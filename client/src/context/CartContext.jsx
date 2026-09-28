@@ -14,8 +14,26 @@ import {
 
 const CartContext = createContext(null);
 
-/** A cart line is keyed by _id (Mongo) or id (SQL/other backends). */
+/**
+ * A cart line is keyed by _id (Mongo) or id (SQL/other backends).
+ *
+ * For a product with variants this is the VARIANT's id, not the product's - two
+ * sizes of the same shirt are two different things to buy and must be two
+ * separate lines that can have separate quantities. A product with no variants
+ * keeps using its own id, which is what every existing saved cart contains.
+ */
 const idOf = (product) => product?._id || product?.id || product?.productId;
+
+/**
+ * The cart key for a line.
+ *
+ * A variant product keys on the variant; anything else keys on the product. The
+ * variant is detected off the item itself (`variantId` set by the product card,
+ * which already knows which row was picked) rather than by re-reading the
+ * product, so a line restored from `localStorage` behaves identically to a fresh
+ * one.
+ */
+const lineKey = (product) => product?.variantId || idOf(product);
 
 function readStoredCart() {
   try {
@@ -37,7 +55,7 @@ export function CartProvider({ children }) {
   }, [items]);
 
   const addItem = useCallback((product, quantity = 1) => {
-    const key = idOf(product);
+    const key = lineKey(product);
     if (!key) return;
 
     setItems((prev) => {
@@ -59,6 +77,16 @@ export function CartProvider({ children }) {
           price: Number(product.price) || 0,
           image: product.image || '',
           quantity,
+          // Carried so the cart can render "L / Blue" and the server knows which
+          // row to price. Both are optional: a product with no variants sends
+          // neither, and the server falls back to the product's own price.
+          ...(product.variantId
+            ? {
+                productId: idOf(product),
+                variantId: product.variantId,
+                variantTitle: product.variantTitle || '',
+              }
+            : {}),
         },
       ];
     });

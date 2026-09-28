@@ -88,6 +88,16 @@ export default function CartDrawer() {
 
                   <div className="cart-line__info">
                     <p className="cart-line__name">{line.name}</p>
+
+                    {/* Which option was actually chosen. Printed on its own line
+                        because a shopper scanning the cart needs to tell two
+                        lines of the same product apart at a glance. */}
+                    {line.variantTitle ? (
+                      <p className="muted small cart-line__variant">
+                        {line.variantTitle}
+                      </p>
+                    ) : null}
+
                     <p className="muted">{formatCurrency(line.price)} each</p>
 
                     <div className="qty">

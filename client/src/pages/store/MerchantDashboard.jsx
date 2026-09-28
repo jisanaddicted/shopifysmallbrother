@@ -430,6 +430,29 @@ export default function MerchantDashboard() {
           </p>
         </div>
         <div className="button-row">
+          {/* Store switcher, only once the account actually runs more than
+              one store - the full "My storefronts" list used to live here. */}
+          {myStores.length > 1 ? (
+            <label className="field field--inline">
+              <span>Store</span>
+              <select
+                value={activeStoreId}
+                onChange={(event) => switchStore(event.target.value)}
+              >
+                {myStores.map((entry) => {
+                  const entryStore = entry.store || {};
+                  return (
+                    <option
+                      key={storeKey(entryStore) || entryStore.slug}
+                      value={String(entryStore._id || entryStore.id || '')}
+                    >
+                      {entryStore.name || 'Unnamed store'}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+          ) : null}
           {store.slug ? (
             <a
               className="btn btn-outline btn-sm"
@@ -452,102 +475,6 @@ export default function MerchantDashboard() {
 
       {notice ? <p className="alert alert--ok">{notice}</p> : null}
       {error ? <p className="alert alert--danger">{error}</p> : null}
-
-      {/* ---- Every storefront this account runs, each with its own landing-page link */}
-      <section className="panel">
-        <div className="panel__header">
-          <h2 className="panel__title">My storefronts</h2>
-          <span className="muted small">
-            Every store landing page for this account — open, copy or share
-            each link.
-          </span>
-        </div>
-
-        {myStores.length === 0 ? (
-          <p className="muted">
-            {store.slug ? (
-              <>
-                Landing page:{' '}
-                <Link to={shopPath(store.slug)}>/s/{store.slug}</Link>
-              </>
-            ) : (
-              'No storefronts yet.'
-            )}
-          </p>
-        ) : (
-          <ul className="rider-list">
-            {myStores.map((entry) => {
-              const entryStore = entry.store || {};
-              const key = storeKey(entryStore) || entryStore.slug;
-              const isActive = activeStoreId
-                ? String(entryStore._id || entryStore.id) === activeStoreId
-                : false;
-              const landing = storeUrl(entryStore);
-              return (
-                <li key={key}>
-                  <div
-                    className={`rider-list__item${isActive ? ' is-active' : ''}`}
-                  >
-                    <span className="rider-list__id">
-                      {entryStore.name || 'Unnamed store'}
-                      {isActive ? ' · viewing' : ''}
-                    </span>
-                    <span className="muted small">
-                      <Link to={shopPath(entryStore.slug)}>
-                        /s/{entryStore.slug}
-                      </Link>
-                      {entry.role === 'admin' ? ' · store admin' : ' · owner'}
-                      {entryStore.isActive === false
-                        ? ' · closed to customers'
-                        : ''}
-                    </span>
-                    <div className="button-row">
-                      <a
-                        className="btn btn-ghost btn-sm"
-                        href={landing}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open
-                      </a>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => {
-                          const url = landing;
-                          if (navigator.clipboard?.writeText) {
-                            navigator.clipboard
-                              .writeText(url)
-                              .then(() => flash('Landing-page link copied.'))
-                              .catch(() =>
-                                flash(`Copy this link: ${url}`),
-                              );
-                          } else {
-                            flash(`Copy this link: ${url}`);
-                          }
-                        }}
-                      >
-                        Copy link
-                      </button>
-                      {!isActive && entryStore._id ? (
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          onClick={() =>
-                            switchStore(entryStore._id || entryStore.id)
-                          }
-                        >
-                          View
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
 
       <div className="stats">
         <div className="stat">

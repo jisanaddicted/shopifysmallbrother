@@ -24,6 +24,24 @@ const orderItemSchema = new mongoose.Schema(
       ref: 'Product',
       default: null,
     },
+    // Which variant sold, when the product has any. Null for a product bought
+    // as a single version - the case for everything ordered before variants
+    // existed. It is NOT a ref to a separate collection (variants are embedded
+    // in their product), so this is an id the server resolves against the
+    // product document it already loaded.
+    variant: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
+    },
+    // The variant's label, "L / Blue", copied in for the same reason `name` is:
+    // an order is a historical receipt. If the merchant later renames the
+    // option or deletes the variant, the rider must still be able to read off
+    // exactly what was collected.
+    variantTitle: { type: String, trim: true, default: '' },
+    // What it sold for, versus what it is struck through at. Nullable because a
+    // sale with no compare-at price is the normal case.
+    compareAtPrice: { type: Number, min: 0, default: null },
+    sku: { type: String, trim: true, default: '' },
     name: { type: String, required: true, trim: true },
     price: { type: Number, required: true, min: 0, default: 0 },
     quantity: { type: Number, required: true, min: 1, default: 1 },

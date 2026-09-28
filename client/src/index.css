@@ -934,7 +934,244 @@ ol {
   font-weight: 600;
 }
 
-/* --- Order summary -------------------------------------------------------- */
+/* --- Variant matrix (merchant product form) --------------------------------
+   Scoped under `.vm` so nothing here can leak into the storefront's own
+   `.variant-chip` buttons, which are a different component entirely. */
+.vm {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-alt);
+}
+
+.vm__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* The component answers to its OWN width, not the viewport's.
+   The merchant form is a narrow sidebar on a 1400px screen, so a media query
+   would happily hand it a 3-column row with about 280px to fill - which
+   squashed the value chips into a vertical stack of "value" text and pushed
+   Remove on top of the Values label. A container query measures the box the
+   matrix actually lives in, which is the thing that has to fit. */
+.vm {
+  container-type: inline-size;
+}
+
+.vm__option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+@container (min-width: 34rem) {
+  .vm__option {
+    display: grid;
+    grid-template-columns: minmax(0, 9rem) minmax(0, 1fr) auto;
+    align-items: start;
+  }
+}
+
+.vm__remove {
+  align-self: flex-start;
+}
+
+.vm__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+/* `min-width: 0` matters: a flex item defaults to min-width:auto and refuses to
+   shrink below its content, which is what squeezed these into a vertical stack
+   of one letter per line. `flex: 0 1 auto` lets them wrap as whole chips. */
+.vm__chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.vm__chip input {
+  border: 0;
+  background: transparent;
+  padding: 0.3rem 0.5rem;
+  width: 100%;
+  min-width: 4.5rem;
+  font: inherit;
+  color: var(--ink);
+}
+
+.vm__chip button {
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0.2rem 0.45rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.vm__chip button:hover {
+  color: var(--danger, #dc2626);
+}
+
+/* The matrix has more columns than a 300px sidebar can hold, so it scrolls
+   sideways inside its own wrapper rather than being allowed to widen the page.
+   `overflow-x: auto` is on `.table-wrap` already; what it must NOT be is a
+   source of page-level horizontal scroll. */
+.vm__matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.vm__matrix-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.vm__table input.vm__input {
+  width: 5.5rem;
+  max-width: 100%;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.vm__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+/* Phones: keep the matrix inputs narrow enough to scroll sideways inside the
+   table wrapper, and let the page itself stay put. */
+@media (max-width: 640px) {
+  .vm__table input.vm__input {
+    width: 5rem;
+  }
+}
+
+/* --- Storefront option picker --------------------------------------------- */
+.variant-picker {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.variant-picker__label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  padding: 0;
+  margin-bottom: 0.3rem;
+}
+
+.variant-picker__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.variant-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  padding: 0.3rem 0.7rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.variant-chip:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--ink);
+}
+
+.variant-chip.is-active {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* A value that cannot lead to a real product. Struck through rather than merely
+   dimmed, so it reads as "not for this choice" and not "loading". */
+.variant-chip.is-unavailable {
+  opacity: 0.45;
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+
+.variant-chip:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.variant-picker__stock {
+  margin: 0.35rem 0 0;
+}
+
+/* The struck-through original beside a sale price. */
+.price__was {
+  color: var(--ink-soft);
+  opacity: 0.7;
+  font-weight: 400;
+  margin-right: 0.15rem;
+}
+
+.price__now {
+  color: var(--danger, #dc2626);
+}
+
+/* --- Variant label on receipts, carts and pick lists ----------------------- */
+.summary__line-variant,
+.cart-line__variant {
+  display: block;
+  font-style: normal;
+  color: var(--ink-soft);
+}
+
+.picklist__variant {
+  display: block;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--brand);
+  font-size: 0.85rem;
+}
+
+
 .summary__lines {
   display: flex;
   flex-direction: column;
@@ -1773,6 +2010,43 @@ ol {
 
 .profile__hint {
   margin: 0;
+}
+
+/* A merchant's storefront links + the "Copy URL" action, on the profile.
+   Each store is a row: name/link on the left, the copy button on the right. */
+.profile__stores {
+  width: 100%;
+  border-top: 1px solid var(--line);
+  padding-top: 0.85rem;
+}
+
+.profile__stores h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.profile__stores p {
+  margin: 0;
+}
+
+.profile__store-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.profile__store-row p {
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .profile__store-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 /* The ✕ in the profile header (see ProfilePage.jsx). It builds on .icon-btn

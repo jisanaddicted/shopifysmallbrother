@@ -8,6 +8,7 @@ import {
   ROUTES,
   customerPath,
   lastStoreVisit,
+  shopPath,
 } from '../../utils/constants';
 import { initials } from '../../utils/formatters';
 
@@ -24,8 +25,16 @@ import { initials } from '../../utils/formatters';
  * header carries a ✕ that closes it again — see closeProfile below.
  */
 export default function ProfilePage() {
-  const { user, setUser, isRider, isCustomer, customerHomeRoute, homeRoute, shoppingStores } =
-    useAuth();
+  const {
+    user,
+    setUser,
+    isRider,
+    isCustomer,
+    isStore,
+    customerHomeRoute,
+    homeRoute,
+    shoppingStores,
+  } = useAuth();
   // Present only on the scoped route /s/:slug/profile — that slug is what
   // keeps the customer inside their store after login.
   const { slug: routeSlug } = useParams();
@@ -63,6 +72,53 @@ export default function ProfilePage() {
   const [invitations, setInvitations] = useState([]);
   const [invBusy, setInvBusy] = useState(false);
 
+  // Storefront links for a merchant: [{ store, role, isOwner }]. This is where
+  // the "copy my store URL" action lives now that the merchant dashboard no
+  // longer carries a "My storefronts" card.
+  const [myStores, setMyStores] = useState([]);
+  const [copiedSlug, setCopiedSlug] = useState('');
+
+  const loadMyStores = useCallback(async () => {
+    // Customers, riders and admins own no store, so skip the call entirely
+    // rather than asking the API for something that must come back empty.
+    if (!isStore) {
+      setMyStores([]);
+      return;
+    }
+    const list = await storeService.listMyMerchantStores().catch(() => []);
+    setMyStores(Array.isArray(list) ? list : []);
+  }, [isStore]);
+
+  // Full public URL for sharing: origin + /s/<slug>.
+  const storeUrl = (entryStore) => {
+    const slug = entryStore?.slug || '';
+    if (typeof window !== 'undefined' && window.location?.origin && slug) {
+      return `${window.location.origin}${shopPath(slug)}`;
+    }
+    return slug ? shopPath(slug) : '';
+  };
+
+  const copyStoreUrl = (entryStore) => {
+    const url = storeUrl(entryStore);
+    const slug = entryStore?.slug || '';
+    if (!url) {
+      setNotice('This store has no public link yet — set its slug first.');
+      return;
+    }
+
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(url)
+        .then(() => {
+          setNotice('Store link copied.');
+          setCopiedSlug(slug);
+        })
+        .catch(() => setNotice(`Copy this link: ${url}`));
+    } else {
+      setNotice(`Copy this link: ${url}`);
+    }
+  };
+
   const loadInvitations = useCallback(async () => {
     const list = await storeService.listMyRequests().catch(() => []);
     setInvitations(Array.isArray(list) ? list : []);
@@ -71,6 +127,10 @@ export default function ProfilePage() {
   useEffect(() => {
     loadInvitations();
   }, [loadInvitations]);
+
+  useEffect(() => {
+    loadMyStores();
+  }, [loadMyStores]);
 
   const respondToInvitation = async (requestId, action) => {
     setInvBusy(true);
@@ -198,6 +258,53 @@ export default function ProfilePage() {
               Stores and admins find you by searching{' '}
               <strong>@{user.username}</strong> — share it exactly like that.
             </p>
+          ) : null}
+
+          {myStores.length > 0 ? (
+            <div className="profile__stores">
+              <h2>My store links</h2>
+              <p className="muted small">
+                Share your public store page so customers can order from you.
+              </p>
+
+              {myStores.map((entry) => {
+                const entryStore = entry.store || {};
+                const slug = entryStore.slug || '';
+                const key = entryStore._id || entryStore.id || slug;
+                return (
+                  <div
+                    key={key}
+                    className="profile__store-row"
+                  >
+                    <div>
+                      <strong>{entryStore.name || 'Unnamed store'}</strong>
+                      <p className="muted small">
+                        {slug ? (
+                          <a
+                            href={storeUrl(entryStore)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {shopPath(slug)}
+                          </a>
+                        ) : (
+                          'No public link yet — set a slug in your dashboard.'
+                        )}
+                        {entry.role === 'admin' ? ' · store admin' : ' · owner'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => copyStoreUrl(entryStore)}
+                    >
+                      {copiedSlug === slug && slug ? 'Copied' : 'Copy URL'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           ) : null}
 
           {isRider && (

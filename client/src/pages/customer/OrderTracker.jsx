@@ -24,6 +24,7 @@ import {
   formatTime,
 } from '../../utils/formatters';
 import { deliveryLegs, elapsedMs, statusSteps } from '../../utils/timings';
+import { findVariant } from '../../utils/variants';
 
 /**
  * The read-only view of a single order: live map, progress timeline, items,
@@ -182,11 +183,18 @@ export default function OrderTracker({
   const pickList = useMemo(() => {
     const rows = (order?.items || []).map((item) => ({
       name: item.name,
+      // The variant label, as it was AT THE TIME OF THE ORDER - the line's own
+      // copy, never re-derived from the live product. A rider collecting "2x
+      // Large / Blue" must not be told "2x Small / Red" because the merchant
+      // has since renamed the options.
+      variantTitle: item.variantTitle || '',
       quantity: Number(item.quantity) || 0,
       category: item.product?.category || '',
-      // The thumbnail also comes from the live product, so it is dropped along
-      // with the location if the product is deleted - the receipt line stands.
-      image: item.product?.image || '',
+      // The thumbnail prefers the variant's own photo, then the product's, so a
+      // shelf of six colours can be picked from the picture alone. It comes from
+      // the live product, so it is dropped along with the location if the product
+      // is deleted - the receipt line stands.
+      image: findVariant(item.product, item.variant)?.image || item.product?.image || '',
       rack: String(item.product?.rack ?? '').trim(),
       shelf: String(item.product?.shelf ?? '').trim(),
       known: Boolean(item.product),
@@ -464,6 +472,12 @@ export default function OrderTracker({
 
                     <span className="picklist__name">
                       <strong>{row.name}</strong>
+                      {/* Which option to grab. Its own line because "Large / Blue"
+                          is the difference between picking the right thing off the
+                          shelf and putting the wrong one in the bag. */}
+                      {row.variantTitle ? (
+                        <em className="picklist__variant">{row.variantTitle}</em>
+                      ) : null}
                       {row.category ? (
                         <em className="muted small"> {row.category}</em>
                       ) : null}
@@ -738,6 +752,11 @@ export default function OrderTracker({
               <li key={`${item.name}-${index}`}>
                 <span className="summary__line-name">
                   {item.name}
+                  {/* The shopper's own words from checkout, so a receipt months
+                      later still says which option they bought. */}
+                  {item.variantTitle ? (
+                    <em className="summary__line-variant"> {item.variantTitle}</em>
+                  ) : null}
                   <em>× {item.quantity}</em>
                 </span>
                 <span>{formatCurrency(item.price * item.quantity)}</span>

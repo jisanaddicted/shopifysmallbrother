@@ -139,7 +139,13 @@ export default function Checkout() {
     try {
       const { order, guestToken } = await orderService.createOrder({
         items: items.map((line) => ({
-          productId: line._id,
+          // For a variant line, `_id` in the cart is the VARIANT id, so the
+          // product is carried separately by the cart. A plain product has no
+          // `productId` and falls back to its own `_id` exactly as before.
+          productId: line.productId || line._id,
+          // Omitted rather than sent as null for a plain product, which is the
+          // shape the server already knows how to read.
+          ...(line.variantId ? { variantId: line.variantId } : {}),
           name: line.name,
           price: line.price,
           quantity: line.quantity,

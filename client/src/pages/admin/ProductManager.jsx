@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import VariantMatrix from '../../components/store/VariantMatrix';
 import { useAuth } from '../../context/AuthContext';
 import productService from '../../services/productService';
-import { formatCurrency, formatLocation, truncate } from '../../utils/formatters';
+import { formatLocation, truncate } from '../../utils/formatters';
+import { formatProductPrice } from '../../utils/variants';
 
 const EMPTY_FORM = {
   name: '',
@@ -32,6 +34,13 @@ export default function ProductManager() {
   const [notice, setNotice] = useState('');
 
   const [form, setForm] = useState(EMPTY_FORM);
+
+  // The variation block, held separately from `form` so the matrix can re-render
+  // on every keystroke without dragging the rest of the form - and the
+  // inventory table below it - along with it.
+  const [options, setOptions] = useState([]);
+  const [variants, setVariants] = useState([]);
+
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -96,6 +105,8 @@ export default function ProductManager() {
   const resetForm = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setOptions([]);
+    setVariants([]);
   };
 
   const startEdit = (product) => {
@@ -112,6 +123,27 @@ export default function ProductManager() {
       image: product.image || '',
       description: product.description || '',
     });
+    // The saved matrix comes back verbatim, each row keeping its `_id` so the
+    // server can recognise it as an edit rather than a delete-and-recreate -
+    // which is what stops existing carts and receipts being orphaned.
+    setOptions(
+      (product.options || []).map((option) => ({
+        name: option.name || '',
+        values: [...(option.values || [])],
+      })),
+    );
+    setVariants(
+      (product.variants || []).map((variant) => ({
+        _id: variant._id || variant.id,
+        optionValues: { ...(variant.optionValues || {}) },
+        price: variant.price ?? '',
+        compareAtPrice: variant.compareAtPrice ?? '',
+        sku: variant.sku || '',
+        stock: variant.stock ?? '',
+        image: variant.image || '',
+        enabled: variant.enabled !== false,
+      })),
+    );
     setNotice('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -126,6 +158,14 @@ export default function ProductManager() {
       return;
     }
 
+    // A product with a matrix carries its own per-row price and stock, so the
+    // headline numbers must not also be sent as though they were the price of
+    // the product. They are still required by the schema, so the product's
+    // price is used as the seed the matrix defaults from, and its stock is left
+    // at zero - `totalStock` reads the matrix, so the top-level figure is never
+    // shown to a shopper once there are variants.
+    const hasMatrix = options.length > 0;
+
     const payload = {
       name: form.name.trim(),
       price: Number(form.price) || 0,
@@ -135,7 +175,34 @@ export default function ProductManager() {
       shelf: form.shelf.trim(),
       image: form.image.trim(),
       description: form.description.trim(),
+
+      // Always sent, even when empty. An absent key means "this client does not
+      // manage variants" to the server, which would leave a merchant unable to
+      // delete a matrix they no longer want.
+      options: options.map((option) => ({
+        name: option.name.trim(),
+        values: option.values,
+      })),
+      variants: variants.map((variant) => ({
+        ...(variant._id ? { _id: variant._id } : {}),
+        optionValues: variant.optionValues,
+        price: variant.price === '' ? 0 : Number(variant.price),
+        ...(variant.compareAtPrice === '' || variant.compareAtPrice === undefined
+          ? { compareAtPrice: null }
+          : { compareAtPrice: Number(variant.compareAtPrice) }),
+        stock: variant.stock === '' ? 0 : Number(variant.stock),
+        sku: variant.sku || '',
+        image: variant.image || '',
+        enabled: variant.enabled !== false,
+      })),
     };
+
+    // A product with a matrix but no complete rows would save as "no variants"
+    // and silently drop the options. Say so rather than accepting it.
+    if (hasMatrix && !payload.variants.length) {
+      setError('Give each option a name and at least one value, or remove the option.');
+      return;
+    }
 
     // A member running several stores must say which one; the backend pins
     // the product for anybody with a single store.
@@ -349,6 +416,13 @@ export default function ProductManager() {
             />
           </label>
 
+          <VariantMatrix
+            options={options}
+            setOptions={setOptions}
+            variants={variants}
+            setVariants={setVariants}
+          />
+
           <div className="button-row">
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving
@@ -418,14 +492,36 @@ export default function ProductManager() {
                           <span className="muted small block">
                             {truncate(product.description || '—', 48)}
                           </span>
+
+                          {/* A merchant scanning the catalogue needs to know at a
+                              glance that a product has a matrix and how big it
+                              is - not open each one to find out. */}
+                          {product.hasVariants ? (
+                            <span className="muted small block">
+                              {product.variants.length} option
+                              {product.variants.length === 1 ? '' : 's'}
+                            </span>
+                          ) : null}
                         </div>
                       </div>
                     </td>
 
                     <td>{product.category || '—'}</td>
                     <td className="muted">{formatLocation(product)}</td>
-                    <td>{formatCurrency(product.price)}</td>
-                    <td>{product.stock ?? '—'}</td>
+
+                    {/* Reads the range across the matrix, or the product's own
+                        price when it has none - so this column stays truthful in
+                        both cases instead of showing a seed value. */}
+                    <td>{formatProductPrice(product)}</td>
+
+                    {/* Summed across the sellable rows, because a shopper can
+                        buy all of them; a product with no matrix shows its own
+                        stock exactly as before. */}
+                    <td>
+                      {product.hasVariants
+                        ? (product.totalStock ?? 0)
+                        : (product.stock ?? '—')}
+                    </td>
 
                     <td className="table__actions">
                       <button

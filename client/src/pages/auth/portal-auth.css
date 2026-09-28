@@ -10,6 +10,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   background: var(--surface);
+  /* Stop iOS Safari inflating the text when a phone is rotated. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* ---- Left: brand panel ------------------------------------------------- */
@@ -129,8 +132,11 @@
 .portal__form-side {
   display: flex;
   align-items: center;
+  /* `safe` keeps the top of a form that is taller than the viewport reachable —
+     plain `center` would push it above the scroll origin and strand it. */
+  align-items: safe center;
   justify-content: center;
-  padding: 2.5rem 1.5rem;
+  padding: 2.5rem clamp(1rem, 4vw, 2.5rem);
   background:
     radial-gradient(800px 380px at 50% -160px, var(--brand-soft), transparent),
     var(--surface);
@@ -165,6 +171,11 @@
 .portal__tab:hover {
   text-decoration: none;
   color: var(--ink);
+}
+
+.portal__tab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .portal__tab.is-active {
@@ -219,14 +230,36 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* ---- Responsive: stack brand on top on small screens -------------------- */
+/* ---- Responsive ----------------------------------------------------------
+   Measured behaviour that drives the tiers below (register page, the tallest
+   form):
+     390x844 phone  — brand panel ate 676px = 80% of the fold, first input
+                      landed below the fold.
+     844x390 phone  — landscape: 581px panel = 149% of a 390px fold, the form
+                      was not on screen at all.
+   So phones get a compact brand header, and short viewports drop the panel
+   entirely. Tablets keep the full panel but tightened.
+   -------------------------------------------------------------------------- */
+
+/* --- Large desktop: cap the card so it does not drift on wide monitors --- */
+@media (min-width: 1600px) {
+  .portal__form-wrap {
+    max-width: 460px;
+  }
+
+  .portal__brand-inner {
+    max-width: 34rem;
+  }
+}
+
+/* --- Tablet: stack, keep the brand story but tighten it ------------------- */
 @media (max-width: 900px) {
   .portal {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .portal__brand {
-    padding: 2.25rem 1.5rem;
+    padding: 2rem clamp(1.25rem, 5vw, 2.5rem);
   }
 
   .portal__brand-inner {
@@ -234,11 +267,99 @@
   }
 
   .portal__logo-card {
-    max-width: 22rem;
+    max-width: 20rem;
+  }
+
+  .portal__desc {
+    font-size: 0.95rem;
   }
 
   .portal__form-side {
-    padding: 1.75rem 1rem 3rem;
+    padding: 1.75rem 1rem 2.5rem;
     align-items: flex-start;
+  }
+}
+
+/* --- Short viewports (landscape phones, short laptop windows) -------------
+   Height, not width, is the constraint here, so the split screen comes back
+   and the marketing copy steps aside to leave room for the form. */
+@media (max-width: 900px) and (max-height: 620px) {
+  /* Single column: the brand panel is hidden below, so a two-column grid
+     would leave the form stranded in an empty first column. */
+  .portal {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The panel is redundant next to the form at this size. */
+  .portal__brand {
+    display: none;
+  }
+
+  .portal__form-side {
+    align-items: safe center;
+    min-height: 100dvh;
+    padding: 1.5rem 1rem;
+  }
+}
+
+/* --- Phone: the brand panel becomes a compact header ----------------------
+   The form is the point of these pages, so the logo + title stay and the
+   description / role cards / oversized padding go. */
+@media (max-width: 640px) {
+  .portal__brand {
+    padding: 1.25rem 1rem 1.5rem;
+  }
+
+  .portal__logo-card {
+    max-width: 13rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(2, 6, 23, 0.35);
+  }
+
+  .portal__title {
+    font-size: clamp(1.35rem, 6.4vw, 1.75rem);
+  }
+
+  /* Marketing copy is what pushed the form off the fold. */
+  .portal__desc,
+  .portal__roles {
+    display: none;
+  }
+
+  .portal__form-side {
+    padding: 1.25rem 0.85rem 2rem;
+  }
+
+  /* Comfortable tap targets on the role picker. */
+  .portal__role-btn {
+    padding: 0.7rem 0.35rem;
+  }
+}
+
+/* --- Small phones (iPhone SE and similar): 3 role buttons will not fit
+   side by side at this width, so let them stack. */
+@media (max-width: 400px) {
+  .portal__form-side {
+    padding-inline: 0.7rem;
+  }
+
+  .portal__role-pick {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .portal__role-btn {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+  }
+}
+
+/* --- Motion / contrast preferences --------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .portal * {
+    animation: none !important;
+    transition: none !important;
   }
 }

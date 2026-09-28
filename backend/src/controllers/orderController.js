@@ -20,6 +20,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { canAccessOrder } from '../utils/orderAccess.js';
 import { activeStoreIds, isBoundToStore } from '../utils/storeRider.js';
 import { summariseTimings, summariseByRider } from '../utils/deliveryTiming.js';
+import { resolveErrorMessage, resolveLineTarget } from '../utils/variants.js';
 import {
   loadManageableStore,
   managedStoreIds,
@@ -57,7 +58,11 @@ const ORDER_POPULATE = [
   { path: 'rider', select: 'name username phone email location' },
   { path: 'customer', select: 'name email phone' },
   { path: 'store', select: 'name slug image' },
-  { path: 'items.product', select: 'name rack shelf category image' },
+  // `variants` is selected so the pick list can show a variant's own photo, and
+  // so a receipt line whose variant still exists can be matched back to its row
+  // without a second query. The line's own `variantTitle` remains the source of
+  // truth for what was sold.
+  { path: 'items.product', select: 'name rack shelf category image variants' },
 ];
 
 const toFiniteNumber = (value) => {
@@ -251,30 +256,77 @@ export const createOrder = asyncHandler(async (req, res) => {
     }
   }
 
+  // Lines whose variant could not be resolved, collected rather than thrown from
+  // inside the map so every line is examined and the shopper is told about the
+  // first genuine problem, not whichever happened to be last in the array.
+  const unresolved = [];
+
   const lines = items.map((line) => {
     const product = byId.get(String(line?.productId));
     const quantity = Math.max(1, Number.parseInt(line?.quantity, 10) || 1);
 
+    // Price and stock come from the DATABASE, never from the line the client
+    // sent - that is the whole reason a tampered cart cannot set its own total.
+    // `resolveLineTarget` is the single implementation of that lookup for both
+    // plain products and variants, so there is no second code path that could
+    // come to disagree about what a line is worth.
+    const target = resolveLineTarget(product, line?.variantId);
+
+    if (!target.ok) {
+      // Recorded rather than thrown so a single stale line reports its own
+      // problem, rather than the shopper being told about a different product.
+      unresolved.push({
+        product,
+        reason: target.reason,
+        line,
+      });
+      return null;
+    }
+
     return {
       product: product?._id ?? null,
+      variant: target.variantId || null,
+      variantTitle: target.title,
+      compareAtPrice: target.variant?.compareAtPrice ?? null,
+      sku: target.sku,
       name: product?.name || String(line?.name || 'Item').trim(),
-      price: product ? product.price : Number(line?.price) || 0,
+      price: target.price,
       quantity,
+      // Kept off the persisted line (the schema has no such field) but needed
+      // for the stock check and the $inc below.
+      _stock: target.stock,
     };
   });
 
-  // Refuse to sell what we don't have in stock.
-  const short = lines.find((line) => {
+  // A line that could not be resolved is a hard stop. The three reasons are
+  // all things the shopper can act on - a deleted variant, one the merchant
+  // switched off, or never having chosen - and each gets the wording the shared
+  // resolver defines, so the cart, the shop and the checkout never describe the
+  // same problem three different ways.
+  const bad = unresolved[0];
+  if (bad) {
+    const name = bad.product?.name || String(bad.line?.name || 'this product').trim();
+    throw new HttpError(400, resolveErrorMessage(bad.reason, name));
+  }
+
+  const priced = lines.filter(Boolean);
+
+  // Refuse to sell what we don't have in stock. Checked per line against the
+  // variant's own stock when the product has variants, so "the red is gone" no
+  // longer blocks an order for a size that is in stock.
+  const short = priced.find((line) => {
     if (!line.product) return false;
-    const product = byId.get(String(line.product));
-    return product && product.stock < line.quantity;
+    return line._stock < line.quantity;
   });
 
   if (short) {
     const product = byId.get(String(short.product));
+    const label = short.variantTitle
+      ? `${product?.name} (${short.variantTitle})`
+      : product?.name;
     throw new HttpError(
       400,
-      `Only ${product.stock} left of “${product.name}”. Please update your cart.`,
+      `Only ${short._stock} left of “${label}”. Please update your cart.`,
     );
   }
 
@@ -301,8 +353,10 @@ export const createOrder = asyncHandler(async (req, res) => {
           };
         })()),
     store: storeId,
-    items: lines,
-    ...priceOrder(lines),
+    // `priced`, not `lines`: the unresolved ones are null placeholders that must
+    // never reach the database or the money.
+    items: priced,
+    ...priceOrder(priced),
     address: cleanAddress,
     location: { lat, lng },
     paymentMethod: paymentMethod === 'card' ? 'card' : 'cod',
@@ -317,14 +371,24 @@ export const createOrder = asyncHandler(async (req, res) => {
   });
 
   // Take the sold units out of stock.
+  //
+  // A variant line decrements THAT row's stock, not the product's, or a shop
+  // selling three sizes would see its headline number fall by three per order
+  // and hit zero while every size is still in stock. A product with no variants
+  // takes the original top-level path, unchanged.
   await Promise.all(
-    lines
+    priced
       .filter((line) => line.product)
       .map((line) =>
-        Product.updateOne(
-          { _id: line.product },
-          { $inc: { stock: -line.quantity } },
-        ),
+        line.variant
+          ? Product.updateOne(
+              { _id: line.product, 'variants._id': line.variant },
+              { $inc: { 'variants.$.stock': -line.quantity } },
+            )
+          : Product.updateOne(
+              { _id: line.product },
+              { $inc: { stock: -line.quantity } },
+            ),
       ),
   );
 
