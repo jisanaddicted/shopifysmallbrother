@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import DeliveryMap from '../../components/maps/DeliveryMap';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import OrderReview from '../../components/store/OrderReview';
+import ReviewDialog from '../../components/store/ReviewDialog';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
 import orderService from '../../services/orderService';
@@ -62,6 +62,10 @@ export default function OrderTracker({
   const [advanceError, setAdvanceError] = useState('');
   const [receiving, setReceiving] = useState(false);
   const [receiveError, setReceiveError] = useState('');
+  // The rating popup. Opens by itself the instant a receipt is confirmed (the
+  // one moment the customer definitely has the parcel in front of them), and can
+  // be reopened later from the panel.
+  const [reviewOpen, setReviewOpen] = useState(false);
   // Did this customer already leave a review? Drives the wording of the
   // "what next" panel below, so a finished order can nudge them to order again
   // instead of looking like a dead end.
@@ -138,6 +142,10 @@ export default function OrderTracker({
     try {
       const updated = await orderService.confirmOrderReceived(orderId);
       setOrder(updated);
+      // The ask: now that the parcel is confirmed, ask for the stars and the
+      // note while they still have it in hand. It is dismissible, and the panel
+      // below stays on the page afterwards for anyone who says "maybe later".
+      setReviewOpen(true);
     } catch (err) {
       setReceiveError(err.message || 'Could not confirm the delivery.');
     } finally {
@@ -269,7 +277,7 @@ export default function OrderTracker({
   const isGuestOrder = !order?.customer;
   const hasGuestToken = Boolean(getGuestToken(orderId));
   // May press "Confirm delivery received" - a signed-in owner, or a guest with
-  // the token. Reviews stay account-only (see OrderReview below).
+  // the token. Reviews stay account-only (see the popup's guest variant).
   const canConfirmReceived = isOrderOwner || (isGuestOrder && hasGuestToken);
   const isCancelled = status === ORDER_STATUS.CANCELLED;
   // "Start a new order" only makes sense once this one is done being tracked -
@@ -395,6 +403,21 @@ export default function OrderTracker({
           order?.rider?.name ||
           (isAdmin ? 'Rider' : variant === 'rider' ? 'You' : 'Your rider')
         }
+      />
+
+      {/* The rating popup. Mounted at the top level (not inside the panel) so it
+          is a genuine overlay rather than something the page layout can push
+          around, and so it is a sibling of everything the customer can see
+          behind it. Opened automatically by confirmReceived(). */}
+      <ReviewDialog
+        orderId={orderId}
+        open={reviewOpen}
+        canReview={isOrderOwner}
+        storeName={order?.store?.name}
+        signInPath={storeSignInPath}
+        startNewOrderPath={startNewOrderPath}
+        onClose={() => setReviewOpen(false)}
+        onSaved={(saved) => setHasReview(Boolean(saved))}
       />
 
       {isAdmin ? (
@@ -548,26 +571,26 @@ export default function OrderTracker({
                 place; only its label and enabled state change. */}
             {customerHasReceived ? (
               isOrderOwner ? (
-                <>
-                  <OrderReview
-                    orderId={orderId}
-                    onSaved={(saved) => setHasReview(Boolean(saved))}
-                  />
-
-                  {/* The way out of a finished order, offered whether or not the
-                      shopper got round to reviewing - nobody should be stranded
-                      on a dead tracker. */}
-                  <div className="button-row">
-                    <Link className="btn btn-outline" to={startNewOrderPath}>
-                      Start a new order
-                    </Link>
-                    <span className="muted small">
-                      {hasReview
-                        ? 'Thanks for reviewing.'
-                        : 'You can review any time — this page keeps your order.'}
-                    </span>
-                  </div>
-                </>
+                /* The form itself lives in the popup, not inline, so the review is
+                   fetched and rendered in exactly one place. This button is how
+                   you open it - now or later. */
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setReviewOpen(true)}
+                  >
+                    {hasReview ? 'Edit your review' : 'Rate this delivery'}
+                  </button>
+                  <Link className="btn btn-outline" to={startNewOrderPath}>
+                    Start a new order
+                  </Link>
+                  <span className="muted small">
+                    {hasReview
+                      ? 'Thanks for reviewing.'
+                      : 'You can review any time — this page keeps your order.'}
+                  </span>
+                </div>
               ) : (
                 /* A guest confirmed their own delivery - the button above did
                    that for them, token and all - but a rating has to belong to an

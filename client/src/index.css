@@ -1529,6 +1529,92 @@ ol {
   margin-top: 1rem;
 }
 
+/* --- The rating popup (ReviewDialog) ------------------------------------- */
+/* A real overlay: fixed, scrim, centred on a desktop and a bottom sheet on a
+   phone - deliberately the same shape as .account-sheet so the two overlays in
+   the app behave the same way under a thumb. */
+.review-dialog {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 520;
+}
+
+.review-dialog__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.review-dialog__panel {
+  position: relative;
+  margin: 10vh auto 0;
+  width: min(30rem, calc(100% - 2rem));
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem 1.15rem;
+  box-shadow: var(--shadow);
+}
+
+/* The panel is focusable only so focus can be moved into the dialog on open
+   (tabIndex={-1}); it must not draw a ring when it merely holds focus. */
+.review-dialog__panel:focus {
+  outline: none;
+}
+
+.review-dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  margin-bottom: 0.35rem;
+}
+
+.review-dialog__close {
+  border: 1px solid var(--line);
+  background: var(--surface-alt);
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  flex: none;
+}
+
+.review-dialog__lede {
+  margin: 0 0 0.5rem;
+}
+
+/* "Maybe later" sits apart from the submit row above it, so backing out never
+   looks like the same action as sending the review. */
+.review-dialog__skip {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 768px) {
+  .review-dialog__panel {
+    margin: 0;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: 88vh;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: calc(1.15rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+
 /* The three closing checkpoints (delivered -> received -> rated). A compact
    restatement of the Progress timeline, so the "confirm you received it" button
    is never a surprise when it comes alive. */

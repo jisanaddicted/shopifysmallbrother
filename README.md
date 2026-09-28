@@ -380,6 +380,9 @@ client/src/
   pages/store/MerchantDashboard.jsx, RiderTracker.jsx,
                   ThemeBuilder.jsx, StoreRiderAnalytics.jsx
   pages/admin/               AdminDashboard.jsx, AdminInvitations.jsx, ProductManager.jsx
+  components/store/          OrderReview.jsx (the stars + note form),
+                              ReviewDialog.jsx (the popup it opens in, shown the
+                              moment a receipt is confirmed)
 backend/src/
   controllers/authController.js  register/login/me/updateMe/usernameAvailable
   routes/authRoutes.js           POST /register + /login, GET /username-available + /me, PATCH /me
