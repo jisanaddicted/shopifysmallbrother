@@ -1089,7 +1089,7 @@ async function main() {
       },
       location: { lat: 27.7172, lng: 85.324 },
       storeId: pizzaStore._id,
-      guest: { name: 'Walk-in Shopper' },
+      guest: { name: 'Walk-in Shopper', email: 'walkin.shopper@example.com' },
     },
   });
   const guestOrderId = guestOrder.data?.order?._id || guestOrder.data?.order?.id;
@@ -1178,6 +1178,136 @@ async function main() {
       strangerConfirm.status === 403,
       `got ${why(strangerConfirm)}`,
     );
+  }
+
+  // --- Guest checkout is identified by EMAIL --------------------------------
+  // The rule was inverted once: a name was demanded and the email was optional,
+  // so the app produced guest orders it could neither send a receipt for nor
+  // later turn into an account. These two pin the corrected contract.
+  {
+    const buyable = pizzaProducts.find((p) => Number(p.stock) >= 1) || pizzaProducts[0];
+    const noEmail = await api('POST', '/orders', {
+      body: {
+        items: [{ productId: buyable._id, quantity: 1 }],
+        address: { line1: '1 Nameless Way', city: 'Kathmandu', phone: '9800000000' },
+        location: { lat: 27.7172, lng: 85.324 },
+        storeId: pizzaStore._id,
+        guest: { name: 'Only A Name' },
+      },
+    });
+    check(
+      'a guest checkout with a name but no email is refused',
+      noEmail.status === 400,
+      `got ${why(noEmail)}`,
+    );
+
+    // Email ALONE is enough - the name stays optional.
+    const emailOnly = await api('POST', '/orders', {
+      body: {
+        items: [{ productId: buyable._id, quantity: 1 }],
+        address: { line1: '1 Email Only Way', city: 'Kathmandu', phone: '9800000000' },
+        location: { lat: 27.7172, lng: 85.324 },
+        storeId: pizzaStore._id,
+        guest: { email: 'email.only.shopper@example.com' },
+      },
+    });
+    const emailOnlyId = emailOnly.data?.order?._id || emailOnly.data?.order?.id;
+    const emailOnlyToken = emailOnly.data?.guestToken;
+    check(
+      'a guest can check out with an email and nothing else',
+      (emailOnly.status === 200 || emailOnly.status === 201) &&
+        Boolean(emailOnlyId) &&
+        Boolean(emailOnlyToken),
+      `got ${why(emailOnly)}`,
+    );
+
+    // --- Turning that guest order into an account --------------------------
+    if (emailOnlyId && emailOnlyToken) {
+      // A wrong token must not work: the order id alone is not proof.
+      const wrongToken = await api('POST', '/auth/claim-guest-order', {
+        body: {
+          orderId: emailOnlyId,
+          guestToken: 'not-the-real-token',
+          password: 'hunter2!',
+        },
+      });
+      check(
+        'a guest order cannot be claimed without the right guest token',
+        wrongToken.status === 403,
+        `got ${why(wrongToken)}`,
+      );
+
+      const claimed = await api('POST', '/auth/claim-guest-order', {
+        body: {
+          orderId: emailOnlyId,
+          guestToken: emailOnlyToken,
+          password: 'hunter2!',
+          name: 'Email Only Shopper',
+        },
+      });
+      const claimedToken = claimed.data?.token;
+      const claimedUser = claimed.data?.user;
+      check(
+        'a guest can turn a guest order into a real account with a password',
+        claimed.status === 201 && Boolean(claimedToken) && claimedUser?.role === 'customer',
+        `got ${why(claimed)}`,
+      );
+
+      if (claimedToken) {
+        // The order really moved into the account's history - the whole point.
+        const history = await api('GET', '/orders/mine', { token: claimedToken });
+        const inHistory = (history.data?.orders || history.data || []).some(
+          (o) => String(o._id || o.id) === String(emailOnlyId),
+        );
+        check(
+          'the claimed order shows up in the new account\'s order history',
+          history.status === 200 && inHistory,
+          `got ${why(history)}`,
+        );
+
+        // And the guest token was retired, so the order is no longer reachable
+        // by the secret that used to open it.
+        const afterClaim = await api('GET', `/orders/${emailOnlyId}`, {
+          params: { guestToken: emailOnlyToken },
+        });
+        check(
+          'the guest token stops working once the order has an owner',
+          afterClaim.status === 401 || afterClaim.status === 403,
+          `got ${why(afterClaim)}`,
+        );
+      }
+
+      // THE TAKEOVER GUARD. Claiming must never work for an email that already
+      // belongs to a real account - otherwise anybody who ever checked out as a
+      // guest with a shared address could reset that account's password.
+      const existingEmailOrder = await api('POST', '/orders', {
+        body: {
+          items: [{ productId: buyable._id, quantity: 1 }],
+          address: { line1: '1 Shared Address', city: 'Kathmandu', phone: '9800000000' },
+          location: { lat: 27.7172, lng: 85.324 },
+          storeId: pizzaStore._id,
+          // This is a real registered customer's address.
+          guest: { email: DEMO.customer.email },
+        },
+      });
+      const existingId = existingEmailOrder.data?.order?._id || existingEmailOrder.data?.order?.id;
+      const existingToken = existingEmailOrder.data?.guestToken;
+
+      if (existingId && existingToken) {
+        const takeover = await api('POST', '/auth/claim-guest-order', {
+          body: {
+            orderId: existingId,
+            guestToken: existingToken,
+            password: 'attacker-chosen-password',
+          },
+        });
+        check(
+          'a guest order on an already-registered email cannot be claimed',
+          takeover.status === 409,
+          `got ${why(takeover)}`,
+        );
+      }
+    }
   }
 
   // --- A rider may not take an order from a store they are not bound to ---

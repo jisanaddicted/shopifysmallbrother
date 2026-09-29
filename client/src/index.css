@@ -247,10 +247,143 @@ ol {
   color: var(--brand-dark);
 }
 
+/*
+ * The "order placed" screen. Centred and narrow on purpose: this is a
+ * confirmation, not a workspace, and the only thing on it that asks anything of
+ * the shopper is the optional account offer below the receipt.
+ */
+.order-success {
+  max-width: 34rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.order-success__head {
+  text-align: center;
+}
+
+.order-success__tick {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  margin: 0 auto 0.75rem;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.order-success__summary .detail-list {
+  margin: 0 0 1rem;
+}
+
+.order-success__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.order-success__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .navbar__actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/*
+ * The account control: one icon that opens one menu.
+ *
+ * Replaces a pair of text buttons ("Log in" / "Sign up") plus, once signed in,
+ * a separate profile link and a separate "Log out" button. Three controls in
+ * the corner, two of which said the same thing in opposite directions. The
+ * menu is anchored to the wrapper rather than the header so it can be clipped
+ * and shadowed without dragging the whole bar with it.
+ */
+.navbar__account {
+  position: relative;
+}
+
+.navbar__user-btn {
+  display: grid;
+  place-items: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.navbar__user-btn:hover,
+.navbar__user-btn[aria-expanded='true'] {
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+.navbar__account-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 700;
+  min-width: 14rem;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.navbar__account-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.3rem;
+}
+
+.navbar__account-head strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.navbar__account-item {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.navbar__account-item:hover {
+  background: var(--surface-alt);
+  text-decoration: none;
+}
+
+.navbar__account-item--primary {
+  color: var(--brand-dark);
+  font-weight: 700;
 }
 
 .navbar__user {
@@ -808,6 +941,79 @@ ol {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+/*
+ * Two cards per row on a phone.
+ *
+ * The catalogue grid is `auto-fill, minmax(220px, 1fr)`, and 220px is wider
+ * than a 390px phone minus its page padding, so every phone was getting a
+ * single card per row: one product, then a full screen of scrolling, then the
+ * next one. Two-up is the density a shopper actually wants when browsing on a
+ * phone - you scan a row, spot the one you want, and keep scrolling.
+ *
+ * Everything below is not decoration, it is what makes the narrower column
+ * survive. At ~155px wide, the desktop card's side-by-side price + button and
+ * its 4:3 image both fall apart, so the card adapts with it.
+ */
+@media (max-width: 640px) {
+  .grid {
+    /* minmax(0, 1fr), NOT 1fr. `1fr` is really minmax(auto, 1fr), which
+       refuses to shrink below the widest unbreakable word - so one product
+       called "Sugar doughnut" would push its column past the screen edge and
+       take the grid with it. 0 as the minimum lets the track actually shrink. */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .product-card__media {
+    /* Square, like the reference. A 4:3 image in a 155px column is only ~116px
+       tall - too small to recognise what it is selling. */
+    aspect-ratio: 1 / 1;
+  }
+
+  .product-card__body {
+    padding: 0.6rem;
+    gap: 0.3rem;
+  }
+
+  .product-card__title {
+    font-size: 0.85rem;
+    /* Same overflow problem as the track: one long word, one broken grid. */
+    overflow-wrap: anywhere;
+  }
+
+  .product-card__desc {
+    font-size: 0.75rem;
+    /* Two lines, then it stops. The full text lives on the product page, and
+       an unclamped description makes the two cards in a row sit at visibly
+       different heights, which is exactly what a two-up grid looks bad at. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .product-card__footer {
+    /* Stacked, full-width button. Side by side, a price and an "Add to cart"
+       in a 155px column either wrap mid-phrase or squeeze the button into
+       three words. */
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+  }
+
+  .product-card__footer .btn {
+    width: 100%;
+  }
+
+  .product-card__media .chip {
+    top: 0.35rem;
+    left: 0.35rem;
+    font-size: 0.7rem;
+    padding: 0.12rem 0.45rem;
+  }
 }
 
 /* --- Cart drawer ---------------------------------------------------------- */

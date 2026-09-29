@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES, checkoutPath, lastStoreVisit, shopPath } from '../../utils/constants';
@@ -20,6 +20,7 @@ export default function Navbar() {
   } = useAuth();
   const { itemCount, toggleCart } = useCart();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // The store this customer signed up at (from the DB via the session:
   // customerStores[].store carries logo + image + slug + name). Newest
@@ -84,6 +85,71 @@ export default function Navbar() {
   // one (the brand store, else the last storefront visited), bare /checkout
   // only when no slug is known at all.
   const checkoutTarget = checkoutPath(brandStore?.slug || lastStoreVisit() || '');
+
+  /* Where "My profile" goes: a customer's profile lives under their store,
+     everyone else's is the portal one. */
+  const profileTarget =
+    isCustomer && brandStore?.slug
+      ? `/s/${brandStore.slug}/profile`
+      : ROUTES.PROFILE;
+
+  /* Where the account menu's "Log in" / "Sign up" doors lead.
+     A customer account belongs to a store (see AuthContext), so for anyone
+     browsing as a customer these are that store's own pages; staff keep the
+     portal ones. Same rule handleLogout follows in the other direction. */
+  const storeSlug = brandStore?.slug || lastStoreVisit() || '';
+  const useStoreDoors = isCustomer || user?.role === ROLES.CUSTOMER;
+  const loginTarget = useStoreDoors
+    ? storeSlug
+      ? `/s/${storeSlug}/login`
+      : ROUTES.LOGIN
+    : ROUTES.LOGIN;
+  const registerTarget = useStoreDoors
+    ? storeSlug
+      ? `/s/${storeSlug}/register`
+      : ROUTES.REGISTER
+    : ROUTES.REGISTER;
+
+  /* Carried on the links so the door knows which store the visitor was on and
+     can send them back to it afterwards. */
+  const accountState = {
+    ...(storeSlug
+      ? {
+          storeSlug,
+          storeName: brandStore?.name || '',
+          storePath: storeSlug ? shopPath(storeSlug) : undefined,
+        }
+      : {}),
+  };
+
+  /* The account menu is a disclosure, so it closes on Escape, on a click
+     outside, and whenever the route changes. */
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+
+    const onPointerDown = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (event) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
 
   return (
     <header className="navbar">
@@ -163,46 +229,103 @@ export default function Navbar() {
             </button>
           ) : null}
 
-          {isAuthenticated ? (
-            <>
-              <Link
-                className="navbar__user"
-                to={
-                  isCustomer && brandStore?.slug
-                    ? `/s/${brandStore.slug}/profile`
-                    : ROUTES.PROFILE
-                }
-                title={
-                  user?.username
-                    ? `@${user.username} — view profile`
-                    : 'View profile'
-                }
-              >
-                <span className="avatar" aria-hidden="true">
-                  {initials(user?.name || user?.email)}
-                </span>
-                <span className="navbar__user-name">
-                  {user?.username ? `@${user.username}` : user?.name || user?.email}
-                </span>
-              </Link>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={handleLogout}
-              >
-                Log out
-              </button>
-            </>
-          ) : (
-            <>
-              <Link className="btn btn-ghost btn-sm" to={ROUTES.LOGIN}>
-                Log in
-              </Link>
-              <Link className="btn btn-primary btn-sm" to={ROUTES.REGISTER}>
-                Sign up
-              </Link>
-            </>
-          )}
+          {/*
+            Account access lives behind ONE control now.
+
+            It used to be a pair of text buttons ("Log in" / "Sign up") sitting
+            next to a separate profile link and a separate "Log out" button -
+            up to three things in the corner, two of which only existed to say
+            the same thing in the opposite direction. Now there is a single
+            account icon: it opens a small menu with the right options for
+            whoever is browsing, and it is the same affordance on the storefront
+            header. A signed-out visitor gets Log in / Sign up; a signed-in one
+            gets their profile and Log out.
+          */}
+          <div className="navbar__account" ref={menuRef}>
+            <button
+              type="button"
+              className="navbar__user-btn"
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              aria-label={
+                isAuthenticated
+                  ? `Account menu for ${user?.name || user?.email}`
+                  : 'Log in or create an account'
+              }
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20 21a8 8 0 0 0-16 0" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </button>
+
+            {menuOpen ? (
+              <div className="navbar__account-menu" role="menu">
+                {isAuthenticated ? (
+                  <>
+                    <div className="navbar__account-head">
+                      <span className="avatar" aria-hidden="true">
+                        {initials(user?.name || user?.email)}
+                      </span>
+                      <span>
+                        <strong>{user?.name || user?.email}</strong>
+                        {user?.username ? (
+                          <span className="muted small block">
+                            @{user.username}
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+
+                    <Link
+                      className="navbar__account-item"
+                      role="menuitem"
+                      to={profileTarget}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      My profile
+                    </Link>
+
+                    <button
+                      type="button"
+                      className="navbar__account-item"
+                      role="menuitem"
+                      onClick={handleLogout}
+                    >
+                      Log out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/*
+                      Customers have no generic /login to be sent to - an
+                      account belongs to the store they signed up at, so both
+                      doors are that store's own pages (see handleLogout).
+                    */}
+                    <Link
+                      className="navbar__account-item"
+                      role="menuitem"
+                      to={loginTarget}
+                      state={accountState}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Log in
+                    </Link>
+                    <Link
+                      className="navbar__account-item navbar__account-item--primary"
+                      role="menuitem"
+                      to={registerTarget}
+                      state={accountState}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Sign up
+                    </Link>
+                  </>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
     </header>

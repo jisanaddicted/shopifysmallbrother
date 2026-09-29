@@ -36,6 +36,7 @@ const Login = lazy(() => import('./pages/auth/Login'));
 const Register = lazy(() => import('./pages/auth/Register'));
 const ProfilePage = lazy(() => import('./pages/profile/ProfilePage'));
 const Checkout = lazy(() => import('./pages/customer/Checkout'));
+const OrderSuccess = lazy(() => import('./pages/customer/OrderSuccess'));
 const OrderTracker = lazy(() => import('./pages/customer/OrderTracker'));
 const PaymentFailed = lazy(() => import('./pages/customer/PaymentFailed'));
 const PaymentSuccess = lazy(() => import('./pages/customer/PaymentSuccess'));
@@ -219,6 +220,12 @@ export default function App() {
               stays for old links and redirects to the scoped URL. */}
           <Route path={ROUTES.STORE_CHECKOUT} element={<Checkout />} />
           <Route path={ROUTES.CHECKOUT} element={<Checkout />} />
+          {/* The screen right after an order is placed. Public for the same
+              reason as the tracker: a guest has no session yet, and this is
+              where they are OFFERED one (with the order attached). The offer is
+              gated on the order's guestToken, which only the browser that
+              placed the order holds. */}
+          <Route path={ROUTES.ORDER_SUCCESS} element={<OrderSuccess />} />
           <Route path={ROUTES.ORDER_TRACKER} element={<OrderTracker />} />
 
           {/* Payment result pages. The BACKEND redirects here after the

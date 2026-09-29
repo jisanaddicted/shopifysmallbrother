@@ -20,7 +20,6 @@ import {
   customerPath,
   isOnlinePayment,
   lastStoreVisit,
-  orderTrackerPath,
   rememberStoreVisit,
   saveGuestToken,
   shopPath,
@@ -123,8 +122,18 @@ export default function Checkout() {
       setError('Please add a street address and a phone number.');
       return;
     }
-    if (!isAuthenticated && !guest.name.trim()) {
-      setError('Please tell us your name so the rider knows who to ask for.');
+    /*
+     * Guests are identified by EMAIL. It is the one field the order genuinely
+     * needs — it carries the receipt, the order tracker, and later the sign-in
+     * if they decide to keep an account — so it is the one we insist on.
+     *
+     * Name is a nicety: a rider may glance at it to know who to ask for at the
+     * door, but nobody blocks an order on it. It used to be the other way
+     * round, and that made "just tell us your name" the only path to checking
+     * out without an account, for no gain.
+     */
+    if (!isAuthenticated && !guest.email.trim()) {
+      setError('Please enter an email address so we can send your receipt and track this order.');
       return;
     }
     if (!point?.lat && !(address.lat && address.lng)) {
@@ -174,10 +183,25 @@ export default function Checkout() {
         return;
       }
 
-      // Cash on delivery: the order is the end of it, go track it.
+      // Cash on delivery: the order is placed, so go to the confirmation screen.
+      //
+      // This used to jump straight to the tracker. The tracker is the right page
+      // to WATCH an order, but the first thing a guest needs after paying is to
+      // be told it worked, and (because they have no account) to be offered one
+      // while the order is still the most recent thing they did. The order id
+      // and the guest token travel in router state rather than the query
+      // string, so the page renders instantly and the token stays out of
+      // history and out of any Referer header.
       if (paymentMethod === PAYMENT_METHODS.COD) {
         clearCart();
-        navigate(orderTrackerPath(orderId), { replace: true });
+        navigate(ROUTES.ORDER_SUCCESS, {
+          replace: true,
+          state: {
+            orderId,
+            order,
+            guestName: guest.name.trim(),
+          },
+        });
         return;
       }
 
@@ -265,32 +289,41 @@ export default function Checkout() {
           {!isAuthenticated ? (
             <>
               <p className="muted small">
-                No account needed — just tell the rider who to ask for.{' '}
+                No account needed — just an email to send your receipt.{' '}
                 <Link className="link-btn" to={loginTarget}>
                   Prefer to sign in?
                 </Link>
               </p>
               <div className="field-row">
+                {/*
+                  Email leads and is the required one. Name is optional and
+                  second: it only helps the rider recognise you at the door, so
+                  demanding it before the address made guests fill in a field
+                  the shop does not strictly need before they could buy
+                  anything.
+                */}
                 <label className="field">
-                  <span>Your name</span>
-                  <input
-                    type="text"
-                    name="name"
-                    value={guest.name}
-                    onChange={handleGuestChange}
-                    placeholder="Jane Doe"
-                    required
-                  />
-                </label>
-
-                <label className="field">
-                  <span>Email (optional)</span>
+                  <span>Email</span>
                   <input
                     type="email"
                     name="email"
                     value={guest.email}
                     onChange={handleGuestChange}
                     placeholder="jane@example.com"
+                    autoComplete="email"
+                    required
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Name (optional)</span>
+                  <input
+                    type="text"
+                    name="name"
+                    value={guest.name}
+                    onChange={handleGuestChange}
+                    placeholder="Jane Doe"
+                    autoComplete="name"
                   />
                 </label>
               </div>

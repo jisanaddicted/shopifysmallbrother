@@ -22,7 +22,7 @@ import { ROUTES, rememberStoreVisit } from '../../utils/constants';
 export default function ShopPage() {
     const { slug } = useParams();
   const location = useLocation();
-  const { isAuthenticated, user } = useAuth();
+  const { user } = useAuth();
   const { itemCount, openCart } = useCart();
 
   const [store, setStore] = useState(null);
@@ -39,19 +39,6 @@ export default function ShopPage() {
   /* The ACCOUNT tab's sheet: this shopper's own account, not the store's. */
   const [accountOpen, setAccountOpen] = useState(false);
   const searchRef = useRef(null);
-
-  /* Which store this page is, so the sign-in / sign-up links below create the
-     customer account *at this store* (the API keys off `storeSlug`). */
-  const authLinkState = {
-    from: location,
-    ...(slug || store?.slug
-      ? {
-          storeSlug: store?.slug || slug,
-          storeName: store?.name || '',
-          storePath: location.pathname,
-        }
-      : {}),
-  };
 
   /* Derive unique categories from the store's products. */
   const categories = useMemo(() => {
@@ -167,25 +154,16 @@ export default function ShopPage() {
         />
       </div>
 
-      {!isAuthenticated ? (
-        <p className="alert alert--info">
-          Browse freely and check out without an account. Have an account?{' '}
-          <Link
-            to={store?.slug ? `/s/${store.slug}/login` : ROUTES.LOGIN}
-            state={authLinkState}
-          >
-            Sign in
-          </Link>{' '}
-          or{' '}
-          <Link
-            to={store?.slug ? `/s/${store.slug}/register` : ROUTES.REGISTER}
-            state={authLinkState}
-          >
-            create one
-          </Link>{' '}
-          only if you want order history.
-        </p>
-      ) : null}
+      {/*
+        The "browse freely, sign in if you want history" notice used to sit
+        here. It is gone on purpose: account access is now reached through the
+        Navbar's user icon (and the store header's account button), so a
+        paragraph of sign-in copy above the product grid was a second, louder
+        place to say the same thing — and it pushed the actual products below
+        the fold. A shopper who wants an account has a persistent control in
+        the header; a shopper who does not never has to scroll past a
+        paragraph about it.
+      */}
 
       {visible.length === 0 ? (
         <p className="empty">

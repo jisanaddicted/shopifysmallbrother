@@ -1,6 +1,10 @@
+import crypto from 'node:crypto';
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Store from '../models/Store.js';
+import Order from '../models/Order.js';
 import { HttpError } from '../middleware/errorHandler.js';
+import { hashGuestToken } from '../middleware/auth.js';
 import {
   ROLES,
   ROLES_REQUIRING_USERNAME,
@@ -154,6 +158,138 @@ export const register = asyncHandler(async (req, res) => {
     token: signToken(user),
     user,
     store: primaryStore,
+    stores: entries,
+    customerStores,
+  });
+});
+
+/**
+ * POST /api/auth/claim-guest-order
+ * body: { orderId, guestToken, password, name? }
+ *
+ * Turns a guest checkout into a real account, attaching the order to it.
+ * This is the "I checked out without an account, but I would like to keep this
+ * order" button on the success page. Responds exactly like register/login:
+ * { token, user, store, stores, customerStores }.
+ *
+ * WHY THIS IS SAFE (the whole endpoint hinges on it):
+ *
+ * The only proof of identity is the guestToken, the 32-byte secret minted at
+ * checkout and handed to that one browser. Only its SHA-256 hash is stored, and
+ * it is compared in constant time, so a leaked database cannot be used to
+ * replay this and knowing the order id alone gets you nothing.
+ *
+ * The important rule is the one about EXISTING ACCOUNTS: if somebody already
+ * holds the email on this order, this endpoint refuses and tells them to sign
+ * in. It must never "claim" their order by setting a password on their behalf —
+ * that would be account takeover for anyone who ever ordered as a guest with
+ * a shared or mistyped address. The order stays guest-owned and the guest token
+ * keeps working, so they lose nothing by signing in instead.
+ */
+export const claimGuestOrder = asyncHandler(async (req, res) => {
+  const { orderId, guestToken, password, name } = req.body || {};
+  const cleanPassword = String(password || '');
+  const cleanName = String(name || '').trim();
+
+  if (!orderId || !mongoose.isValidObjectId(String(orderId))) {
+    throw new HttpError(400, 'That order id is not valid.');
+  }
+  if (!guestToken) {
+    throw new HttpError(
+      400,
+      'This browser is not the one that placed the order, so it cannot be saved to an account.',
+    );
+  }
+  if (cleanPassword.length < 6) {
+    throw new HttpError(400, 'Your password must be at least 6 characters.');
+  }
+
+  // `+guestTokenHash` is not optional. The field is declared `select: false` so
+  // the hash can never leak into an ordinary order response, which means a
+  // plain findById hands back an order with it invisible - and comparing a
+  // missing hash to a presented token fails for every legitimate caller. This
+  // is the one place that needs to see it, so this is the one place that asks.
+  const order = await Order.findById(orderId).select('+guestTokenHash');
+  if (!order) throw new HttpError(404, 'We could not find that order.');
+
+  // Already somebody else's (or an account's) - claiming twice is a no-op at
+  // best and a race at worst.
+  if (order.customer) {
+    throw new HttpError(
+      409,
+      'That order already belongs to an account. Sign in to see it.',
+    );
+  }
+
+  // Constant-time compare of the presented token against the stored hash.
+  const presented = Buffer.from(hashGuestToken(guestToken), 'utf8');
+  const stored = Buffer.from(String(order.guestTokenHash || ''), 'utf8');
+  const matches =
+    presented.length === stored.length &&
+    crypto.timingSafeEqual(presented, stored);
+  if (!matches) {
+    throw new HttpError(
+      403,
+      'That order link is no longer valid, so it cannot be saved to an account.',
+    );
+  }
+
+  const email = normaliseEmail(order.guest?.email);
+  if (!email || !EMAIL_PATTERN.test(email)) {
+    throw new HttpError(
+      400,
+      'That order has no usable email address, so there is nothing to create an account with.',
+    );
+  }
+
+  // The takeover guard. See the note above.
+  const existing = await User.findOne({ email });
+  if (existing) {
+    throw new HttpError(
+      409,
+      'An account already exists for that email. Sign in instead and your order history is waiting there.',
+    );
+  }
+
+  // A guest who gave no name gets a readable one derived from the address
+  // rather than being forced to type one on the success screen.
+  const user = await User.create({
+    name: cleanName || order.guest?.name || email.split('@')[0],
+    email,
+    role: ROLES.CUSTOMER,
+    passwordHash: await User.hashPassword(cleanPassword),
+  });
+
+  // The account belongs to the store they just bought from, exactly as if they
+  // had signed up on that storefront.
+  let shoppingStore = null;
+  if (order.store) {
+    shoppingStore = await Store.findById(order.store);
+    if (shoppingStore) {
+      await ensureStoreCustomer(
+        shoppingStore,
+        user,
+        STORE_CUSTOMER_SOURCE.ORDER,
+      );
+    }
+  }
+
+  // Hand the order over: it now has an owner, so the guest secret is retired.
+  // Leaving guestTokenHash set would keep a token that outlives its purpose
+  // alive as a second way into an order that has an owner.
+  order.customer = user._id;
+  order.guestTokenHash = undefined;
+  await order.save();
+
+  const [entries, customerStores] = await Promise.all([
+    storesForUser(user),
+    customerStoresFor(user),
+  ]);
+
+  res.status(201).json({
+    token: signToken(user),
+    user,
+    store: entries[0]?.store || shoppingStore || null,
     stores: entries,
     customerStores,
   });

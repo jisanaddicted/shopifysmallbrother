@@ -29,6 +29,20 @@ export const createOrder = (payload) =>
     guestToken: res.data.guestToken || null,
   }));
 
+/**
+ * POST /auth/claim-guest-order — turns a guest order into a real account and
+ * attaches the order to it, so the shopper keeps their order history.
+ *
+ * The `guestToken` is the proof: it was minted at checkout and handed to this
+ * browser only. Note the API REFUSES if the email already has an account (you
+ * cannot claim somebody else's order by setting a password on their address) —
+ * callers should surface that as "sign in instead", not as an error to retry.
+ *
+ * Resolves to the same session shape as login(): { token, user, ... }.
+ */
+export const claimGuestOrder = ({ orderId, guestToken, password, name }) =>
+  api.post('/auth/claim-guest-order', { orderId, guestToken, password, name });
+
 /** GET /orders/mine - the logged-in customer's order history. */
 export const getMyOrders = () =>
   api.get('/orders/mine').then((res) => res.data.orders || res.data || []);

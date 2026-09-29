@@ -389,12 +389,31 @@ export const createOrder = asyncHandler(async (req, res) => {
   const guestName = String(guest?.name || '').trim();
   const guestEmail = String(guest?.email || '').trim().toLowerCase();
   let guestTokenForResponse = null;
-  if (!signedIn && !guestName) {
-    throw new HttpError(400, 'Please tell us your name so the rider knows who to ask for.');
+
+  /*
+   * A guest is identified by their EMAIL, not their name.
+   *
+   * This used to require a name and treat the email as optional, which was
+   * backwards: the name is only ever read by a rider looking for somebody at
+   * the door ("ask for Jane"), while the email is what the order actually needs
+   * — it is the receipt, the future sign-in, and the handle the guest can turn
+   * this order into an account with. Requiring the optional field and waving
+   * through the essential one produced orders with no way to contact the buyer.
+   *
+   * Name is still accepted and still stored, just not demanded.
+   */
+  if (!signedIn && !guestEmail) {
+    throw new HttpError(
+      400,
+      'Please enter an email address so we can send your receipt and let you track this order.',
+    );
   }
-  if (!signedIn && guestEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+  if (!signedIn && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
     throw new HttpError(400, 'That email address does not look valid.');
   }
+
+  // What to call this guest in the audit trail when they gave no name.
+  const guestLabel = guestName || guestEmail;
 
   const order = await Order.create({
     customer: req.user?._id || null,
@@ -420,7 +439,7 @@ export const createOrder = asyncHandler(async (req, res) => {
     statusHistory: [
       {
         status: ORDER_STATUS.PENDING,
-        note: signedIn ? 'Order placed' : `Guest order placed by ${guestName}`,
+        note: signedIn ? 'Order placed' : `Guest order placed by ${guestLabel}`,
         by: req.user?._id || null,
       },
     ],

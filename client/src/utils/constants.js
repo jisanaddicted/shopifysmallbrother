@@ -500,6 +500,12 @@ export const ROUTES = {
   // from. Both read ?tran_id=… and ask the API what actually happened.
   PAYMENT_SUCCESS: '/payment-success',
   PAYMENT_FAILED: '/payment-failed',
+  // The "order placed" screen a shopper lands on straight after paying or
+  // placing a cash order. It is where a guest is offered the chance to keep
+  // this order by setting a password, so it is deliberately a PAGE of its own
+  // rather than a toast over the tracker: the order is done, but the account
+  // question is still open, and answering it needs room to breathe.
+  ORDER_SUCCESS: '/order-success',
 };
 
 // Build a real tracker URL from an order id: orderTrackerPath('abc') -> /track/abc
