@@ -64,12 +64,25 @@ export default function RiderAnalytics() {
   const rows = data?.orders || [];
   const finished = data?.delivered || 0;
 
-  // The three stages of a delivery, in the order they happen.
+  /*
+   * The three stages of a delivery, in the order they happen.
+   *
+   * Keys are the `summary` AVERAGES. They used to be the per-order field names
+   * (`prepMs` / `waitMs` / `rideMs`), which live on the `orders[]` rows and
+   * never on `summary` - so `summary[leg.key]` was always undefined and this
+   * breakdown rendered as three em dashes with empty bars.
+   */
   const legs = [
-    { key: 'prepMs', label: 'Store prep', hint: 'order placed → ready' },
-    { key: 'waitMs', label: 'Waited at counter', hint: 'ready → picked up' },
-    { key: 'rideMs', label: 'Ride time', hint: 'picked up → delivered' },
+    { key: 'avgPrepMs', label: 'Store prep', hint: 'order placed → ready' },
+    { key: 'avgWaitMs', label: 'Waited at counter', hint: 'ready → picked up' },
+    { key: 'avgRideMs', label: 'Ride time', hint: 'picked up → delivered' },
   ];
+
+  // The same cohort the three legs are averaged over, so the bars and the
+  // headline "Avg delivery" figure are describing the same deliveries.
+  const totalForBreakdown = Number.isFinite(summary.avgLegsTotalMs)
+    ? summary.avgLegsTotalMs
+    : summary.avgTotalMs;
 
   return (
     <div className="page">
@@ -107,7 +120,7 @@ export default function RiderAnalytics() {
           <section className="stats timing-stats">
             <div className="stat">
               <span className="stat__label">Avg delivery</span>
-              <strong>{formatDurationMs(summary.avgTotalMs)}</strong>
+              <strong>{formatDurationMs(totalForBreakdown)}</strong>
               <span className="muted small">order → doorstep</span>
             </div>
 
@@ -177,7 +190,7 @@ export default function RiderAnalytics() {
                       <span
                         className="leg__fill"
                         style={{
-                          width: `${legShare(value, summary.avgTotalMs)}%`,
+                          width: `${legShare(value, totalForBreakdown)}%`,
                         }}
                       />
                     </span>

@@ -139,15 +139,50 @@ export function summariseTimings(orders) {
 
   const onTime = delivered.filter((row) => row.totalMs !== null && row.totalMs <= DELIVERY_TARGET_MS);
 
+  /*
+   * The three legs and the end-to-end total are averaged over ONE cohort.
+   *
+   * A store's order book is not uniform. Plenty of delivered orders never
+   * recorded a pickup - imported history, a hand-edited status, an order closed
+   * straight from confirmed to delivered - so they carry a real `totalMs` but no
+   * prep/wait/ride split. `average()` drops those non-finite legs, so the legs
+   * were being averaged over the ~41 orders that have a full split while
+   * `avgTotalMs` averaged over all 72. The two figures described different sets
+   * of orders, and the three legs then failed to add up to the total printed
+   * beside them - which reads as a broken dashboard, with no way for the reader
+   * to tell it is really a cohort mismatch.
+   *
+   * Averaging the legs AND their total over the same rows makes the breakdown
+   * reconcile with the headline by construction. Falls back to every delivered
+   * order when nothing has a full split, so a store that has never recorded a
+   * pickup still shows numbers instead of a page of dashes.
+   */
+  const measured = delivered.filter(
+    (row) =>
+      Number.isFinite(row.prepMs) &&
+      Number.isFinite(row.waitMs) &&
+      Number.isFinite(row.rideMs) &&
+      Number.isFinite(row.totalMs),
+  );
+  const cohort = measured.length ? measured : delivered;
+
   return {
     delivered: delivered.length,
     open: inFlight.length,
     cancelled: rows.filter((row) => row.isCancelled).length,
     summary: {
-      avgPrepMs: average(delivered.map((row) => row.prepMs)),
-      avgWaitMs: average(delivered.map((row) => row.waitMs)),
-      avgRideMs: average(delivered.map((row) => row.rideMs)),
+      avgPrepMs: average(cohort.map((row) => row.prepMs)),
+      avgWaitMs: average(cohort.map((row) => row.waitMs)),
+      avgRideMs: average(cohort.map((row) => row.rideMs)),
+      // The total the three legs are drawn against, so the breakdown and the
+      // headline are always the same orders and always add up.
+      avgLegsTotalMs: average(cohort.map((row) => row.totalMs)),
+      // Every completed delivery, including those with no leg split. The honest
+      // all-in average; `avgLegsTotalMs` is the comparable one.
       avgTotalMs: average(totals),
+      // How many deliveries the leg breakdown covers, so the UI can say so
+      // rather than implying the split describes all of them.
+      measured: measured.length,
       bestMs: best,
       worstMs: worst,
       onTime: onTime.length,

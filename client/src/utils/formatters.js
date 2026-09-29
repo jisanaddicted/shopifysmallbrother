@@ -47,13 +47,22 @@ export function formatDuration(seconds) {
  * reports delivery timings in. Unlike formatDuration() this takes ms, not
  * seconds, so a whole delivery can be read at a glance. Returns an em dash for
  * anything missing, which is what a stage that never happened looks like.
+ *
+ * Anything under a minute renders as "< 1 min" rather than the prose "under a
+ * minute". This output is a metric in a KPI card, a stat column and a bar
+ * label, and a value that changes width and wording depending on the magnitude
+ * is exactly what breaks a row of figures into ragged columns - spelled out it
+ * was the longest string on the card, so a 40-second transit time pushed its
+ * neighbours out of line. The symbol keeps it a number and keeps the row
+ * scannable, and is the same convention the sub-minute figures use in every
+ * ops dashboard.
  */
 export function formatDurationMs(ms) {
   const total = Number(ms);
   if (!Number.isFinite(total) || total < 0) return '—';
 
   const minutes = Math.round(total / 60000);
-  if (minutes < 1) return 'under a minute';
+  if (minutes < 1) return '< 1 min';
 
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;

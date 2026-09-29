@@ -69,25 +69,66 @@ export default function StoreRiderAnalytics() {
   const rows = data?.orders || [];
   const riders = data?.riders || [];
   const finished = data?.delivered || 0;
-  const storeName = data?.store?.name || 'your store';
 
+  /*
+   * Each leg points at the AVERAGE in `summary`, not at the per-order field of
+   * the same name.
+   *
+   * These keys used to be `prepMs` / `waitMs` / `rideMs`, which are the
+   * per-order timings in the `orders[]` rows - `summary` only ever had
+   * `avgPrepMs` / `avgWaitMs` / `avgRideMs`. So `summary[leg.key]` was always
+   * undefined and the whole breakdown rendered as three em dashes with empty
+   * bars, under a heading that claimed the time was being split up. The label
+   * text was the only thing on the panel that was ever right.
+   */
   const legs = [
-    { key: 'prepMs', label: 'Store prep', hint: 'order placed → ready' },
-    { key: 'waitMs', label: 'Waited at counter', hint: 'ready → picked up' },
-    { key: 'rideMs', label: 'Ride time', hint: 'picked up → delivered' },
+    { key: 'avgPrepMs', label: 'Store Prep' },
+    { key: 'avgWaitMs', label: 'Counter Wait' },
+    { key: 'avgRideMs', label: 'Transit Time' },
   ];
+
+  /*
+   * The total the breakdown is drawn against, and the count behind it.
+   *
+   * `avgLegsTotalMs` is the average over the same deliveries the three legs are
+   * averaged over, so the bars and the headline "Avg. Delivery Time" card are
+   * describing one cohort and the parts genuinely add up to the whole. Falling
+   * back to `avgTotalMs` covers a backend that predates the field, so the page
+   * still renders rather than showing an em dash.
+   */
+  const totalForBreakdown = Number.isFinite(summary.avgLegsTotalMs)
+    ? summary.avgLegsTotalMs
+    : summary.avgTotalMs;
+
+  const measuredCount = Number.isFinite(summary.measured)
+    ? summary.measured
+    : finished;
 
   return (
     <div className="page">
       <header className="page__header">
         <div>
           <h1>Rider analytics</h1>
-          <p className="muted">
-            {finished} delivered · {data?.open || 0} in progress
-            {finished
-              ? ` · last ${data?.window || rows.length} orders of ${storeName}`
-              : ''}
-          </p>
+
+          {/*
+            Scope and status are separate concerns, so they are separate
+            elements: a scope label says HOW WIDE the numbers are, and the pills
+            say what is in that window right now. Run together in one sentence
+            the reader had to parse "72 delivered - 121 in progress - last 200
+            orders" to work out which number was a count and which was a range.
+          */}
+          <div className="analytics-scope">
+            <span className="analytics-scope__label">
+              Scope: Last {data?.window || rows.length} orders
+            </span>
+
+            <div className="analytics-scope__pills">
+              <span className="chip chip--ok">{finished} Delivered</span>
+              <span className="chip chip--warn">
+                {data?.open || 0} In Progress
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="button-row">
@@ -112,29 +153,38 @@ export default function StoreRiderAnalytics() {
       ) : (
         <>
           {/* --- Headline numbers ------------------------------------------- */}
+          {/*
+            Five numbers on one scan line, in the order an operator asks for
+            them: how long does a delivery take, then how that time splits, then
+            how good is the best run, then are we holding the target.
+
+            The subtext under each card used to explain which party owned the
+            wait ("the store's part", "the rider's part"). Once the labels say
+            Store Prep and Transit Time that is no longer ambiguous, and the
+            extra line under every value was the first thing pushing the numbers
+            out of alignment - five cards, five different heights, and the eye
+            had to re-find the baseline on each one. Only the on-time card keeps
+            a subtext, because "96%" alone hides its own sample size.
+          */}
           <section className="stats timing-stats">
             <div className="stat">
-              <span className="stat__label">Avg delivery</span>
-              <strong>{formatDurationMs(summary.avgTotalMs)}</strong>
-              <span className="muted small">order → doorstep</span>
+              <span className="stat__label">Avg. Delivery Time</span>
+              <strong>{formatDurationMs(totalForBreakdown)}</strong>
             </div>
 
             <div className="stat">
-              <span className="stat__label">Avg prep</span>
+              <span className="stat__label">Avg. Store Prep</span>
               <strong>{formatDurationMs(summary.avgPrepMs)}</strong>
-              <span className="muted small">the store&apos;s part</span>
             </div>
 
             <div className="stat">
-              <span className="stat__label">Avg ride time</span>
+              <span className="stat__label">Avg. Transit Time</span>
               <strong>{formatDurationMs(summary.avgRideMs)}</strong>
-              <span className="muted small">the rider&apos;s part</span>
             </div>
 
             <div className="stat">
-              <span className="stat__label">Fastest</span>
+              <span className="stat__label">Fastest Delivery</span>
               <strong>{formatDurationMs(summary.bestMs)}</strong>
-              <span className="muted small">best run</span>
             </div>
 
             <div
@@ -146,23 +196,30 @@ export default function StoreRiderAnalytics() {
                     : 'stat--warn'
               }`}
             >
-              <span className="stat__label">Under 45 min</span>
+              <span className="stat__label">On-Time Rate (&lt;45m)</span>
               <strong>
                 {summary.onTimePct === null ? '—' : `${summary.onTimePct}%`}
               </strong>
+              {/* The denominator, so the percentage is readable on its own. */}
               <span className="muted small">
-                {summary.onTime} of {finished}
+                {summary.onTime} / {finished} orders
               </span>
             </div>
           </section>
-          {/* --- Where the time goes --------------------------------------- */}
+          {/* --- Delivery time breakdown ------------------------------------ */}
           <section className="panel">
             <div className="panel__header">
               <div>
-                <h2 className="panel__title">Where the time goes</h2>
+                <h2 className="panel__title">Delivery Time Breakdown</h2>
+                {/*
+                  Metadata, not a sentence. "Average of your 72 delivered
+                  order(s), split by who owned the wait" repeated the panel
+                  title in longer words and added a bracketed plural; all the
+                  reader needs is how many deliveries the split is built from.
+                */}
                 <p className="panel__subtitle">
-                  Average of your {finished} delivered order(s), split by who
-                  owned the wait.
+                  Based on {measuredCount} completed{' '}
+                  {measuredCount === 1 ? 'delivery' : 'deliveries'}
                 </p>
               </div>
             </div>
@@ -173,10 +230,7 @@ export default function StoreRiderAnalytics() {
 
                 return (
                   <li key={leg.key} className="leg">
-                    <span className="leg__label">
-                      {leg.label}
-                      <span className="muted small block">{leg.hint}</span>
-                    </span>
+                    <span className="leg__label">{leg.label}</span>
 
                     {/* Scaled against the whole delivery, so the three bars add
                         up to the length of the average order. */}
@@ -184,7 +238,7 @@ export default function StoreRiderAnalytics() {
                       <span
                         className="leg__fill"
                         style={{
-                          width: `${legShare(value, summary.avgTotalMs)}%`,
+                          width: `${legShare(value, totalForBreakdown)}%`,
                         }}
                       />
                     </span>

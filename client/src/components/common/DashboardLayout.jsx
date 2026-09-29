@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import storeService from '../../services/storeService';
 import { HOME_ROUTE_BY_ROLE, ROUTES } from '../../utils/constants';
 import { initials } from '../../utils/formatters';
+import ronexLogo from '../../assets/images/ronex-mart-logo.png';
 
 /**
  * Side-navbar shell for the back-office areas (store dashboard + admin
@@ -127,18 +128,28 @@ export default function DashboardLayout({ variant = 'merchant' }) {
   return (
     <div className="dash">
       <aside className={`dash__sidebar ${open ? 'is-open' : ''}`}>
+        {/*
+          Brand lockup: the Ronex Mart logo, not the words "DeliveryApp" over a
+          panel name. The arrow glyph and the two text lines were saying the same
+          thing twice - the product name belongs in the logo, and the panel name
+          is already in the topbar directly opposite, so printing it here as well
+          just made the rail heavier at the top of every page.
+
+          The logo is the link's accessible name now, so the panel name is folded
+          into the alt text rather than dropped - it still tells a screen reader
+          which panel they are in, and the <nav> below carries it as its
+          aria-label too.
+        */}
         <Link
           to={brandTarget}
           className="dash__brand"
           onClick={() => setOpen(false)}
         >
-          <span className="navbar__logo" aria-hidden="true">
-            →
-          </span>
-          <span>
-            <span className="dash__brand-name">DeliveryApp</span>
-            <span className="dash__brand-sub">{title}</span>
-          </span>
+          <img
+            className="dash__brand-logo"
+            src={ronexLogo}
+            alt={`Ronex Mart — ${title}`}
+          />
         </Link>
 
         <p className="dash__who">

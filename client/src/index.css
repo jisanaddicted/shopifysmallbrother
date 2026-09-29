@@ -452,6 +452,14 @@ ol {
   color: var(--warn);
   border-color: transparent;
 }
+/* Finished and closed. Added for the analytics scope pills, which show a
+   delivered / in-progress split rather than any one order's status. */
+.chip--ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+  border-color: transparent;
+}
+
 
 .chip--button {
   cursor: pointer;
@@ -1397,12 +1405,53 @@ ol {
 
 /* --- Delivery timing (RiderAnalytics) ------------------------------------ */
 
+/*
+ * Scope + status, under the page title.
+ *
+ * The scope label and the two status pills are different kinds of fact - "how
+ * far back do these numbers reach" versus "what is in flight right now" - so
+ * they sit on one row that wraps, with the pills as a group. Both stay on the
+ * same line as each other rather than stacking, because they are read together
+ * and the reader is comparing the split against the window.
+ */
+.analytics-scope {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.3rem;
+}
+
+.analytics-scope__label {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.analytics-scope__pills {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
 /* Five headline numbers need a little more room than the default stat tile. */
 .timing-stats {
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
-/* "Where the time goes": one row per stage of a delivery, with a bar showing
+/*
+ * Four of the five timing cards are now label-over-value with nothing beneath,
+ * so their values share a baseline; the on-time card keeps its "69 / 72 orders"
+ * denominator and would otherwise be the only card with a second line. Pushing
+ * the denominator onto its own line inside the card (it already is) and letting
+ * the value sit at the top keeps the row of figures aligned, which is the whole
+ * point of a KPI strip.
+ */
+.timing-stats .stat {
+  justify-content: flex-start;
+}
+
+/* Delivery time breakdown: one row per stage of a delivery, with a bar showing
    that stage's share of the whole trip. */
 .legs {
   list-style: none;
@@ -2305,26 +2354,35 @@ ol {
 .dash__brand {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
   color: var(--ink);
   font-weight: 800;
+  /* The lockup used to hold a glyph + two text lines. Now it is a single
+     image, so it needs a clickable area rather than a flex row of words. */
+  padding: 0.15rem 0;
 }
 
 .dash__brand:hover {
   text-decoration: none;
 }
 
-.dash__brand-name {
+/*
+ * The Ronex Mart logo is 744x200 on a white background.
+ *
+ * Sized by WIDTH, not height: the source is a wide 3.7:1 lockup, so pinning a
+ * height would make it overflow the 248px rail on narrow screens. `width: 100%`
+ * with `height: auto` keeps the proportions and lets it shrink with the rail,
+ * and the max-width stops it stretching past its natural size if the rail ever
+ * gets wider.
+ *
+ * `object-fit: contain` is deliberately NOT used - the artwork already sits on
+ * flat white and the rail is white, so it needs to render at its own size to
+ * keep the antialiased edges of the wordmark crisp.
+ */
+.dash__brand-logo {
   display: block;
-  font-size: 1rem;
-  line-height: 1.1;
-}
-
-.dash__brand-sub {
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--muted);
+  width: 100%;
+  max-width: 190px;
+  height: auto;
 }
 
 .dash__who {
