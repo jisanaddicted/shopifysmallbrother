@@ -6,27 +6,14 @@ import cors from 'cors';
 import { config } from './config/env.js';
 import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { corsOriginFn } from './config/cors.js';
 
-/**
- * The browser talks to this API from a different origin (Vite dev server on
- * 5173, or a Cloudflare quick-tunnel URL), so CORS has to name the allowed
- * origins explicitly. Requests without an Origin header (curl, health checks)
- * are allowed through.
- *
- * Tunnel-friendly: any https://*.trycloudflare.com origin is accepted so a
- * fresh `cloudflared tunnel --url` works without editing backend/.env. Set
- * CLIENT_ORIGIN to lock this down for production.
- */
-const TUNNEL_SUFFIX = '.trycloudflare.com';
+// The browser talks to this API from a different origin (Vite dev server on
+// 5173, or a Cloudflare quick-tunnel URL), so CORS has to name the allowed
+// origins explicitly - see config/cors.js, which socket.io shares.
 
 const corsOptions = {
-  origin(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (config.clientOrigins.includes('*')) return callback(null, true);
-    if (config.clientOrigins.includes(origin)) return callback(null, true);
-    if (origin.endsWith(TUNNEL_SUFFIX)) return callback(null, true);
-    return callback(new Error(`Origin ${origin} is not allowed by CORS.`));
-  },
+  origin: corsOriginFn,
   credentials: true,
 };
 
@@ -64,11 +51,30 @@ export function createApp() {
       // from cache: a stale copy pins visitors to an old build after every
       // deploy (e.g. seeing the pre-fix logout behaviour). Hashed assets
       // keep their normal caching - only the entry document revalidates.
+      //
+      // Everything under /assets/ is content-hashed by Vite, so the file name
+      // changes whenever the bytes do. That makes it safe to cache for a year
+      // and never revalidate: a returning visitor loads the app from cache
+      // instead of re-downloading ~530KB on every single page load. Before
+      // this, those files went out with `max-age=0`, which turned every visit
+      // into a full re-download plus a conditional request per file - the
+      // single largest source of perceived slowness in the app.
+      //
+      // The guard is the hash itself. If a future build stops hashing a file
+      // (a fixed name like `logo.png`), only the hashed pattern is exempted
+      // and the rest falls back to express.static's default revalidation,
+      // which is the safe direction to fail.
+      const ONE_YEAR = 31536000;
       app.use(
         express.static(distDir, {
           setHeaders: (res, filePath) => {
             if (filePath.endsWith('index.html')) {
               res.setHeader('Cache-Control', 'no-store');
+              return;
+            }
+            // Vite's build output: /assets/<name>-<8 hex chars>.<ext>
+            if (/-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/.test(filePath)) {
+              res.setHeader('Cache-Control', `public, max-age=${ONE_YEAR}, immutable`);
             }
           },
         }),

@@ -11,16 +11,13 @@
     <title>Delivery App</title>
 
     <!--
-      Leaflet's stylesheet MUST be loaded before the map is rendered.
-      Loading it here (instead of importing it in JS) keeps it out of the
-      React bundle and lets the browser start fetching it immediately.
+      Leaflet's stylesheet is NOT loaded here. It used to be a render-blocking
+      <link> in this head, pulled from unpkg, which made every page wait on a
+      third-party request for a stylesheet that only four pages need. It now
+      travels with the map components (see components/maps/AddressPickerMap.jsx)
+      and Vite emits it into the lazily-imported chunk, so it is fetched only
+      when a page actually draws a map.
     -->
-    <link
-      rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-      crossorigin=""
-    />
   </head>
   <body>
     <div id="root"></div>

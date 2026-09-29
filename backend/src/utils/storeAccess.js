@@ -54,6 +54,38 @@ export function isStoreOwner(user, store) {
 }
 
 /**
+ * The store fields the SESSION ships, and nothing else.
+ *
+ * The store `logo` is a base64 data URL of the uploaded image - around 90KB of
+ * JSON for one photo. It used to ride along inside `store` and again inside
+ * every `stores[]` entry, so a single /auth/me was 183KB of which 180KB was the
+ * same logo sent twice, on every page load, for every signed-in user.
+ *
+ * Nothing in the session path renders it: the navbar logo comes from
+ * `customerStores` (Navbar.jsx `brandStore`), and the Theme tab fetches its own
+ * store from /stores/mine to show and edit the logo. So the field is dropped here
+ * and the storefront, which does show it, still gets it in full from its own
+ * endpoints.
+ *
+ * `image` is a short URL and is kept - a few pickers fall back to it.
+ *
+ * `publicPath` is a VIRTUAL (`/s/${slug}`), so it cannot be selected - see
+ * withVirtuals() below.
+ */
+const SESSION_STORE_FIELDS =
+  'name slug description phone address owner isActive createdAt updatedAt image';
+
+/**
+ * Re-attach the virtuals that `.select()` drops.
+ *
+ * Mongoose only includes a virtual on a hydrated document, and a projection is
+ * exactly the case where it quietly goes missing - which would leave the client
+ * holding a store that has a slug but no `publicPath`.
+ */
+const withVirtuals = (store) =>
+  store ? { ...store.toObject(), publicPath: store.publicPath } : store;
+
+/**
  * Every store this account runs, owner-owned stores first, as
  * `[{ store, role }]`. This is what the client receives with the session so a
  * store admin can be sent to the dashboard just like an owner.
@@ -62,7 +94,9 @@ export async function storesForUser(user) {
   if (!user?._id) return [];
 
   const [owned, links] = await Promise.all([
-    Store.find({ owner: user._id }).sort({ createdAt: 1 }),
+    Store.find({ owner: user._id })
+      .select(SESSION_STORE_FIELDS)
+      .sort({ createdAt: 1 }),
     // Newest accepted membership first: "the store you joined most recently"
     // is what the dashboard opens when an admin runs several stores.
     StoreRider.find({
@@ -70,12 +104,12 @@ export async function storesForUser(user) {
       role: STORE_MEMBER_ROLES.ADMIN,
       status: STORE_RIDER_STATUS.ACTIVE,
     })
-      .populate('store')
+      .populate('store', SESSION_STORE_FIELDS)
       .sort({ respondedAt: -1, createdAt: -1 }),
   ]);
 
   const entries = owned.map((store) => ({
-    store,
+    store: withVirtuals(store),
     role: STORE_ROLES.OWNER,
   }));
   const seen = new Set(entries.map((entry) => String(entry.store._id)));
@@ -86,7 +120,7 @@ export async function storesForUser(user) {
     if (!link.store || seen.has(String(link.store._id))) continue;
 
     seen.add(String(link.store._id));
-    entries.push({ store: link.store, role: STORE_ROLES.ADMIN });
+    entries.push({ store: withVirtuals(link.store), role: STORE_ROLES.ADMIN });
   }
 
   return entries;

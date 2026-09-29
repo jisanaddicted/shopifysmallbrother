@@ -135,11 +135,15 @@ export const register = asyncHandler(async (req, res) => {
 
   // A store admin sees the stores they were appointed to run, so the response
   // carries the full list; `store` stays the primary one for the older client
-  // code paths.
-  const entries = await storesForUser(user);
-  // Full entries [{ store, status, source, ... }] - the client reads
+  // code paths. Full entries [{ store, status, source, ... }] - the client reads
   // entry.store.slug for "my stores" and the association display.
-  const customerStores = await customerStoresFor(user);
+  //
+  // Overlapped for the same reason as sign-in: independent collections, and a
+  // registration is a first impression the user is waiting on.
+  const [entries, customerStores] = await Promise.all([
+    storesForUser(user),
+    customerStoresFor(user),
+  ]);
 
   // Where this account lands: a merchant's own store, or the storefront they
   // signed up from. Staff never inherit someone else's store, so the merchant
@@ -208,8 +212,15 @@ export const login = asyncHandler(async (req, res) => {
   // up; for a store admin, the store(s) an owner appointed it to. The client
   // needs the list to land an admin - who keeps their original role - on the
   // store dashboard instead of the customer storefront.
-  const entries = await storesForUser(user);
-  const customerStores = await customerStoresFor(user);
+  //
+  // Independent reads of different collections, so they overlap. Sign-in is the
+  // one interaction a user judges the whole app by, and this endpoint already
+  // spends most of its time in bcrypt - the two extra round trips were pure
+  // dead time added on the end.
+  const [entries, customerStores] = await Promise.all([
+    storesForUser(user),
+    customerStoresFor(user),
+  ]);
 
   res.json({
     token: signToken(user),
@@ -255,10 +266,20 @@ export const usernameAvailable = asyncHandler(async (req, res) => {
  * signing in again.
  */
 export const me = asyncHandler(async (req, res) => {
-  const entries = await storesForUser(req.user);
-  // The stores this account shops at - rebuilt on every call, so a customer
-  // who signed up at a storefront sees it here right after registering.
-  const customerStores = await customerStoresFor(req.user);
+  // The two lookups are independent - "stores this account runs" and "stores
+  // this account shops at" read different collections and never depend on each
+  // other. They were awaited one after the other, so every hard refresh paid
+  // two sequential round trips to a remote Atlas cluster, and this endpoint
+  // blocks the whole app from rendering until it answers.
+  //
+  // Promise.all makes the two overlap: the request now costs one round trip
+  // instead of two.
+  const [entries, customerStores] = await Promise.all([
+    storesForUser(req.user),
+    // Rebuilt on every call, so a customer who signed up at a storefront sees
+    // it here right after registering.
+    customerStoresFor(req.user),
+  ]);
 
   res.json({
     user: req.user,

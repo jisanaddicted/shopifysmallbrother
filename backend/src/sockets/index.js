@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import { Server } from 'socket.io';
-import { config } from '../config/env.js';
 import Order from '../models/Order.js';
 import User from '../models/User.js';
 import { ROLES, SOCKET_EVENTS, STORE_RIDER_STATUS } from '../utils/constants.js';
 import { verifyToken } from '../utils/jwt.js';
+import { corsOriginFn } from '../config/cors.js';
 import { hashGuestToken } from '../middleware/auth.js';
 import { canAccessOrder } from '../utils/orderAccess.js';
 import { activeStoreIds } from '../utils/storeRider.js';
@@ -83,25 +83,12 @@ const safe = (socket, handler) => async (payload = {}) => {
 };
 
 export function initSockets(httpServer) {
-  // Same policy as the REST CORS layer in app.js: named origins plus any
-  // https://*.trycloudflare.com host, so a fresh quick-tunnel works for
-  // live tracking without editing backend/.env.
-  const TUNNEL_SUFFIX = '.trycloudflare.com';
-  const socketCorsOrigin = (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (config.clientOrigins.includes('*')) return callback(null, true);
-    if (config.clientOrigins.includes(origin)) return callback(null, true);
-    try {
-      if (new URL(origin).hostname.endsWith(TUNNEL_SUFFIX)) {
-        return callback(null, true);
-      }
-    } catch {
-      // fall through to deny
-    }
-    return callback(new Error(`Origin ${origin} is not allowed by CORS.`));
-  };
+  // The SAME policy the REST layer uses (config/cors.js). This used to be a
+  // second, hand-written copy that had already drifted from the first: a build
+  // served by the backend loaded its page but every live-tracking connection
+  // then failed the handshake with 400. One shared function, one behaviour.
   io = new Server(httpServer, {
-    cors: { origin: socketCorsOrigin, credentials: true },
+    cors: { origin: corsOriginFn, credentials: true },
   });
 
   io.use(authenticateSocket);

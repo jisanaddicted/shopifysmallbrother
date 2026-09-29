@@ -7,6 +7,15 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
+// Leaflet's stylesheet, imported here rather than from a <link> in index.html.
+//
+// It used to be a render-blocking <link> in the document head, which meant every
+// page - sign-in, menu, orders, theme builder - waited on it, and fetched it from
+// a third-party CDN, even though only four pages draw a map. Now it travels with
+// this module, and Vite emits it into the lazily-imported chunk: a page without a
+// map never requests it, and a page with one has the styles applied by the time
+// the component renders.
+import 'leaflet/dist/leaflet.css';
 import { MAP } from '../../utils/constants';
 
 /**

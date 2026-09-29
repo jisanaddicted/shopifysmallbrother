@@ -36,24 +36,29 @@ import { customersForStore } from '../utils/storeCustomer.js';
 export const listStoreCustomers = asyncHandler(async (req, res) => {
   const { store } = await loadManageableStore(req.params.id, req.user);
 
-  const customers = await customersForStore(store._id);
-
-  // One pass over this store's orders, grouped by who placed them.
-  const spendByCustomer = await Order.aggregate([
-    { $match: { store: store._id, customer: { $ne: null } } },
-    {
-      $group: {
-        _id: '$customer',
-        orders: { $sum: 1 },
-        spent: {
-          $sum: {
-            $cond: [{ $in: ['$status', CANCELLED_STATUSES] }, 0, '$total'],
+  // The customer list and the order rollup read different collections and never
+  // depend on each other, so they run together. This page is one of the
+  // merchant's most-opened screens and it was paying two sequential round trips
+  // to a remote cluster for every load.
+  const [customers, spendByCustomer] = await Promise.all([
+    customersForStore(store._id),
+    // One pass over this store's orders, grouped by who placed them.
+    Order.aggregate([
+      { $match: { store: store._id, customer: { $ne: null } } },
+      {
+        $group: {
+          _id: '$customer',
+          orders: { $sum: 1 },
+          spent: {
+            $sum: {
+              $cond: [{ $in: ['$status', CANCELLED_STATUSES] }, 0, '$total'],
+            },
           },
+          // The most recent delivery address on file, for the Location column.
+          location: { $first: '$address.city' },
         },
-        // The most recent delivery address on file, for the Location column.
-        location: { $first: '$address.city' },
       },
-    },
+    ]),
   ]);
 
   const rollup = new Map(

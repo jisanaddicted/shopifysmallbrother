@@ -414,9 +414,10 @@ join an order room you own, are delivering, or administer.
 - **Passwords** are bcrypt-hashed with `select: false`, so a hash can never
   leak into a JSON response by accident.
 - **CORS** is an allow-list from `CLIENT_ORIGIN` in `backend/.env`, plus any
-  `https://*.trycloudflare.com` origin (see `backend/src/app.js`). If you
-  serve the client from another port, add that origin or the browser will
-  report a network error.
+  `https://*.trycloudflare.com` origin and the backend's own host (see
+  `backend/src/config/cors.js`, shared by the REST layer and the socket.io
+  handshake so the two can never disagree). If you serve the client from another
+  port, add that origin or the browser will report a network error.
 - **Duplicate constants:** `ROLES`, `SOCKET_EVENTS`, order statuses and
   pricing exist in both halves. Changing one means editing
   `client/src/utils/constants.js` *and* `backend/src/utils/constants.js`.

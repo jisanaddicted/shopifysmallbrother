@@ -65,6 +65,53 @@ const ORDER_POPULATE = [
   { path: 'items.product', select: 'name rack shelf category image variants' },
 ];
 
+/**
+ * The same shape as ORDER_POPULATE, minus the live catalogue lookup.
+ *
+ * For a LIST of orders the receipt already carries everything the table shows:
+ * each line has its own frozen `name` and `price` copied at checkout. Populating
+ * `items.product` there re-joins the whole catalogue onto every row, and on a
+ * busy store that is the single most expensive thing the orders board does - the
+ * product document (with `variants` and `image`) is larger than the order line
+ * it sits on, and it is repeated for every line of every order.
+ *
+ * The full populate is still what the ORDER DETAIL page uses, which is where the
+ * merchant is picking items off shelves and genuinely needs live catalogue data.
+ * A list does not.
+ */
+const ORDER_LIST_POPULATE = [
+  { path: 'rider', select: 'name username phone' },
+  { path: 'customer', select: 'name email phone' },
+  { path: 'store', select: 'name slug' },
+];
+
+/**
+ * The exact set of fields the orders TABLE renders, for a list query.
+ *
+ * Kept beside ORDER_LIST_POPULATE and for the same reason: a list is not a
+ * detail page, and the detail page fetches the full document itself.
+ *
+ *   _id            the order number / detail link
+ *   createdAt      the "when" column
+ *   customer       who it is for (populated)
+ *   store          which merchant (populated)
+ *   total          the price column
+ *   payment.status the paid badge
+ *   paymentMethod  the cash-vs-online column
+ *   status         fulfillment + delivery badges
+ *   items.quantity the item count column
+ *
+ * Deliberately NOT selected: `guest`, `address`, `location`, `payment` in full,
+ * `statusHistory`, `cancelReason` and the rest of each line. None of it is
+ * rendered here, and all of it was being shipped on every page load.
+ *
+ * `isOpen` is a virtual (isOpen === false once CLOSED_STATUSES is reached) and
+ * is NOT stored, so it cannot be selected. The list sends it explicitly below,
+ * because the table derives "delivered" from it.
+ */
+const ORDER_LIST_FIELDS =
+  '_id createdAt customer store total payment.status paymentMethod status items.quantity';
+
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -838,13 +885,37 @@ export const listStoreOrders = asyncHandler(async (req, res) => {
 
   if (!entry) throw new HttpError(404, 'You do not have a store yet.');
 
+  // The list projects ONLY what the orders table renders: the id, when it
+  // arrived, who it is for, what it came to, how it is paid, and how many items.
+  //
+  // It used to return whole order documents. Each one carries a guest block, a
+  // full address, a geo point, the payment record, the entire status history,
+  // and every line - which the table never reads and the DETAIL page fetches
+  // on its own anyway. On a store with a few hundred orders that is several
+  // hundred KB of JSON per page load, all of it parsed by the browser and then
+  // discarded. Selecting the ten fields that are actually rendered is the
+  // difference between a board that opens instantly and one that does not.
+  //
+  // The projection keeps the document shape the client already expects, so no
+  // page had to change.
   const orders = await Order.find({ store: entry.store._id })
+    .select(ORDER_LIST_FIELDS)
     .sort({ createdAt: -1 })
     .limit(200)
-    .populate(ORDER_POPULATE);
+    .populate(ORDER_LIST_POPULATE)
+    .lean();
+
+  // `isOpen` is a virtual, so `.lean()` drops it - and the table's
+  // fulfillmentOf() reads `order.isOpen === false` to mean "closed". Recomputing
+  // it here is exactly the virtual's own rule, so the projected rows behave
+  // identically to the full documents and no page had to change.
+  const rows = orders.map((order) => ({
+    ...order,
+    isOpen: !CLOSED_STATUSES.includes(order.status),
+  }));
 
   res.json({
-    orders,
+    orders: rows,
     store: entry.store,
     role: entry.role,
     isOwner: entry.role === STORE_ROLES.OWNER,
@@ -876,16 +947,26 @@ export const listAllOrders = asyncHandler(async (req, res) => {
   }
 
   const [orders, total] = await Promise.all([
+    // Same projection as the store board: an admin list is still a list, and
+    // its table renders the same columns. The detail page fetches its own order.
     Order.find(filter)
+      .select(ORDER_LIST_FIELDS)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .populate(ORDER_POPULATE),
+      .populate(ORDER_LIST_POPULATE)
+      .lean(),
     Order.countDocuments(filter),
   ]);
 
+  // See listStoreOrders: `isOpen` is a virtual that .lean() drops.
+  const rows = orders.map((order) => ({
+    ...order,
+    isOpen: !CLOSED_STATUSES.includes(order.status),
+  }));
+
   res.json({
-    orders,
+    orders: rows,
     page,
     pages: Math.max(1, Math.ceil(total / limit)),
     total,

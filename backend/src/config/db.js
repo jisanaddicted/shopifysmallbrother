@@ -31,7 +31,33 @@ export async function connectDB() {
 
   // Generous on purpose: a remote Atlas cluster may need to wake up first.
   // Failing fast with a clear message beats hanging for the 30s default.
-  await mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 15000 });
+  await mongoose.connect(config.mongoUri, {
+    serverSelectionTimeoutMS: 15000,
+
+    // The database is a REMOTE Atlas cluster, so every query pays a network
+    // round trip. The driver defaults to a pool of 5, which is far too small
+    // once a page fires several queries in parallel - the extra ones queue
+    // behind the pool and each adds a full round trip of waiting.
+    //
+    // maxPoolSize 20 covers the widest fan-out in the app (the merchant
+    // dashboard and the order board both load several collections at once)
+    // without opening connections nobody needs.
+    maxPoolSize: 20,
+
+    // Never let a request hang on an exhausted pool. Without this a saturated
+    // pool makes requests queue for the driver's 30s default instead of
+    // failing over to the read preference below, which is the whole point of
+    // having one.
+    waitQueueTimeoutMS: 10000,
+
+    // Retry a read once against a secondary if the primary is briefly
+    // unavailable. Every dashboard read in this app is a read, so this turns a
+    // brief primary election from a pile of failed requests into a slower
+    // response instead.
+    readPreference: 'primaryPreferred',
+    retryReads: true,
+    retryWrites: true,
+  });
 
   const { host, port, name } = mongoose.connection;
   console.log(`[db] connected to ${name} at ${host}${port ? `:${port}` : ''}`);

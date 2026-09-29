@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Navbar from './components/common/Navbar';
 import DashboardLayout from './components/common/DashboardLayout';
@@ -6,29 +7,66 @@ import CustomerLogin from './pages/auth/CustomerLogin';
 import CustomerRegister from './pages/auth/CustomerRegister';
 import CartDrawer from './components/store/CartDrawer';
 import { useAuth } from './context/AuthContext';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminInvitations from './pages/admin/AdminInvitations';
-import ProductManager from './pages/admin/ProductManager';
-import ProductEditor from './pages/admin/ProductEditor';
-
-import Login from './pages/auth/Login';
-import Register from './pages/auth/Register';
-import ProfilePage from './pages/profile/ProfilePage';
-import Checkout from './pages/customer/Checkout';
-import OrderTracker from './pages/customer/OrderTracker';
-import PaymentFailed from './pages/customer/PaymentFailed';
-import PaymentSuccess from './pages/customer/PaymentSuccess';
-import ShopPage from './pages/customer/ShopPage';
-import Storefront from './pages/customer/Storefront';
-import MerchantDashboard from './pages/store/MerchantDashboard';
-import StoreRiderAnalytics from './pages/store/StoreRiderAnalytics';
-import StoreOrders from './pages/store/StoreOrders';
-import StoreCustomers from './pages/store/StoreCustomers';
-import RiderTracker from './pages/store/RiderTracker';
-import ThemeBuilder from './pages/store/ThemeBuilder';
-import RiderConsole from './pages/rider/RiderConsole';
-import RiderAnalytics from './pages/rider/RiderAnalytics';
+import LoadingSpinner from './components/common/LoadingSpinner';
 import { ROLES, ROUTES } from './utils/constants';
+
+/**
+ * Pages are code-split, not eagerly imported.
+ *
+ * Every page used to be a top-level import, so the browser downloaded and parsed
+ * all of them - including the rider/admin screens nobody had opened - before it
+ * could paint anything. Two concrete costs that came out of that:
+ *
+ *   - Leaflet (151KB of map code) was pulled in on EVERY page, but only the
+ *     rider map pages use it.
+ *   - A shopper landing on a storefront paid for the entire staff portal.
+ *
+ * `lazy` defers each page to its own chunk, fetched the first time that route
+ * is actually visited. The two auth pages stay eager on purpose: they are the
+ * entry point for a signed-out visitor and the destination of the very first
+ * navigation, so deferring them would only add a round trip before anything
+ * could be shown.
+ */
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
+const AdminInvitations = lazy(() => import('./pages/admin/AdminInvitations'));
+const ProductManager = lazy(() => import('./pages/admin/ProductManager'));
+const ProductEditor = lazy(() => import('./pages/admin/ProductEditor'));
+
+const Login = lazy(() => import('./pages/auth/Login'));
+const Register = lazy(() => import('./pages/auth/Register'));
+const ProfilePage = lazy(() => import('./pages/profile/ProfilePage'));
+const Checkout = lazy(() => import('./pages/customer/Checkout'));
+const OrderTracker = lazy(() => import('./pages/customer/OrderTracker'));
+const PaymentFailed = lazy(() => import('./pages/customer/PaymentFailed'));
+const PaymentSuccess = lazy(() => import('./pages/customer/PaymentSuccess'));
+const ShopPage = lazy(() => import('./pages/customer/ShopPage'));
+const Storefront = lazy(() => import('./pages/customer/Storefront'));
+const MerchantDashboard = lazy(() => import('./pages/store/MerchantDashboard'));
+const StoreRiderAnalytics = lazy(() =>
+  import('./pages/store/StoreRiderAnalytics')
+);
+const StoreOrders = lazy(() => import('./pages/store/StoreOrders'));
+const StoreCustomers = lazy(() => import('./pages/store/StoreCustomers'));
+const RiderTracker = lazy(() => import('./pages/store/RiderTracker'));
+const ThemeBuilder = lazy(() => import('./pages/store/ThemeBuilder'));
+const RiderConsole = lazy(() => import('./pages/rider/RiderConsole'));
+const RiderAnalytics = lazy(() => import('./pages/rider/RiderAnalytics'));
+
+/**
+ * Shown while a page chunk is in flight.
+ *
+ * Sized to roughly a page of content so the layout does not jump when the real
+ * page replaces it, and centred so it reads as "loading" rather than as a
+ * broken empty screen.
+ */
+function PageFallback() {
+  return (
+    <div className="page">
+      <LoadingSpinner label="Loading…" />
+    </div>
+  );
+}
+
 /** "/" sends everyone to the right home page for their role. */
 function HomeRedirect() {
   const { isAuthenticated, user, runsStore, homeRoute } = useAuth();
@@ -109,7 +147,14 @@ export default function App() {
               : 'app-main'
         }
       >
-        <Routes>
+        {/* One Suspense boundary for the whole route table: the first page a
+            visitor lands on pays for its own chunk, and after that the chunks
+            are in the HTTP cache (see the immutable cache headers in app.js).
+            A boundary per route would work too, but a single one means the
+            chrome - navbar, cart drawer, dashboard rail - stays mounted and
+            only the page area swaps. */}
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
           <Route path={ROUTES.HOME} element={<HomeRedirect />} />
           <Route path={ROUTES.LOGIN} element={<Login />} />
           <Route path={ROUTES.REGISTER} element={<Register />} />
@@ -317,7 +362,8 @@ export default function App() {
           <Route path={ROUTES.SHOP} element={<ShopPage />} />
 
           <Route path="*" element={<NotFound />} />
-        </Routes>
+          </Routes>
+        </Suspense>
       </main>
 
       {/* Lives outside <Routes> so any page can slide the cart open. */}
