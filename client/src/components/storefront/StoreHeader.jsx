@@ -3,12 +3,17 @@ import { Link, useLocation } from 'react-router-dom';
 
 /**
  * Store header for the public storefront (`/s/<slug>`).
- * Left: store logo (image when the store has one, otherwise initial + name).
+ * Left: the three-line menu button (phones only) + store logo (image when the
+ * store has one, otherwise initial + name).
  * Right: cart icon button (opens the cart drawer) + account icon link.
  *
  * The account link carries the store's identity in its state, so a guest who
  * taps it lands on /login (and from there /register) *as a customer of this
  * store* - the API links the account the moment they sign up or sign in.
+ *
+ * The menu button is passed in rather than rendered here unconditionally: it
+ * only makes sense on a storefront that actually has a menu, and the CSS keeps
+ * it hidden on desktop where the horizontal nav bar is the navigation.
  */
 
 function initialsOf(name) {
@@ -23,7 +28,23 @@ function initialsOf(name) {
   );
 }
 
-export default function StoreHeader({ store, itemCount, user, onCartClick }) {
+/* Three bars, drawn as SVG so they stay an even thickness and crisp at any
+   size, rather than borrowing the ☰ glyph (which varies by font). */
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
+export default function StoreHeader({
+  store,
+  itemCount,
+  user,
+  onCartClick,
+  onMenuClick,
+}) {
   const [logoBroken, setLogoBroken] = useState(false);
   const location = useLocation();
   const name = store?.name || 'Store';
@@ -44,6 +65,19 @@ export default function StoreHeader({ store, itemCount, user, onCartClick }) {
   return (
     <header className="store-header">
       <div className="store-header__brand">
+        {/* Phones only (CSS). Opens the store menu as a drawer from the left,
+            matching the cart drawer on the right side of the header. */}
+        {onMenuClick ? (
+          <button
+            type="button"
+            className="store-header__menu-btn"
+            onClick={onMenuClick}
+            aria-label="Open store menu"
+          >
+            <MenuIcon />
+          </button>
+        ) : null}
+
         {logo ? (
           <img
             src={logo}

@@ -10,6 +10,11 @@ import { Link } from 'react-router-dom';
  * Top-level items with `children` render as content-width mega menus on hover
  * (desktop). On touch devices the mega menu is toggled with a small caret
  * button next to the label.
+ *
+ * This is the DESKTOP navigation only. It is hidden below 768px, where the
+ * header's three-line button opens the same menu as a slide-in drawer instead
+ * (StoreMenuDrawer) — a single burger per screen, sitting in the header beside
+ * the logo where the thumb already is.
  */
 
 function isExternal(href) {

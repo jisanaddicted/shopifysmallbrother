@@ -855,6 +855,144 @@ ol {
   transform: translateX(0);
 }
 
+/*
+ * The left-hand variant, used by the store menu drawer.
+ *
+ * Only the panel's anchoring and slide direction change; the scrim, timings
+ * and width are inherited from the cart drawer above, so the two side panels
+ * in this app are unmistakably the same control pointed the other way.
+ */
+.drawer--left .drawer__panel {
+  right: auto;
+  left: 0;
+  transform: translateX(-100%);
+  /* Opening from the right edge would need the shadow on its left face only. */
+  box-shadow: var(--shadow);
+}
+
+.drawer--left.drawer--open .drawer__panel {
+  transform: translateX(0);
+}
+
+/*
+ * Store menu rows inside the drawer.
+ *
+ * A row is a link PLUS a toggle, never a link that toggles: the label still has
+ * to reach that page, and folding it away behind an accordion would make every
+ * parent section unreachable. The toggle is a full-height 44px target so it is
+ * easy to hit with a thumb.
+ */
+.smenu,
+.smenu__sub {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.smenu__row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+}
+
+.smenu__link {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 0.95rem 1rem;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.smenu__link:hover {
+  color: var(--brand-dark);
+  text-decoration: none;
+}
+
+.smenu__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.25rem;
+  padding: 0 0.9rem;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--line);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.smenu__item.is-open > .smenu__row .smenu__toggle {
+  transform: rotate(180deg);
+  color: var(--brand-dark);
+}
+
+.smenu__item.is-open > .smenu__row .smenu__link {
+  color: var(--brand-dark);
+}
+
+/* Nested levels are tinted and indented, so the depth of the tree is readable
+   at a glance instead of every level looking like a sibling. */
+.smenu__sub {
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--line);
+}
+
+.smenu__sub .smenu__row {
+  border-bottom-color: transparent;
+}
+
+.smenu__sub .smenu__link {
+  padding-left: 1.75rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.smenu__sub .smenu__sub .smenu__link {
+  padding-left: 2.5rem;
+  font-size: 0.92rem;
+}
+
+/*
+ * The header's three-line button, and the phone-only rule that hides the
+ * horizontal nav it replaces.
+ *
+ * Hidden by default and revealed at the same 768px breakpoint the storefront
+ * already uses for its bottom tab bar, so the two mobile affordances switch
+ * together. On desktop the nav bar below is the navigation and a burger in the
+ * corner would be a second, redundant way to reach it.
+ */
+.store-header__menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-right: 0.15rem;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.store-header__menu-btn:hover {
+  background: var(--surface-alt);
+}
+
+@media (max-width: 768px) {
+  .store-header__menu-btn {
+    display: flex;
+  }
+}
+
 .drawer__header,
 .drawer__footer {
   padding: 1rem;
@@ -2385,33 +2523,21 @@ ol {
   height: auto;
 }
 
-.dash__who {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin: 0;
-  padding: 0.7rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface-alt);
-}
-
-.dash__who-name {
-  display: block;
-  font-weight: 700;
-  font-size: 0.9rem;
-}
-
 .dash__nav {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
+/*
+ * Text-only rows now, so the flex gap that separated an icon from its label is
+ * gone - with one child it did nothing, and left the labels sitting a hair
+ * further right than the rest of the rail. The active state carries the
+ * position.
+ */
 .dash__link {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
   padding: 0.6rem 0.75rem;
   border-radius: var(--radius-sm);
   color: var(--ink-soft);
@@ -2752,6 +2878,11 @@ ol {
   opacity: 1;
 }
 
+/* --- Mobile: the store menu as a drawer from the left ---------------------- */
+/* The phone rules that hide .store-nav__list, and the header's three-line
+   button, live with the cart drawer further up — the menu drawer reuses that
+   component's scrim and panel. See "The left-hand variant" there. */
+
 /* Legacy small dropdown class kept for backwards compat (no longer rendered
    by StoreNav, but harmless if some cached markup still uses it). */
 .store-nav__submenu {
@@ -2793,13 +2924,19 @@ ol {
   margin-left: 0.25rem;
 }
 
-/* Mobile: mega menu opens on tap via .open class, stacked statically */
+/*
+ * Phones: the horizontal bar is gone.
+ *
+ * It used to stay visible here, re-flowed into wrapped rows, and reached the
+ * menu through the mega menu opened by a caret. That whole path is replaced by
+ * the header's three-line button and the left-side drawer, so the bar is hidden
+ * outright and the rules that used to restyle it are gone with it. The
+ * mega-menu overrides below are the last of that old approach, kept only so a
+ * stale cached stylesheet cannot flash an unstyled panel.
+ */
 @media (max-width: 768px) {
   .store-nav__list {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: 0.25rem 1rem;
-    padding: 0.6rem 1rem;
+    display: none;
   }
 
   .store-nav__item {
@@ -2840,9 +2977,9 @@ ol {
   display: none;
 }
 
-/* Bottom sheets opened from the mobile tab bar. Both are display:none above
-   768px, so they only ever exist inside the mobile experience. */
-.menu-sheet,
+/* Bottom sheet opened from the mobile tab bar. display:none above 768px, so it
+   only ever exists inside the mobile experience. (The tab bar's MENU tab now
+   opens the store menu drawer instead of its own sheet — see ShopPage.) */
 .account-sheet {
   display: none;
 }
@@ -2938,83 +3075,6 @@ ol {
     font-weight: 700;
     letter-spacing: 0;
     border: 2px solid #123524;
-  }
-
-  .menu-sheet {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 500;
-  }
-
-  .menu-sheet__scrim {
-    position: absolute;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.45);
-    border: none;
-    padding: 0;
-    cursor: pointer;
-  }
-
-  .menu-sheet__panel {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    max-height: 70vh;
-    overflow-y: auto;
-    background: var(--surface);
-    border-radius: 18px 18px 0 0;
-    padding: 0.75rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
-    box-shadow: var(--shadow);
-  }
-
-  .menu-sheet__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.25rem 0 0.6rem;
-    font-size: 1rem;
-  }
-
-  .menu-sheet__close {
-    border: 1px solid var(--line);
-    background: var(--surface-alt);
-    border-radius: 999px;
-    width: 32px;
-    height: 32px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    line-height: 1;
-  }
-
-  .menu-sheet__list {
-    display: flex;
-    flex-direction: column;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  .menu-sheet__item {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.8rem 0.25rem;
-    background: none;
-    border: none;
-    border-bottom: 1px solid var(--line);
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--ink);
-    cursor: pointer;
-    text-align: left;
-  }
-
-  .menu-sheet__item.is-active {
-    color: #123524;
   }
 
   /* Bottom sheet opened from the mobile ACCOUNT tab: the signed-in shopper's

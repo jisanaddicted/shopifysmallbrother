@@ -4,6 +4,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ProductCard from '../../components/store/ProductCard';
 import StoreHeader from '../../components/storefront/StoreHeader';
 import StoreNav from '../../components/storefront/StoreNav';
+import StoreMenuDrawer from '../../components/storefront/StoreMenuDrawer';
 import MobileTabs from '../../components/storefront/MobileTabs';
 import CustomerAccountSheet from '../../components/storefront/CustomerAccountSheet';
 import { useAuth } from '../../context/AuthContext';
@@ -31,7 +32,10 @@ export default function ShopPage() {
   const [error, setError] = useState('');
     const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
-  const [menuOpen, setMenuOpen] = useState(false);
+  /* The store's own nav menu, as a side drawer. Opened from BOTH the header's
+     three-line button and the bottom tab bar's MENU tab, so the two
+     affordances always show the shopper the same thing. */
+  const [navOpen, setNavOpen] = useState(false);
   /* The ACCOUNT tab's sheet: this shopper's own account, not the store's. */
   const [accountOpen, setAccountOpen] = useState(false);
   const searchRef = useRef(null);
@@ -129,7 +133,15 @@ export default function ShopPage() {
 
     return (
     <div className="page page--customer">
-      <StoreHeader store={store} itemCount={itemCount} user={user} onCartClick={openCart} />
+      <StoreHeader
+        store={store}
+        itemCount={itemCount}
+        user={user}
+        onCartClick={openCart}
+        /* Only offer the menu button when the store actually has a menu, so we
+           never open an empty drawer. */
+        onMenuClick={menu.length ? () => setNavOpen(true) : undefined}
+      />
       {store ? <StoreNav menu={menu} /> : null}
 
             <div className="filters">
@@ -187,20 +199,37 @@ export default function ShopPage() {
         </div>
       )}
 
+      {/* The store's own menu, as a drawer from the left. Opened by the
+          three-line button in the header; phones only. */}
+      <StoreMenuDrawer
+        menu={menu}
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+      />
+
       {/* Mobile-only bottom tab bar: Home · Menu · Cart · Search · Account */}
       <MobileTabs
         store={store}
         itemCount={itemCount}
         user={user}
-        menuOpen={menuOpen}
+        menuOpen={navOpen}
         accountOpen={accountOpen}
         onCartClick={openCart}
+        /* The bottom MENU tab opens the SAME store menu the header's three-line
+           button does. It used to open a separate sheet listing product
+           CATEGORIES, so two different panels on one screen were both called
+           "Menu" and the tab never showed anything the merchant had actually
+           built in the theme editor.
+
+           Nothing is lost by dropping that sheet: the category filter is still
+           right there in the .filters__select above, which does the same job on
+           every screen size. */
         onMenuClick={() => {
           setAccountOpen(false);
-          setMenuOpen((open) => !open);
+          setNavOpen(true);
         }}
         onAccountClick={() => {
-          setMenuOpen(false);
+          setNavOpen(false);
           setAccountOpen(true);
         }}
         onSearchClick={() => {
@@ -208,47 +237,6 @@ export default function ShopPage() {
           searchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }}
       />
-      {/* Mobile menu sheet: category list opened from the bottom MENU tab */}
-      {menuOpen ? (
-        <div className="menu-sheet" role="dialog" aria-label="Menu categories">
-          <button
-            type="button"
-            className="menu-sheet__scrim"
-            aria-label="Close menu"
-            onClick={() => setMenuOpen(false)}
-          />
-          <div className="menu-sheet__panel">
-            <div className="menu-sheet__head">
-              <strong>Menu</strong>
-              <button
-                type="button"
-                className="menu-sheet__close"
-                onClick={() => setMenuOpen(false)}
-                aria-label="Close menu"
-              >
-                ✕
-              </button>
-            </div>
-            <ul className="menu-sheet__list">
-              {categories.map((c) => (
-                <li key={c}>
-                  <button
-                    type="button"
-                    className={`menu-sheet__item${category === c ? ' is-active' : ''}`}
-                    onClick={() => {
-                      setCategory(c);
-                      setMenuOpen(false);
-                    }}
-                  >
-                    {c === 'all' ? 'All items' : c}
-                    <span aria-hidden="true">→</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      ) : null}
       {/* Mobile account sheet: the shopper's own account details, or the
           Create account / Log in choice when they are browsing as a guest. */}
       <CustomerAccountSheet

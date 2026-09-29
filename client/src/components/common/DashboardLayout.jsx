@@ -61,49 +61,52 @@ export default function DashboardLayout({ variant = 'merchant' }) {
   const isMerchant = variant === 'merchant';
   const isRiderShell = variant === 'rider';
 
-  // Three back-office shells, one per variant. The rider's rail is short: the
-  // console and their own numbers, which is the same pair the rider navbar used
-  // to carry across the top.
+  /*
+   * Three back-office shells, one per variant. The rider's rail is short: the
+   * console and their own numbers, which is the same pair the rider navbar used
+   * to carry across the top.
+   *
+   * No icons. The rail is a text list, and the emoji that used to lead each row
+   * (a shop, a receipt, a box, a chart, a palette) were decorative duplicates of
+   * the word beside them - they added a second, noisier labelling of the same
+   * six things, they rendered differently on every OS, and they were the widest
+   * thing in the row, so the labels did not line up. The active row is already
+   * marked by the brand-tinted background.
+   */
   const merchantLinks = [
-    { to: ROUTES.MERCHANT_DASHBOARD, label: 'My store', icon: '🏪', end: true },
+    { to: ROUTES.MERCHANT_DASHBOARD, label: 'My store', end: true },
     // The order book and the customer list used to be two tables at the bottom
     // of "My store". They are pages of their own now: both are things a
     // merchant comes back to and searches, and neither is something you scroll
     // past once on the way to the team panel.
-    { to: ROUTES.MERCHANT_ORDERS, label: 'Orders', icon: '🧾', end: false },
-    { to: ROUTES.MERCHANT_CUSTOMERS, label: 'Customers', icon: '👥', end: false },
-    { to: ROUTES.MERCHANT_PRODUCTS, label: 'Products', icon: '📦', end: false },
+    { to: ROUTES.MERCHANT_ORDERS, label: 'Orders', end: false },
+    { to: ROUTES.MERCHANT_CUSTOMERS, label: 'Customers', end: false },
+    { to: ROUTES.MERCHANT_PRODUCTS, label: 'Products', end: false },
     // How long deliveries take here, split by who owned each wait.
-    {
-      to: ROUTES.MERCHANT_ANALYTICS,
-      label: 'Rider analytics',
-      icon: '📈',
-      end: false,
-    },
-    { to: ROUTES.MERCHANT_THEME, label: 'Theme', icon: '🎨', end: false },
+    { to: ROUTES.MERCHANT_ANALYTICS, label: 'Rider analytics', end: false },
+    { to: ROUTES.MERCHANT_THEME, label: 'Theme', end: false },
   ];
 
   const riderLinks = [
-    { to: ROUTES.RIDER_CONSOLE, label: 'My deliveries', icon: '🛵', end: true },
-    { to: ROUTES.RIDER_ANALYTICS, label: 'Analytics', icon: '📈', end: false },
+    { to: ROUTES.RIDER_CONSOLE, label: 'My deliveries', end: true },
+    { to: ROUTES.RIDER_ANALYTICS, label: 'Analytics', end: false },
   ];
 
   const adminLinks = [
-    { to: ROUTES.ADMIN_DASHBOARD, label: 'Orders', icon: '🧭', end: true },
-    { to: ROUTES.ADMIN_PRODUCTS, label: 'Products', icon: '📦', end: false },
+    { to: ROUTES.ADMIN_DASHBOARD, label: 'Orders', end: true },
+    { to: ROUTES.ADMIN_PRODUCTS, label: 'Products', end: false },
     // Live delivery map across the stores this admin runs. Moved here from the
     // store dashboard: watching every rider at once is an operations view, and
     // an admin with several stores picks which one from this page.
-    { to: ROUTES.ADMIN_RIDERS, label: 'Rider tracker', icon: '🛵', end: false },
+    { to: ROUTES.ADMIN_RIDERS, label: 'Rider tracker', end: false },
     // Stores invite this admin by username; the answer happens here.
     {
       to: ROUTES.ADMIN_INVITATIONS,
       label: 'Invitations',
-      icon: '✉️',
       end: false,
       badge: pendingInvites,
     },
-    { to: ROUTES.ADMIN_THEME, label: 'Theme', icon: '🎨', end: false },
+    { to: ROUTES.ADMIN_THEME, label: 'Theme', end: false },
   ];
 
   const links = isRiderShell
@@ -117,13 +120,6 @@ export default function DashboardLayout({ variant = 'merchant' }) {
     : isMerchant
       ? 'Store dashboard'
       : 'Admin panel';
-  const subtitle = isRiderShell
-    ? 'Your deliveries'
-    : isMerchant
-      ? user?.username
-        ? `@${user.username}`
-        : user?.name || user?.email || ''
-      : 'Platform controls';
 
   return (
     <div className="dash">
@@ -152,19 +148,16 @@ export default function DashboardLayout({ variant = 'merchant' }) {
           />
         </Link>
 
-        <p className="dash__who">
-          <span className="avatar" aria-hidden="true">
-            {initials(user?.name || user?.email)}
-          </span>
-          <span>
-            <span className="dash__who-name">
-              {user?.name || user?.email || 'Account'}
-            </span>
-            {subtitle ? (
-              <span className="muted small block">{subtitle}</span>
-            ) : null}
-          </span>
-        </p>
+        {/*
+          The signed-in card that used to sit here is gone.
+
+          It repeated what the topbar already says directly opposite: the same
+          avatar, the same name, the same @handle. With the logo above it, the
+          rail opened with three stacked identity blocks before a merchant
+          reached a single navigation link - and the username is the one thing
+          in there a merchant never needs to re-read on every page. The topbar
+          profile link still carries it, so nothing is lost.
+        */}
 
         <nav className="dash__nav" aria-label={title}>
           {links.map((link) => (
@@ -177,7 +170,6 @@ export default function DashboardLayout({ variant = 'merchant' }) {
                 `dash__link${isActive ? ' is-active' : ''}`
               }
             >
-              <span aria-hidden="true">{link.icon}</span>
               {link.label}
               {link.badge > 0 ? (
                 <span

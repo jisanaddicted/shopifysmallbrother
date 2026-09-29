@@ -109,7 +109,7 @@ export default function MobileTabs({
         className={`mobile-tabs__tab${menuOpen ? ' is-active' : ''}`}
         onClick={onMenuClick}
         aria-expanded={Boolean(menuOpen)}
-        aria-label="Open menu categories"
+        aria-label="Open store menu"
       >
         <span className="mobile-tabs__icon"><MenuIcon /></span>
         <span className="mobile-tabs__label">MENU</span>
