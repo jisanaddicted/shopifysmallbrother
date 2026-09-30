@@ -4,6 +4,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import VariantMatrix from '../../components/store/VariantMatrix';
 import { useAuth } from '../../context/AuthContext';
 import productService from '../../services/productService';
+import menuService from '../../services/menuService';
 import { statusOf, tracksInventory } from '../../utils/catalog';
 import {
   PRODUCT_STATUS,
@@ -71,6 +72,15 @@ export default function ProductEditor({ basePath }) {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(!isNew);
   const [form, setForm] = useState(EMPTY_FORM);
+  /* The store's categories, for the Category dropdown. Read from the same
+     endpoint the theme panel edits, so the two can never disagree about what
+     exists - see menuService.getStoreCategories.
+
+     Held apart from `form` because it is loaded data rather than something the
+     merchant is typing: it arrives on its own, and refetching it must not
+     disturb a half-filled form. */
+  const [categories, setCategories] = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   // Held apart from `form` for the same reason ProductManager does it: the
   // matrix re-renders on every keystroke, and dragging the whole form with it
   // would remount inputs under the merchant mid-edit.
@@ -86,6 +96,101 @@ export default function ProductEditor({ basePath }) {
       setStoreId(String(memberStores[0]._id || memberStores[0].id));
     }
   }, [memberStores, storeId]);
+
+  /**
+   * Load the store's categories for the dropdown.
+   *
+   * Keyed on `storeId` rather than fetched once, because a member who runs
+   * several stores can switch this product between them from the Store picker
+   * above - and two shops do not share a category list. Changing store
+   * therefore reloads the options.
+   *
+   * A failed load is NOT surfaced as a form error and does not block saving.
+   * The dropdown degrades to whatever it already had, and because the current
+   * category is always rendered as an option (see `categoryOptions`), a product
+   * can still be opened, read and re-saved with its category intact while the
+   * category list is unavailable. Blocking the whole form on a failed
+   * supplementary read would trade a working product for a dead dropdown.
+   */
+  useEffect(() => {
+    if (!storeId) {
+      setCategories([]);
+      return undefined;
+    }
+
+    let active = true;
+    setCategoriesLoading(true);
+
+    menuService
+      .getStoreCategories(storeId)
+      .then((next) => {
+        if (active) setCategories(next);
+      })
+      .catch(() => {
+        if (active) setCategories([]);
+      })
+      .finally(() => {
+        if (active) setCategoriesLoading(false);
+      });
+
+    // `active` rather than checking an id after the fact: this effect can be
+    // torn down mid-flight by a store switch, and a late response would
+    // otherwise land in the state of the store the merchant has moved on from.
+    return () => {
+      active = false;
+    };
+  }, [storeId]);
+
+  /**
+   * The category options actually rendered.
+   *
+   * The product's CURRENT category is always in this list, even when the server
+   * did not return it. That is not belt-and-braces, it is the difference
+   * between editing a product and silently unfiling it:
+   *
+   *   - a `<select>` whose `value` matches none of its `<option>`s renders
+   *     blank, so `form.category` on the next save would be `''`;
+   *   - the stored category being absent from the list is entirely possible -
+   *     it was filed under a different store, the read failed, or the merchant
+   *     deleted that category in the Theme tab while this form was open.
+   *
+   * So the current name is appended when missing, and the comparison is
+   * case-insensitive to agree with the server's own rule (see listCategories):
+   * a product filed as "drinks" under a curated "Drinks" is one section, and
+   * must not appear as two entries or as none.
+   */
+  const categoryOptions = useMemo(() => {
+    const names = categories
+      .map((entry) => String(entry?.name || '').trim())
+      .filter(Boolean);
+
+    const current = form.category.trim();
+    if (current && !names.some((name) => name.toLowerCase() === current.toLowerCase())) {
+      names.push(current);
+    }
+
+    return names;
+  }, [categories, form.category]);
+
+  /**
+   * The option the select is held on, which is the stored category resolved
+   * against the list.
+   *
+   * Normalised rather than passed through so the control can only ever hold a
+   * value that is actually one of its options. A product stored as "drinks"
+   * under a curated "Drinks" is held on "Drinks" - the spelling the merchant
+   * chose - so saving that untouched form files the product under the name
+   * their storefront heading actually uses, instead of quietly reintroducing
+   * the stray capitalisation.
+   */
+  const selectedCategory = useMemo(() => {
+    const current = form.category.trim();
+    if (!current) return '';
+
+    return (
+      categoryOptions.find((name) => name.toLowerCase() === current.toLowerCase()) || current
+    );
+  }, [categoryOptions, form.category]);
 
   /**
    * Load the product into the form.
@@ -493,7 +598,18 @@ export default function ProductEditor({ basePath }) {
                 <span>Store</span>
                 <select
                   value={storeId}
-                  onChange={(event) => setStoreId(event.target.value)}
+                  onChange={(event) => {
+                    setStoreId(event.target.value);
+                    // A category belongs to the store that defines it, so
+                    // carrying it across would file the product under a section
+                    // of a shop that has never heard of it - and it would not
+                    // even be in the list this box now offers. Clearing it here,
+                    // rather than in an effect watching `storeId`, also keeps
+                    // the automatic store defaulting below (which sets
+                    // `storeId` too) from wiping the category that a loaded
+                    // product brought with it.
+                    setForm((prev) => ({ ...prev, category: '' }));
+                  }}
                 >
                   {memberStores.map((store) => (
                     <option key={store._id || store.id} value={store._id || store.id}>
@@ -506,14 +622,38 @@ export default function ProductEditor({ basePath }) {
 
             <label className="field">
               <span>Category</span>
-              <input
-                type="text"
+              {/* A picker over the store's real categories rather than a
+                  free text box. A category is the storefront's section
+                  heading, so typing a near-miss ("drinks", "Drinks", "Drink")
+                  used to quietly make three sections that each held a share
+                  of the stock and all read the same to a shopper. Choosing
+                  from the list is the entire point of curating one in the
+                  Theme tab. */}
+              <select
                 name="category"
-                value={form.category}
+                value={selectedCategory}
                 onChange={handleChange}
-                placeholder="Food"
-              />
+                disabled={categoriesLoading && !categoryOptions.length}
+              >
+                {/* The blank option is first because a product with no
+                    category is perfectly valid - the storefront gathers
+                    those under its own "Other items" heading. */}
+                <option value="">No category</option>
+                {categoryOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
             </label>
+
+            <p className="muted small">
+              {categoriesLoading
+                ? 'Loading your categories…'
+                : categoryOptions.length === 0
+                  ? 'This store has no categories yet. Create one in the Theme tab, and it becomes a section you can file products under.'
+                  : 'Every product filed under a category shows on your storefront as its own section. Add or rename categories in the Theme tab.'}
+            </p>
 
             <label className="field">
               <span>Type</span>

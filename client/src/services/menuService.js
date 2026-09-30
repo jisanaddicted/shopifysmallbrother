@@ -29,6 +29,30 @@ export const saveStoreMenu = (storeId, items) =>
     .then((res) => res.data.items || []);
 
 /**
+ * GET /api/menu/edit/:storeId/categories  (store owner / admin)
+ *
+ * Just the store's category names, for a picker - the product form's Category
+ * dropdown - so it resolves to an array of `[{ name, count }]` matching the
+ * panel's shape.
+ *
+ * Separate from `loadStoreMenu` rather than a field of it, because that call is
+ * the theme editor's whole payload: the nav tree, every product in the store,
+ * and the store document carrying `categoryImages` (a base64 data URL per
+ * category, up to 1MB each). The product form has no use for any of it, and
+ * the pictures are the expensive part.
+ *
+ * It resolves to the SAME list the theme panel shows, because the server builds
+ * both from one function. That matters: a category can exist only because a
+ * product was filed under it and never been curated, and offering the picker
+ * cannot lose such a category - a select limited to curated names would blank
+ * it out of the product the moment the merchant opened it to edit.
+ */
+export const getStoreCategories = (storeId) =>
+  api
+    .get(`/menu/edit/${storeId}/categories`)
+    .then((res) => res.data.categories || []);
+
+/**
  * POST /api/menu/edit/:storeId/categories  — create a category.
  *
  * Separate from saving the menu on purpose. A category is a NAME, not a menu
@@ -143,6 +167,7 @@ function imageToDataUrl(image, maxSize) {
 export default {
   getPublicStoreMenu,
   loadStoreMenu,
+  getStoreCategories,
   saveStoreMenu,
   createCategory,
   deleteCategory,

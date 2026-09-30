@@ -236,6 +236,97 @@ check(
   !afterDerived.some((c) => c.name === derivedOnly),
 );
 
+/* --- 7c. THE PICKER ENDPOINT: GET /menu/edit/:storeId/categories ------------
+
+   The product form's Category dropdown reads this, and the whole point of it
+   is that a merchant picks from the categories they curated in the Theme tab
+   instead of typing a near-miss that silently forks their storefront into
+   three identically-named sections.
+
+   So the checks are about the three ways that can go wrong:
+
+     1. it must offer the SAME names the theme panel lists - a picker that
+        drifted from the panel would quietly stop offering a real category;
+     2. it must include a category that exists ONLY on products, because the
+        old free-text field could file a product under an uncurated name and
+        the picker must not make that product unreachable on the next edit;
+     3. it must NOT ship the pictures, which are base64 data URLs of up to
+        1MB each and would make a dropdown cost megabytes to render. */
+const picker = await call('GET', `/menu/edit/${storeId}/categories`, { token });
+check('GET categories is readable by the owner', picker.status === 200, `${picker.status}`);
+
+const pickerCats = picker.data?.categories || [];
+const panelCats = (await call('GET', `/menu/edit/${storeId}`, { token })).data
+  ?.categories || [];
+
+check(
+  'it offers exactly the names the theme panel shows',
+  pickerCats.map((c) => c.name).join('|') === panelCats.map((c) => c.name).join('|'),
+  `picker ${pickerCats.length} vs panel ${panelCats.length}`,
+);
+check(
+  'every entry is a { name, count } with no picture attached',
+  pickerCats.every(
+    (c) => typeof c.name === 'string' && typeof c.count === 'number' && !('image' in c),
+  ),
+  JSON.stringify(pickerCats.slice(0, 2)),
+);
+
+/* The product-only category. Step 7b filed one and then DELETED it, so it is
+   created again here - deliberately without POSTing it as a category first,
+   so it exists only as a name on a product. That is the case a curated-only
+   dropdown would lose. */
+const pickerOnly = `${CAT} Picker`;
+await refile(pickerOnly);
+
+const withDerived = (await call('GET', `/menu/edit/${storeId}/categories`, { token })).data
+  ?.categories || [];
+check(
+  'a product-only category is offered too, not just curated ones',
+  withDerived.some((c) => c.name === pickerOnly && c.count === 1),
+  withDerived.map((c) => `${c.name}:${c.count}`).join(' | ') || '(none)',
+);
+
+/* The picture case, which is the payload-size half of the check. A category is
+   given a real image, then the picker is asked again: the name must still be
+   there, and the base64 must not be.
+
+   A 1x1 PNG, so this is a genuine image payload and not a fake header that
+   would be rejected before it could prove anything. */
+const PICKER_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+const PICKER_PIC = `${CAT} PickerPic`;
+await call('POST', `/menu/edit/${storeId}/categories`, { token, body: { name: PICKER_PIC } });
+await call(
+  'PUT',
+  `/menu/edit/${storeId}/categories/${encodeURIComponent(PICKER_PIC)}/image`,
+  { token, body: { image: PICKER_PNG } },
+);
+
+const afterPic = (await call('GET', `/menu/edit/${storeId}/categories`, { token })).data
+  ?.categories || [];
+const picEntry = afterPic.find((c) => c.name === PICKER_PIC);
+check('a category with a picture is still offered', Boolean(picEntry));
+check(
+  'but its 1MB data URL is NOT sent to the picker',
+  picEntry && !('image' in picEntry),
+  picEntry ? Object.keys(picEntry).join(',') : 'missing',
+);
+check(
+  'the picker response stays small',
+  JSON.stringify(afterPic).length < 4096,
+  `${JSON.stringify(afterPic).length} bytes`,
+);
+
+/* Authorisation is the same store-scoped check every other category route
+   inherits, and it is asserted here too because this is a NEW route - a route
+   declared after `router.use(requireAuth)` could still be registered outside it
+   by accident.
+
+   The rider half waits for section 8, which is where the rider signs in. */
+const noAuthPicker = await call('GET', `/menu/edit/${storeId}/categories`);
+check('reading categories without a token is refused', noAuthPicker.status === 401, `${noAuthPicker.status}`);
 // --- 8. Authorisation ---------------------------------------------------
 const noAuth = await call('POST', `/menu/edit/${storeId}/categories`, {
   body: { name: 'Sneaky' },
@@ -250,6 +341,12 @@ const asRider = await call('POST', `/menu/edit/${storeId}/categories`, {
   body: { name: 'Not Mine' },
 });
 check("a rider cannot touch this store's categories", asRider.status === 403, `${asRider.status}`);
+
+// The picker endpoint gets the same treatment, now that a rider token exists.
+const asRiderPicker = await call('GET', `/menu/edit/${storeId}/categories`, {
+  token: rider.data.token,
+});
+check("a rider cannot read this store's categories", asRiderPicker.status === 403, `${asRiderPicker.status}`);
 
 // --- 9. Put everything back the way it was found -------------------------
 await refile(originalCategory);
@@ -390,10 +487,30 @@ await call('DELETE', `/menu/edit/${storeId}/categories/${encodeURIComponent(PIC)
   token,
 });
 
+/* Section 7c left two of its own behind: one curated (with a picture) and one
+   that exists only on the product. The product is already back in its original
+   category by the refile above, so both are now unreferenced and safe to
+   delete. Listed explicitly rather than by prefix, for the same reason the rest
+   of this file names its categories: a prefix sweep would one day catch a
+   category a merchant actually made. */
+await call('DELETE', `/menu/edit/${storeId}/categories/${encodeURIComponent(PICKER_PIC)}`, {
+  token,
+});
+await call('DELETE', `/menu/edit/${storeId}/categories/${encodeURIComponent(pickerOnly)}`, {
+  token,
+});
+
 const finalCats = (await call('GET', `/menu/edit/${storeId}`, { token })).data?.categories || [];
 check(
   'cleanup removed every category this test created',
-  !finalCats.some((c) => c.name === CAT || c.name === MERGE || c.name === PIC),
+  !finalCats.some(
+    (c) =>
+      c.name === CAT ||
+      c.name === MERGE ||
+      c.name === PIC ||
+      c.name === pickerOnly ||
+      c.name === PICKER_PIC,
+  ),
   finalCats.map((c) => c.name).join(', '),
 );
 const restored = (await call('GET', `/products/${pizza.id}`, { token })).data?.product;

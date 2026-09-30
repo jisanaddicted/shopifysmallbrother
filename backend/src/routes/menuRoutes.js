@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getStoreMenu,
   listStoreMenu,
+  listStoreCategories,
   saveStoreMenu,
   createCategory,
   deleteCategory,
@@ -35,6 +36,7 @@ router.put('/edit/:storeId', saveStoreMenu);
 /**
  * The theme builder's category panel.
  *
+ * GET    /api/menu/edit/:storeId/categories        — the names, for a picker
  * POST   /api/menu/edit/:storeId/categories        — create one ({ name })
  * PUT    /api/menu/edit/:storeId/categories/:name/image — set/clear its picture
  * DELETE /api/menu/edit/:storeId/categories/:name  — delete one, and unfile
@@ -45,11 +47,20 @@ router.put('/edit/:storeId', saveStoreMenu);
  * menu itself. `:name` is the category NAME rather than an id - a category is
  * a heading, and headings are words (see models/Store.js).
  *
+ * The GET is the product form's category dropdown reading the very same list
+ * the panel edits. It is registered here, rather than left to the generic
+ * `/edit/:storeId` above, because that endpoint is the theme editor's payload -
+ * the whole nav tree, every product, and the store document with its category
+ * pictures - and a dropdown needs none of that. The two also cannot collide:
+ * `/edit/:storeId` is two segments and this is three, and the public
+ * `/:slug` route above matches a single segment only.
+ *
  * The image route is declared BEFORE the delete route on purpose. They share
  * the `/categories/:name` prefix and differ only by method, so order does not
  * actually decide it - but listing the more specific one first keeps the
  * intent obvious to whoever reads this next.
  */
+router.get('/edit/:storeId/categories', listStoreCategories);
 router.post('/edit/:storeId/categories', createCategory);
 router.put('/edit/:storeId/categories/:name/image', setCategoryImage);
 router.delete('/edit/:storeId/categories/:name', deleteCategory);

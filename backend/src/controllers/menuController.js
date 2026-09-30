@@ -465,6 +465,39 @@ export const createCategory = asyncHandler(async (req, res) => {
 });
 
 /**
+ * GET /api/menu/edit/:storeId/categories  (store owner / store admin / admin)
+ *
+ * The store's categories and nothing else, for a picker - the product form's
+ * "Category" dropdown.
+ *
+ * A separate read rather than reusing `listStoreMenu` on purpose. That endpoint
+ * is built for the theme builder and returns the whole nav tree, every product
+ * in the store, and the store document itself - which carries `categoryImages`,
+ * a map of base64 data URLs of up to 1MB EACH. The picker needs a list of words,
+ * so pulling megabytes of photographs down to render a dropdown would be absurd.
+ * The images are dropped here for the same reason; a `<select>` cannot show one.
+ *
+ * The NAMES, and the live product count, are identical to what the theme panel
+ * shows because both come from the same `listCategories`. That is not a
+ * convenience - it is the contract the picker depends on. A product filed under
+ * a name the merchant never curated still appears in this list, so offering the
+ * picker cannot lose a category that is already on a product; restricting it to
+ * the curated list would blank that product's category the moment it was opened
+ * for editing.
+ */
+export const listStoreCategories = asyncHandler(async (req, res) => {
+  const { store } = await loadManageableStore(req.params.storeId, req.user);
+
+  // No categoryImages argument: nothing here renders a picture, so the base64
+  // is never read, let alone sent.
+  const categories = await listCategories(store._id, store.categories);
+
+  res.json({
+    categories: categories.map(({ name, count }) => ({ name, count })),
+  });
+});
+
+/**
  * DELETE /api/menu/edit/:storeId/categories/:name
  *
  * Delete a category, and unfile the products that were in it.
@@ -673,6 +706,7 @@ export const setCategoryImage = asyncHandler(async (req, res) => {
 export default {
   getStoreMenu,
   listStoreMenu,
+  listStoreCategories,
   saveStoreMenu,
   createCategory,
   deleteCategory,
