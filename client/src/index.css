@@ -943,6 +943,63 @@ ol {
   gap: 0.5rem;
 }
 
+/* The stepper and the Add button, as one control on one row.
+   They live in their own wrapper rather than as two direct children of the
+   footer because the footer's job is to push the price left and the buying
+   controls right; inside this wrapper the stepper leads and the button takes
+   the remaining width. */
+.product-card__buy {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+/* The stepper as it appears on a card, rather than in the cart drawer.
+
+   The drawer version carries `margin-top`, which is right there (it sits under
+   a price in a stacked column) and wrong here, where the stepper is a
+   horizontal control in a row and the margin would shove it out of alignment
+   with the button beside it. */
+.qty--card {
+  margin-top: 0;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.qty--card button {
+  /* 30px rather than the drawer's 26px: this one is a primary tap target on a
+     card in a grid, often on a phone, and 26px is under the comfortable
+     minimum for a control meant to be pressed repeatedly. */
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  /* The glyph is the control, so its own colour and alignment matter more
+     than the border. */
+  color: var(--ink-soft);
+}
+
+.qty--card button:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+/* At a bound the button is genuinely inert - there is nothing to remove at 1,
+   and no more stock above the cap - so it dims rather than staying fully lit
+   and appearing broken. */
+.qty--card button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.qty--card span {
+  /* Two digits ("20") must not make the stepper jump wider and shift the
+     button left, so the number is given room for the widest value it can show
+     and pinned to it. */
+  min-width: 1.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /*
  * Two cards per row on a phone.
  *
@@ -1006,6 +1063,38 @@ ol {
 
   .product-card__footer .btn {
     width: 100%;
+  }
+
+  /* The stepper sits BESIDE the button, not above it.
+     Stacked, the card grows by a whole extra row and the two-up grid loses its
+     "scan a row of products" quality - the eye ends up bouncing between a
+     number and a button on separate lines. Side by side the pair reads as one
+     control and the card keeps its height.
+
+     At ~155px wide this is tight, so the button is allowed to shrink and the
+     stepper is pinned: the two buttons and the number are fixed, and the label
+     ("Add 3 to cart") takes whatever is left, truncating rather than wrapping. */
+  .product-card__buy {
+    width: 100%;
+  }
+
+  .product-card__buy .btn {
+    /* `min-width: 0` is what lets a flex item actually shrink below its
+       content width; without it the button refuses to give ground and pushes
+       the stepper out of the card. */
+    min-width: 0;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Slightly tighter than the 30px above: in a two-up phone grid every
+     millimetre of the card's width is spoken for, and 28px is still a
+     comfortable target. */
+  .qty--card button {
+    width: 28px;
+    height: 28px;
   }
 
   .product-card__media .chip {

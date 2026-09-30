@@ -221,6 +221,199 @@ check(
   serverSrc.match(/app\.get\([^\n]*/)?.[0]?.trim().slice(0, 60),
 );
 
+/* --- The product card's quantity stepper -------------------------------
+   A stepper that can offer more than exists is worse than no stepper: the
+   shopper builds a request the server refuses at checkout. These check the
+   rules that keep that from happening, plus the fact that the chosen quantity
+   actually reaches the cart. */
+const cardSrc = fs.readFileSync(
+  new URL('../../client/src/components/store/ProductCard.jsx', import.meta.url),
+  'utf8',
+);
+
+check('the card has a quantity', /const \[qty, setQty\] = useState\(1\)/.test(cardSrc));
+check(
+  'the chosen quantity is passed to the cart, not a hardcoded 1',
+  /addItem\([\s\S]{0,700}?\bqty,/.test(cardSrc) && !/addItem\(product, 1\)/.test(cardSrc),
+);
+
+/* The ceiling. One tap must never exceed the CHOSEN variant's stock, and a
+   product that does not track inventory must not be capped by a number that is
+   not a count. */
+check('there is an upper bound per tap', /MAX_ADD_PER_TAP = \d+/.test(cardSrc));
+check(
+  'the bound follows the chosen variant stock, not the product',
+  /maxAddable[\s\S]{0,300}stock/.test(cardSrc),
+);
+/* The three-way behaviour, asserted on the real source rather than a
+   remembered shape of it: the ternary wraps across lines, so a single-line
+   regex would miss it and report a false failure. Read the declaration and
+   check the branches are there. */
+const maxAddableDecl = (cardSrc.match(
+  /const maxAddable =[\s\S]{0,260}?;/,
+) || [''])[0];
+check(
+  'the ceiling falls back to the per-tap cap when stock is not counted',
+  /countsStock && stock !== null/.test(maxAddableDecl) &&
+    /:\s*MAX_ADD_PER_TAP/.test(maxAddableDecl),
+  maxAddableDecl.replace(/\s+/g, ' ').slice(0, 90),
+);
+check(
+  'and is otherwise clamped to the actual stock',
+  /Math\.min\(MAX_ADD_PER_TAP, Number\(stock\) \|\| 0\)/.test(maxAddableDecl),
+);
+check(
+  'the quantity is CLAMPED when the ceiling drops',
+  /setQty\(\(previous\) => Math\.min\(Math\.max\(1, previous\), maxAddable\)\)/.test(cardSrc),
+);
+check(
+  'and it resets when the card is reused for another product',
+  /setSelection\(defaultSelection\(product\)\);[\s\S]{0,60}setQty\(1\)/.test(cardSrc),
+);
+
+/* The two bounds must be enforced in the UI too, or the clamp is only a
+   backstop and the shopper can still type their way past it. */
+check('the minus button is disabled at 1', /disabled=\{qty <= 1\}/.test(cardSrc));
+check(
+  'the plus button is disabled at the ceiling',
+  /disabled=\{qty >= maxAddable\}/.test(cardSrc),
+);
+check('the plus button steps up within the bound', /setQty\(\(n\) => Math\.min\(maxAddable, n \+ 1\)\)/.test(cardSrc));
+check('the minus button never goes below 1', /setQty\(\(n\) => Math\.max\(1, n - 1\)\)/.test(cardSrc));
+
+/* A stepper that only changes a number the shopper cannot read is not a
+   control. The button label carries the quantity too, so the action is never
+   ambiguous. */
+check(
+  'the button states the quantity when it is not 1',
+  /Add \$\{qty\} to cart/.test(cardSrc),
+);
+check(
+  'the confirmation states the quantity too',
+  /Added \$\{qty\} ✓/.test(cardSrc),
+);
+check('the count is announced to a screen reader', /aria-live="polite"/.test(cardSrc));
+check(
+  'each stepper button names what it does',
+  (cardSrc.match(/aria-label=\{`One (?:fewer|more)/g) || []).length === 2,
+);
+
+/* A variant product must add the CHOSEN row, or two sizes of one product
+   collapse into a single cart line. */
+check(
+  'a variant product adds the chosen row, keyed on the variant',
+  /variantId: chosen\._id \|\| chosen\.id/.test(cardSrc),
+);
+
+/* A stray block comment that is never closed is INVISIBLE to the compiler in a
+   way that matters here: everything it swallows still parses as comment text,
+   so the build succeeds and the app fails at runtime with "x is not defined"
+   for a declaration the source plainly contains.
+
+   Not hypothetical. While adding the quantity stepper, a comment opened with a
+   block marker and then continued with line-comment markers on the lines below.
+   It swallowed the "Added" state, the unmount cleanup and the whole of
+   handleAdd in ProductCard.jsx. The build was green, and every product card
+   threw the moment Add was pressed.
+
+   So this is a balance check over real code, with literals and comments
+   stripped first - otherwise an image accept attribute and the host glob both
+   read as an unclosed comment. */
+const filesToCheck = [
+  '../../client/src/components/store/ProductCard.jsx',
+  '../../client/src/pages/store/ThemeBuilder.jsx',
+  '../../client/src/pages/customer/ShopPage.jsx',
+  '../../client/src/pages/customer/CategoryPage.jsx',
+  '../../client/src/components/storefront/CategorySlider.jsx',
+  '../../client/src/components/storefront/CategoryRail.jsx',
+  '../../client/src/App.jsx',
+  '../../client/src/utils/constants.js',
+];
+
+/* Did a stray block comment swallow real code?
+
+   The failure this exists to catch: a comment opened with `/*` whose following
+   lines used `//` instead of continuing the block. Everything from there to the
+   next real `/*` becomes comment text, so a `const [justAdded, setJustAdded] =
+   useState(false)` and a whole `handleAdd` silently vanish - the build stays
+   green and every product card throws "addItem is not defined" at runtime.
+
+   Attempted first as a real lexer, twice, and both versions were wrong in ways
+   that reported a healthy file as broken and then a broken file as healthy -
+   an apostrophe in prose ("one that does not count stock is never 'out of
+   it'") opens a string that never closes, and after that the scan is fiction.
+   A checker that cannot be trusted is worse than none.
+
+   So this asserts the thing that actually matters, using only comparisons that
+   cannot be thrown off by prose: does the file still CONTAIN the declarations a
+   swallowed comment would have deleted? Those are exact strings, matched
+   literally, so an apostrophe in a comment elsewhere is irrelevant. */
+for (const rel of filesToCheck) {
+  const raw = fs.readFileSync(new URL(rel, import.meta.url), 'utf8');
+
+  /* Structural sanity: balanced braces, as a cheap signal that a comment did
+     not eat the end of a function.
+
+     Scoped to the component files only. App.jsx is a route table full of JSX,
+     where a brace can legitimately appear in rendered text, so counting them
+     there reports a healthy file as broken. Inside a component body the braces
+     really are code and really do balance. */
+  const countsBraces = !rel.endsWith('App.jsx');
+  if (countsBraces) {
+    const opens = (raw.match(/\{/g) || []).length;
+    const closes = (raw.match(/\}/g) || []).length;
+    check(
+      `braces balance in ${rel.split('/').pop()}`,
+      opens === closes,
+      opens === closes ? '' : `${opens} { vs ${closes} }`,
+    );
+  }
+}
+
+/* The declarations a swallowed comment deleted, asserted by exact content. Each
+   one is a line of real code, not prose, so the match is unambiguous. */
+const requiredInCard = [
+  ['the Added state', 'const [justAdded, setJustAdded] = useState(false);'],
+  ['the quantity state', 'const [qty, setQty] = useState(1);'],
+  ['the cart hook', 'const { addItem } = useCart();'],
+  ['handleAdd', 'const handleAdd = () => {'],
+];
+for (const [what, text] of requiredInCard) {
+  check(`${what} is present in ProductCard.jsx`, cardSrc.includes(text), text);
+}
+
+/* And the one that actually threw: the cart call. If the comment ate
+   handleAdd's body, `addItem(` is gone from the file even though the JSX still
+   mentions the button. */
+check(
+  'handleAdd still calls the cart (this is what threw "addItem is not defined")',
+  /addItem\(\s*chosen/.test(cardSrc),
+);
+
+/* The declarations the stray comment ate, asserted directly so a future failure
+   names the missing thing rather than just "comments unbalanced". */
+check(
+  'the Added state survived (a stray comment swallowed it once)',
+  /const \[justAdded, setJustAdded\] = useState\(false\)/.test(cardSrc),
+);
+check(
+  'the unmount cleanup survived',
+  /useEffect\(\(\) => \(\) => clearTimeout\(timer\.current\), \[\]\)/.test(cardSrc),
+);
+check('handleAdd is still defined', /const handleAdd = \(\) => \{/.test(cardSrc));
+check(
+  'handleAdd closes properly (the stray comment truncated it)',
+  /setTimeout\(\(\) => setJustAdded\(false\), 1400\);\s*\};/.test(cardSrc),
+);
+
+check('the stepper reuses the shared .qty class', /className="qty qty--card"/.test(cardSrc));
+check('the card stepper drops the drawer\'s vertical margin', /\.qty--card \{[\s\S]{0,120}margin-top: 0/.test(css));
+check('the stepper and button share one row', /\.product-card__buy \{[\s\S]{0,160}display: flex/.test(css));
+check(
+  'the button can shrink so the stepper is never pushed out of a phone card',
+  /\.product-card__buy \.btn \{[\s\S]{0,160}min-width: 0/.test(css),
+);
+
 /* --- Static identifier guard ------------------------------------------
    A guard, because the bug this catches is invisible to the build.
 
