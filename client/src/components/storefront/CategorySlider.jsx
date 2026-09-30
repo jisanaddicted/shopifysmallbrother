@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import ProductCard from '../store/ProductCard';
 import { initials } from '../../utils/formatters';
@@ -60,6 +60,68 @@ export default function CategorySlider({
 }) {
   const trackRef = useRef(null);
   const productTrackRef = useRef(null);
+
+  /* Is this card the chosen one?
+
+     Written ONCE and used for both the ordering below and the `is-active`
+     highlight, because two copies of a category comparison is how "Drinks"
+     and "drinks" became two different things elsewhere in this app. Sharing
+     it means a card cannot be promoted to the front without also being the
+     one marked as current - they agree by construction, not by luck.
+
+     Case-insensitive, matching the one rule the rest of the app uses for
+     categories (`sectionNameOf` in ShopPage, `listCategories` on the server).
+     A category page reached by a hand-typed or shared URL says "milk" where
+     the card says "Milk", and both should be the same category. */
+  const activeKey = String(activeCategory || '').trim().toLowerCase();
+
+  const isActive = useCallback(
+    (entry) => String(entry?.name || '').trim().toLowerCase() === activeKey,
+    [activeKey],
+  );
+
+  /* The card order: the chosen category first, every other card exactly where
+     it was.
+
+     DERIVED, never remembered. `activeCategory` IS the dropdown's value, so
+     choosing "All categories" puts every card back on its own with no state to
+     unwind - which is the whole behaviour, and the reason this is a fold at
+     render time rather than an array this component rearranged.
+
+     A move, not a filter. The other cards stay reachable, because this strip
+     is a navigation aid and a shopper who picks the wrong category has to be
+     able to see the others without going back to the dropdown first. */
+  const orderedCategories = useMemo(() => {
+    if (!activeKey) return categories;
+
+    const at = categories.findIndex(isActive);
+    // -1 is "no such card" (the "All categories" sentinel, or a name no card
+    // carries) and 0 is "already first". Both are cases where the strip is
+    // already correct, so it is returned untouched rather than rebuilt.
+    if (at <= 0) return categories;
+
+    return [
+      categories[at],
+      ...categories.slice(0, at),
+      ...categories.slice(at + 1),
+    ];
+  }, [categories, activeKey, isActive]);
+
+  /* Bring the promoted card into view.
+
+     The strip overflows on a phone and the dropdown sits in the heading
+     ABOVE it, so a shopper who has swiped the strip along and then picks a
+     category would have that card jump to an index they had scrolled past -
+     and the strip would look like it had not reacted at all. Resetting the
+     track on a change to the selection is what makes the promotion visible.
+
+     No ref guard needed: the effect only runs when `activeKey` actually
+     changes, so an unrelated re-render cannot yank the strip out from under
+     someone who is swiping through it. On first paint it is a no-op, because
+     the track already starts at 0. */
+  useEffect(() => {
+    if (trackRef.current) trackRef.current.scrollLeft = 0;
+  }, [activeKey]);
 
   if (!categories.length) return null;
 
@@ -153,8 +215,8 @@ export default function CategorySlider({
         role="group"
         aria-label="Categories — scroll sideways for more"
       >
-        {categories.map((category) => {
-          const active = category.name === activeCategory;
+        {orderedCategories.map((category) => {
+          const active = isActive(category);
 
           return (
             <Link

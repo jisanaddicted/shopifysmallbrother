@@ -848,6 +848,18 @@ for (const [label, relative] of [
   ['ProductPage.jsx', '../../client/src/pages/customer/ProductPage.jsx'],
   ['ProductCard.jsx', '../../client/src/components/store/ProductCard.jsx'],
   ['CategoryPage.jsx', '../../client/src/pages/customer/CategoryPage.jsx'],
+  /* The two storefront category components. These were the gap that let
+     `useCallback is not defined` through: the promotion of the chosen
+     category's card to the front of the strip added a hook call here, the
+     import line was updated to include useEffect/useMemo and useCallback was
+     left out, and the app crashed on load.
+
+     It is worth being blunt about why it survived a green build: Vite bundles
+     an unresolved bare name perfectly happily - there is no import to fail -
+     so the only thing that can catch it is this guard. The build being green
+     is not evidence the component runs. */
+  ['CategorySlider.jsx', '../../client/src/components/storefront/CategorySlider.jsx'],
+  ['CategoryRail.jsx', '../../client/src/components/storefront/CategoryRail.jsx'],
 ]) {
   const src = fs.readFileSync(new URL(relative, import.meta.url), 'utf8');
   const missing = undefinedIdentifiers(src);
