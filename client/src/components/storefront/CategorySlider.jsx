@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Link } from 'react-router-dom';
+import ProductCard from '../store/ProductCard';
 import { initials } from '../../utils/formatters';
 
 /**
@@ -33,9 +34,32 @@ import { initials } from '../../utils/formatters';
  * browser's Back button returns to where the shopper came from. Filtering in
  * place with component state would do none of that - Back would leave the store
  * altogether, because the filter was never a place in history.
+ *
+ * `filterControl` is the store's category <select>, rendered in this heading so
+ * the section that LISTS the categories is also the section that FILTERS by them.
+ *
+ * Before, the <select> lived in its own full-width band above the catalogue,
+ * separated from the cards by the search field and the strip itself. Two ways to
+ * reach the same categories, side by side, with nothing saying they were the same
+ * control. Putting the dropdown on the "Categories" heading beside the cards
+ * makes the relationship obvious, and the filter can never be scrolled away from
+ * the list of categories it filters.
+ *
+ * When it is supplied it REPLACES the scroll arrows rather than joining them: in
+ * one ~300px heading there is room for the title and one cluster of controls, not
+ * two, and a shopper cannot tell which row a pair of arrows scrolls when the
+ * heading is no longer the row they scroll.
  */
-export default function CategorySlider({ categories, activeCategory, linkFor }) {
+export default function CategorySlider({
+  categories,
+  activeCategory,
+  linkFor,
+  filterControl,
+  products,
+  selectedLabel,
+}) {
   const trackRef = useRef(null);
+  const productTrackRef = useRef(null);
 
   if (!categories.length) return null;
 
@@ -51,47 +75,75 @@ export default function CategorySlider({ categories, activeCategory, linkFor }) 
     track.scrollBy({ left: direction * step, behavior: 'smooth' });
   };
 
+  /* Page the PRODUCT row underneath by roughly one product card, measured the
+     same way CategoryRail does - by the first card's real width rather than a
+     fixed pixel count, which would be two cards on one phone and half a card on
+     another. */
+  const scrollProducts = (direction) => {
+    const track = productTrackRef.current;
+    if (!track) return;
+
+    const card = track.querySelector('.product-card');
+    const step = card ? card.getBoundingClientRect().width + 10 : track.clientWidth;
+
+    track.scrollBy({ left: direction * step, behavior: 'smooth' });
+  };
+
+  const showProducts = Array.isArray(products) && products.length > 0;
+
   return (
     <section className="catstrip" aria-label="Product categories">
       <div className="catstrip__head">
         <h2 className="catstrip__title">Categories</h2>
-        {/* Only worth offering once the strip is actually overflowing. */}
-        <div className="catstrip__nav">
-          <button
-            type="button"
-            className="catstrip__arrow"
-            onClick={() => scrollByCard(-1)}
-            aria-label="Scroll categories left"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path
-                d="M15 5l-7 7 7 7"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="catstrip__arrow"
-            onClick={() => scrollByCard(1)}
-            aria-label="Scroll categories right"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path
-                d="M9 5l7 7-7 7"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-        </div>
+
+        {/* The store's category filter, OR the strip's scroll arrows.
+
+            One or the other, never both: a heading has room for the title and a
+            single cluster of controls. When the dropdown is there, the strip is
+            still scrollable by swipe, and the track keeps tabIndex so the arrow
+            keys page it - so dropping the arrows costs no way of reaching the
+            cards. */}
+        {filterControl ? (
+          <div className="catstrip__filter">{filterControl}</div>
+        ) : (
+          /* Only worth offering once the strip is actually overflowing. */
+          <div className="catstrip__nav">
+            <button
+              type="button"
+              className="catstrip__arrow"
+              onClick={() => scrollByCard(-1)}
+              aria-label="Scroll categories left"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path
+                  d="M15 5l-7 7 7 7"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="catstrip__arrow"
+              onClick={() => scrollByCard(1)}
+              aria-label="Scroll categories right"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path
+                  d="M9 5l7 7-7 7"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
 
       <div
@@ -134,6 +186,73 @@ export default function CategorySlider({ categories, activeCategory, linkFor }) 
           );
         })}
       </div>
+
+      {/* The chosen category's products, in this section.
+
+          This is what the dropdown is FOR: pick a category and its products are
+          listed here, in one row to browse, and every per-category section below
+          is left exactly as it was. Before, the dropdown narrowed the whole page
+          instead, so choosing a category collapsed the sections underneath it
+          rather than filling this one.
+
+          Its own arrows, because this row scrolls independently of the category
+          cards above it - one pair of arrows cannot drive two rows. */}
+      {showProducts ? (
+        <div className="catstrip__products">
+          <div className="catstrip__productsHead">
+            <h3 className="catstrip__subtitle">{selectedLabel}</h3>
+
+            <div className="catstrip__nav">
+              <button
+                type="button"
+                className="catstrip__arrow"
+                onClick={() => scrollProducts(-1)}
+                aria-label={`Scroll ${selectedLabel} left`}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    d="M15 5l-7 7 7 7"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="catstrip__arrow"
+                onClick={() => scrollProducts(1)}
+                aria-label={`Scroll ${selectedLabel} right`}
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path
+                    d="M9 5l7 7-7 7"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div
+            className="rail__track"
+            ref={productTrackRef}
+            tabIndex={0}
+            role="group"
+            aria-label={`${selectedLabel} — scroll sideways for more`}
+          >
+            {products.map((product) => (
+              <ProductCard key={product._id || product.id} product={product} />
+            ))}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

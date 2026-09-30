@@ -1,5 +1,16 @@
-import { useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import ProductCard from '../store/ProductCard';
+
+/* The auto-advance, as two numbers rather than sprinkled through the effect.
+
+   The delay is long enough that a shopper who has landed on the page and started
+   reading is not interrupted by a jump they did not ask for, and the count is
+   deliberately small: this is a hint that the row continues, not a carousel
+   someone has to sit through. Three advances and then it stops forever - a loop
+   that never ends is how a rail becomes something people tap past just to make
+   it stop. */
+const AUTO_SLIDE_DELAY_MS = 2600;
+const AUTO_SLIDE_STEPS = 3;
 
 /**
  * One storefront section, as seen on a phone: the category name as a heading,
@@ -21,11 +32,21 @@ import ProductCard from '../store/ProductCard';
  * Reuses <ProductCard> unchanged, so a product added to a cart from a rail and
  * one added from the grid are the same component with the same behaviour. Only
  * the surrounding layout differs.
+ *
+ * @param showAllLabel The product count, or null to leave it out.
  */
 export default function CategoryRail({ name, products, showAllLabel }) {
   const trackRef = useRef(null);
 
-  if (!products.length) return null;
+  /* Timer for the auto-advance, kept so it can be cleared the instant the
+     shopper takes over - and so unmounting mid-sequence does not leave a timer
+     firing into a dead component. */
+  const autoTimer = useRef(null);
+  const autoSteps = useRef(0);
+  /* Once the shopper has touched the row themselves, auto-advance is finished for
+     good. Scrolling under someone who is actively swiping is the one failure
+     mode that makes a row feel broken. */
+  const autoCancelled = useRef(false);
 
   /**
    * Page the rail by roughly one card.
@@ -33,9 +54,9 @@ export default function CategoryRail({ name, products, showAllLabel }) {
    * Scrolling by a fixed pixel count would be wrong on every device but one:
    * cards are 150px wide on a phone, so a "300px" step is two cards on a small
    * screen and a third of a card on a large one. Measuring the first card
-   * instead means one press always advances by the same, visible amount.
+   * instead means one press always moves by the same, visible amount.
    */
-  const scrollByCard = (direction) => {
+  const scrollByCard = useCallback((direction) => {
     const track = trackRef.current;
     if (!track) return;
 
@@ -45,7 +66,85 @@ export default function CategoryRail({ name, products, showAllLabel }) {
     const step = card ? card.getBoundingClientRect().width + 10 : track.clientWidth;
 
     track.scrollBy({ left: direction * step, behavior: 'smooth' });
-  };
+  }, []);
+
+  /* Advance the row on its own, a few times, to show that it continues.
+
+     Four things stop it, and each is deliberate:
+       - the shopper scrolls or touches the row (see the listeners below)
+       - the row runs out of things to scroll to
+       - the step budget is spent (3 advances, then never again)
+       - the component unmounts
+
+     Reduced motion switches it off entirely: motion someone has asked to be
+     spared is not a hint they asked for either. */
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return undefined;
+
+    // Nothing to reveal: a category with fewer cards than the row is wide has no
+    // "next" to show, and scrolling would only jitter at the end stop.
+    if (track.scrollWidth <= track.clientWidth + 1) return undefined;
+
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReduced) return undefined;
+
+    const giveUp = () => {
+      autoCancelled.current = true;
+      clearTimeout(autoTimer.current);
+    };
+
+    const tick = () => {
+      if (autoCancelled.current) return;
+
+      const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 2;
+      if (atEnd) {
+        giveUp();
+        return;
+      }
+
+      scrollByCard(1);
+      autoSteps.current += 1;
+
+      if (autoSteps.current < AUTO_SLIDE_STEPS) {
+        autoTimer.current = setTimeout(tick, AUTO_SLIDE_DELAY_MS);
+      }
+    };
+
+    const timer = setTimeout(tick, AUTO_SLIDE_DELAY_MS);
+    autoTimer.current = timer;
+
+    /* Any sign of the shopper taking over ends the sequence.
+
+       `touchstart` and `pointerdown` matter more than `scroll` here: a touch
+       fires first, so the row is already marked as theirs before their own
+       momentum scroll begins. Listening for `scroll` as well is what catches a
+       trackpad, a mouse drag and a keyboard's arrow keys. */
+    track.addEventListener('touchstart', giveUp, { passive: true });
+    track.addEventListener('pointerdown', giveUp, { passive: true });
+    track.addEventListener('wheel', giveUp, { passive: true });
+    track.addEventListener('scroll', giveUp, { passive: true });
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(autoTimer.current);
+      track.removeEventListener('touchstart', giveUp);
+      track.removeEventListener('pointerdown', giveUp);
+      track.removeEventListener('wheel', giveUp);
+      track.removeEventListener('scroll', giveUp);
+    };
+  }, [scrollByCard, products.length, name]);
+
+  /* An empty section renders nothing.
+
+     This sits BELOW every hook on purpose. Returning early above them would mean
+     a rail that once had products and then lost them goes from running hooks to
+     running none, and React throws on that - the effect above would also have
+     been measuring a track that is not in the DOM yet. */
+  if (!products || products.length === 0) return null;
 
   return (
     <section className="rail" aria-labelledby={`rail-${slugifyName(name)}`}>
@@ -71,9 +170,14 @@ export default function CategoryRail({ name, products, showAllLabel }) {
           {showAllLabel ? <span className="rail__count">{showAllLabel}</span> : null}
         </div>
 
-        {/* Both are always rendered rather than hidden at the ends: a button that
+        {/* The arrows, always. The category filter does NOT live here - it is on
+            the "Categories" heading above, beside the cards that list them, which
+            is where a filter belongs. Every product rail therefore scrolls the
+            same way.
+
+            Both are always rendered rather than hidden at the ends: a button that
             appears and disappears shifts the row's content under the shopper's
-            finger mid-swipe, and a disabled one is simply quieter. */}
+            finger mid-swipe. */}
         <div className="rail__nav">
           <button
             type="button"

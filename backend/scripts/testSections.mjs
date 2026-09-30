@@ -72,9 +72,21 @@ const railSrc = fs.readFileSync(
   new URL('../../client/src/components/storefront/CategoryRail.jsx', import.meta.url),
   'utf8',
 );
+const shopSrc = fs.readFileSync(
+  new URL('../../client/src/pages/customer/ShopPage.jsx', import.meta.url),
+  'utf8',
+);
+/* Declared here rather than beside the other slider checks further down: the
+   checks about the Categories section's product row sit ABOVE that block, and
+   referencing a `const` before its declaration throws a ReferenceError rather
+   than quietly testing `undefined`. */
+const sliderSrc = fs.readFileSync(
+  new URL('../../client/src/components/storefront/CategorySlider.jsx', import.meta.url),
+  'utf8',
+);
 check(
   'the arrows live inside the heading, not after the track',
-  /rail__head[\s\S]{0,700}rail__nav[\s\S]{0,1400}<\/header>/.test(railSrc),
+  /rail__head[\s\S]{0,1100}rail__nav[\s\S]{0,1400}<\/header>/.test(railSrc),
 );
 check(
   'and the heading closes before the track begins',
@@ -98,6 +110,127 @@ check(
   'a heading sits closer to its own cards than to the next section (the rhythm)',
   /\.rail__head \{[\s\S]{0,600}margin-bottom: 0\.75rem/.test(css) &&
     /\.store-sections \{[\s\S]{0,120}gap: 1\.6rem/.test(css),
+);
+
+/* The category filter lives on the "Categories" section and drives ONLY that
+   section. Choosing a category fills it with that category's products; the
+   per-category product sections below must not move. */
+check(
+  'the filter is passed to the Categories section (the category-cards strip)',
+  /<CategorySlider[\s\S]{0,2200}filterControl=\{categoryFilter\}/.test(shopSrc),
+);
+check(
+  'the chosen category\'s products go to that section',
+  /products=\{selectedProducts\}/.test(shopSrc) &&
+    /selectedLabel=\{category === 'all' \? 'All products' : category\}/.test(shopSrc),
+);
+check(
+  'the sections below are built WITHOUT the category, so they never change',
+  /for \(const product of searchMatched\)/.test(shopSrc) &&
+    /const sections = useMemo\([\s\S]{0,600}\}, \[searchMatched\]\)/.test(shopSrc),
+);
+check(
+  'the desktop grid follows the sections, not the dropdown',
+  /\{searchMatched\.length > 0 \? \([\s\S]{0,200}\{searchMatched\.map/.test(shopSrc),
+);
+check(
+  'the filter is not ALSO left in a band above the catalogue',
+  !/className="filters">\s*<select/.test(shopSrc),
+);
+check(
+  'the old global `visible` list is gone (it folded the two filters together)',
+  !/const visible = useMemo/.test(shopSrc),
+);
+/* One naming rule for the sections, the dropdown options and the filter, so every
+   section is selectable. Three drifting copies is what made "Other items"
+   unreachable from the filter. */
+check(
+  'one naming rule feeds the options, the filter and the grouping',
+  /const sectionNameOf = \(product\) =>[\s\S]{0,120}UNCATEGORISED;/.test(shopSrc) &&
+    (shopSrc.match(/sectionNameOf\(/g) || []).length >= 4,
+);
+check(
+  'the dropdown lists the same names the sections use, uncategorised included',
+  /seen\.add\(sectionNameOf\(p\)\)/.test(shopSrc),
+);
+check(
+  'the filter compares through that same rule, not the raw category',
+  /sectionNameOf\(product\) === category/.test(shopSrc) &&
+    !/product\.category === category/.test(shopSrc),
+);
+check(
+  'the <select> is defined once',
+  (shopSrc.match(/className="filters__select"/g) || []).length === 1,
+);
+check(
+  'the select is capped on the heading so it cannot squeeze the title out',
+  /\.catstrip__filter \{[\s\S]{0,160}max-width: 58%/.test(css),
+);
+check(
+  'the Categories section renders the chosen category\'s product cards',
+  /showProducts \? \([\s\S]{0,1700}rail__track[\s\S]{0,300}\{products\.map/.test(
+    sliderSrc,
+  ),
+);
+check(
+  'that product row has its own arrows, because one pair cannot drive two rows',
+  /scrollProducts = \(direction\)/.test(sliderSrc) &&
+    (sliderSrc.match(/onClick=\{\(\) => scrollProducts\(/g) || []).length === 2,
+);
+check(
+  'the product row reuses the shared rail track rather than a lookalike',
+  /className="rail__track"/.test(sliderSrc) && /\.rail__track \{/.test(css),
+);
+check(
+  'the two rows are visually separated so they do not read as one strip',
+  /\.catstrip__products \{[\s\S]{0,160}border-top: 1px solid var\(--line\)/.test(css),
+);
+
+/* Auto-advance. The stop conditions are the whole point: an endless carousel is
+   worse than no carousel. */
+check(
+  'the rail auto-advances on a timer',
+  /setTimeout\(tick, AUTO_SLIDE_DELAY_MS\)/.test(railSrc),
+);
+check(
+  'it advances one card at a time, not by a fixed pixel count',
+  /scrollByCard\(1\);/.test(railSrc),
+);
+check(
+  'it stops after a small budget of steps (3), not an endless loop',
+  /autoSteps\.current < AUTO_SLIDE_STEPS/.test(railSrc) &&
+    /const AUTO_SLIDE_STEPS = 3/.test(railSrc),
+);
+check(
+  'it stops at the end of the row instead of jittering there',
+  /const atEnd = track\.scrollLeft[\s\S]{0,80}track\.scrollWidth/.test(railSrc),
+);
+check(
+  'any shopper interaction cancels it for good',
+  /addEventListener\('touchstart', giveUp/.test(railSrc) &&
+    /addEventListener\('scroll', giveUp/.test(railSrc),
+);
+check(
+  'reduced motion switches it off entirely',
+  /prefers-reduced-motion: reduce/.test(railSrc),
+);
+check(
+  'a row that cannot scroll is left alone',
+  /scrollWidth <= track\.clientWidth/.test(railSrc),
+);
+check(
+  'the timers are cleared on unmount',
+  /clearTimeout\(autoTimer\.current\)/.test(railSrc),
+);
+check(
+  'the empty-section guard sits BELOW the hooks (React throws on a changing hook count)',
+  /const scrollByCard = useCallback[\s\S]{0,4000}if \(!products \|\| products\.length === 0\) return null/.test(
+    railSrc,
+  ),
+);
+check(
+  'the track is still focusable, so the arrow keys page it too',
+  /className="rail__track"[\s\S]{0,120}tabIndex=\{0\}/.test(railSrc),
 );
 check(
   'the grid takes over above the phone breakpoint',
@@ -155,19 +288,11 @@ check(
 /* The component must render one card per category, carrying the picture (or
    initials when there is none). The card's ELEMENT TYPE is asserted further
    down - it is a <Link> to a page, not a <button> filter. */
-const sliderSrc = fs.readFileSync(
-  new URL('../../client/src/components/storefront/CategorySlider.jsx', import.meta.url),
-  'utf8',
-);
 check('the card carries the category picture', /category\.image[\s\S]{0,200}<img/.test(sliderSrc));
 check('an imageless category falls back to initials', /initials\(category\.name\)/.test(sliderSrc));
 
 /* And it must be mounted by the storefront as a SIBLING of the phone-only
    block, not inside it. */
-const shopSrc = fs.readFileSync(
-  new URL('../../client/src/pages/customer/ShopPage.jsx', import.meta.url),
-  'utf8',
-);
 const sliderAt = shopSrc.indexOf('<CategorySlider');
 const sectionsAt = shopSrc.indexOf('className="store-sections"');
 check('ShopPage renders the slider', sliderAt > 0);
@@ -732,3 +857,4 @@ for (const [label, relative] of [
       : `FAIL  undefined identifier(s) called in ${label}:\n  ${missing.join('\n  ')}`,
   );
 }
+

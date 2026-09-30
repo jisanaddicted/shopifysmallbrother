@@ -4795,6 +4795,27 @@ ol {
   flex-shrink: 0;
 }
 
+/* The category <select>, on the "Categories" heading.
+
+   It keeps its own `.filters__select` styling so it is the same control it was
+   when it lived in a full-width band; what changes is the fitting. A heading is
+   ~34px tall and ~300px wide on a phone, so the select is capped rather than
+   allowed to take the width its old band gave it - otherwise it would squeeze
+   the heading down to nothing beside it. */
+.catstrip__filter {
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 58%;
+}
+
+.catstrip__filter .filters__select {
+  margin: 0;
+  max-width: 100%;
+  padding-block: 0.3rem;
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
 /* --- Category card slider ---------------------------------------------- */
 /*
  * The store's categories as one horizontal row of picture cards, at the top of
@@ -4948,6 +4969,36 @@ ol {
   padding: 0 0.5rem 0.45rem;
   font-size: 0.72rem;
   color: var(--muted);
+}
+
+/* The chosen category's products, inside the "Categories" section.
+
+   Sits below the category cards with a little breathing room, and is separated
+   from them by a top border so the two rows do not read as one long strip. The
+   track reuses `.rail__track`, so the cards get the exact same width, snapping and
+   shadow handling as every other product rail on the site - one rule for "a row
+   of product cards", not a second one that drifts. */
+.catstrip__products {
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+}
+
+.catstrip__productsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+/* A subheading, not another section title: it labels a row inside this section
+   rather than starting one, so it stays a step below `.catstrip__title`. */
+.catstrip__subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 /* --- Category page ------------------------------------------------------- */

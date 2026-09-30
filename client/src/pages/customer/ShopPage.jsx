@@ -28,6 +28,29 @@ import { categoryPath, ROUTES, rememberStoreVisit } from '../../utils/constants'
 const UNCATEGORISED = 'Other items';
 
 /**
+ * The section a product belongs to, by ONE rule used everywhere on this page.
+ *
+ * This exists because the naming was previously spelled out in three places and
+ * the three copies drifted apart:
+ *
+ *   - the grouping that builds the sections folded a product with no category
+ *     into "Other items",
+ *   - the dropdown built its options from `product.category` alone, so it never
+ *     listed "Other items" at all,
+ *   - and the filter compared against the raw `product.category`.
+ *
+ * The visible result was a page showing two sections ("Other items", "milk")
+ * behind a dropdown offering only "All categories" and "milk" - so the FIRST
+ * section could not be selected, ever, and selecting anything looked like it
+ * only ever applied to some of the page.
+ *
+ * One function, used by the dropdown, the filter and the grouping, means a
+ * section's name and its filter option are the same string by construction.
+ */
+const sectionNameOf = (product) =>
+  String(product?.category || '').trim() || UNCATEGORISED;
+
+/**
  * A store's public page: /s/<slug>
  *
  * Anyone with the link can browse this store's products - no account needed.
@@ -54,11 +77,15 @@ export default function ShopPage() {
   const [accountOpen, setAccountOpen] = useState(false);
   const searchRef = useRef(null);
 
-  /* Derive unique categories from the store's products. */
+  /* The filter's options, in the SAME names the sections use.
+
+     Built from `sectionNameOf`, not from `product.category`, so every section on
+     the page has an option that selects it. Listing only real categories meant
+     the uncategorised section was unreachable from the filter. */
   const categories = useMemo(() => {
     const seen = new Set();
     for (const p of products) {
-      if (p.category && p.category.trim()) seen.add(p.category);
+      seen.add(sectionNameOf(p));
     }
     return ['all', ...seen];
   }, [products]);
@@ -96,7 +123,7 @@ export default function ShopPage() {
     const groups = new Map();
 
     for (const product of products) {
-      const name = String(product.category || '').trim() || UNCATEGORISED;
+      const name = sectionNameOf(product);
       if (!groups.has(name)) groups.set(name, []);
       groups.get(name).push(product);
     }
@@ -126,13 +153,18 @@ export default function ShopPage() {
    * tapping it would then show nothing at all. Suggesting only from what can
    * actually match keeps every suggestion a promise the grid will keep.
    */
-  const inCategory = useMemo(
-    () =>
-      category === 'all'
-        ? products
-        : products.filter((product) => product.category === category),
-    [products, category],
-  );
+  /*
+   * The search bar's suggestion source: the whole catalogue.
+   *
+   * It used to be narrowed to the active category, on the reasoning that a
+   * suggestion the grid would then hide is a broken promise. That reasoning
+   * assumed the category filter narrowed the whole page - which it deliberately
+   * does not any more, since the dropdown now drives only the "Categories"
+   * section. So offering every product is honest again: typing "milk" can suggest
+   * milk, and it will still be on screen afterwards because nothing below was
+   * filtered out.
+   */
+  const inCategory = products;
 
   /* Remember which storefront this is: signing out later - even from
      /profile - brings the shopper back to THE store they were visiting. */
@@ -165,28 +197,51 @@ export default function ShopPage() {
     loadStore();
   }, [loadStore]);
 
-    const visible = useMemo(() => {
+  /*
+   * Everything the store has, narrowed by the SEARCH term and nothing else.
+   *
+   * The category dropdown deliberately does NOT feed into this list. It used to,
+   * and that is the behaviour that made the filter read as broken: choosing a
+   * category collapsed every section on the page into one, so a shopper could
+   * not tell whether the filter was choosing a category or replacing the whole
+   * page with one. Now the dropdown drives ONLY the "Categories" section above,
+   * and the per-category sections below stay exactly as they are.
+   *
+   * Search still applies, because narrowing the sections to what was searched
+   * for is what a shopper expects from a search box.
+   */
+  const searchMatched = useMemo(() => {
     const term = search.trim().toLowerCase();
+    if (!term) return products;
 
-    return products.filter((product) => {
-      const matchesCategory = category === 'all' || product.category === category;
-      const matchesSearch =
-        !term ||
+    return products.filter(
+      (product) =>
         String(product.name || '').toLowerCase().includes(term) ||
-        String(product.description || '').toLowerCase().includes(term);
-      return matchesCategory && matchesSearch;
-    });
-  }, [products, search, category]);
+        String(product.description || '').toLowerCase().includes(term),
+    );
+  }, [products, search]);
+
+  /* What the "Categories" section lists: the dropdown's choice, or everything.
+
+     This is the ONE place the dropdown is applied. Selecting "milk" puts milk's
+     products in that section and leaves every other section on the page alone. */
+  const selectedProducts = useMemo(
+    () =>
+      category === 'all'
+        ? searchMatched
+        : searchMatched.filter((product) => sectionNameOf(product) === category),
+    [searchMatched, category],
+  );
 
   /*
    * The catalogue grouped into one section per category — "Drinks", then
    * "Pizza", each a horizontal rail of its own products.
    *
-   * Built from `visible`, not from `products`, and that is deliberate: it
-   * inherits the active category filter AND the search term, so the sections
-   * always describe what is actually on screen. A shopper who searches "cola"
-   * gets one "Drinks" rail holding the three that matched, rather than every
-   * section reappearing with the other nine drinks hidden inside it.
+   * Built from `searchMatched`, so it inherits the search term but NOT the
+   * category dropdown. A shopper who searches "cola" gets one "Drinks" rail
+   * holding the three that matched, rather than every section reappearing with
+   * the other nine drinks hidden inside it — while choosing a category in the
+   * dropdown leaves this list untouched.
    *
    * The uncategorised bucket is the reason this is a fold rather than just
    * `product.category`. A product with no category used to appear in the plain
@@ -197,17 +252,38 @@ export default function ShopPage() {
   const sections = useMemo(() => {
     const groups = new Map();
 
-    for (const product of visible) {
-      // Trimmed here as well as in the controller, because a product whose
-      // category is only whitespace must not create a section with a blank
-      // heading - and must not create a second "Other items" bucket either.
-      const name = String(product.category || '').trim() || UNCATEGORISED;
+    for (const product of searchMatched) {
+      // The SAME rule the dropdown options use, so a section's heading and its
+      // filter option are one string and every section is selectable.
+      const name = sectionNameOf(product);
       if (!groups.has(name)) groups.set(name, []);
       groups.get(name).push(product);
     }
 
     return [...groups.entries()].map(([name, items]) => ({ name, items }));
-  }, [visible]);
+  }, [searchMatched]);
+
+  /* The category <select>, built once.
+
+     One element, rendered in one of two places: inside the first section's
+     heading when there are sections to host it, or in a plain filter row when
+     there are none. Keeping it as a single value rather than duplicating the
+     markup means the two placements can never disagree about what the options
+     are or what the control is called. */
+  const categoryFilter = (
+    <select
+      className="filters__select"
+      value={category}
+      onChange={(e) => setCategory(e.target.value)}
+      aria-label="Filter by category"
+    >
+      {categories.map((c) => (
+        <option key={c} value={c}>
+          {c === 'all' ? 'All categories' : c}
+        </option>
+      ))}
+    </select>
+  );
 
   if (loading) return <LoadingSpinner fullPage label="Loading the store…" />;
 
@@ -253,27 +329,9 @@ export default function ShopPage() {
         value={search}
         onChange={setSearch}
         inputRef={searchRef}
-        resultCount={visible.length}
+        resultCount={searchMatched.length}
         placeholder={`Search ${store?.name || 'this store'}…`}
       />
-
-      {/* The category filter kept its own row. The search took over the search
-          input's job, so all that is left here is the one control it never
-          did. */}
-      <div className="filters">
-        <select
-          className="filters__select"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          aria-label="Filter by category"
-        >
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c === 'all' ? 'All categories' : c}
-            </option>
-          ))}
-        </select>
-      </div>
 
       {/*
         The "browse freely, sign in if you want history" notice used to sit
@@ -306,9 +364,31 @@ export default function ShopPage() {
            toggle they flip - so it gets a URL, survives a refresh, can be
            shared, and leaves Back pointing at the storefront. */
         linkFor={(name) => categoryPath(slug, name)}
+        /* The <select>, on THIS section's heading.
+
+           This is the section that lists the categories as cards, so it is where
+           the control that filters BY them belongs. It used to sit in a band of
+           its own above the catalogue: two routes to the same categories, side by
+           side, with nothing connecting them - and a shopper filtering to "milk"
+           had to work out which of the two things they had just used was the
+           filter.
+
+           The strip renders whenever the store has any product at all (it is built
+           from every product, not from the filtered list), so the dropdown is
+           reachable in exactly the states where there is something to filter. That
+           is why no separate fallback copy is needed: if the strip is not on
+           screen, the store has no products, and there is nothing to filter. */
+        filterControl={categoryFilter}
+        /* The chosen category's PRODUCTS, shown in this section.
+
+           This is the whole point of the dropdown: pick a category and its
+           products appear here, in one place to browse, while every per-category
+           section below stays exactly as it was. */
+        products={selectedProducts}
+        selectedLabel={category === 'all' ? 'All products' : category}
       />
 
-      {visible.length === 0 ? (
+      {searchMatched.length === 0 ? (
         <p className="empty">
           This store has not listed any products yet. Check back soon.
         </p>
@@ -340,12 +420,14 @@ export default function ShopPage() {
         </div>
       )}
 
-      {/* The grid is the desktop view of the very same `visible` list. Kept as
-          its own element rather than swapped in JS on a media query, so there
-          is exactly one source of truth for "which products are showing". */}
-      {visible.length > 0 ? (
+      {/* The grid is the desktop view of the very same `searchMatched` list the
+          sections are built from. Kept as its own element rather than swapped in
+          JS on a media query, so there is exactly one source of truth for "which
+          products are showing" - and so the desktop grid can never disagree with
+          the phone rails about what the category dropdown did, which is nothing. */}
+      {searchMatched.length > 0 ? (
         <div className="grid store-sections__grid">
-          {visible.map((product) => (
+          {searchMatched.map((product) => (
             <ProductCard key={product._id || product.id} product={product} />
           ))}
         </div>
@@ -374,8 +456,8 @@ export default function ShopPage() {
            built in the theme editor.
 
            Nothing is lost by dropping that sheet: the category filter is still
-           right there in the .filters__select above, which does the same job on
-           every screen size. */
+           there, in the first category section's heading, which does the same job
+           on every screen size. */
         onMenuClick={() => {
           setAccountOpen(false);
           setNavOpen(true);
