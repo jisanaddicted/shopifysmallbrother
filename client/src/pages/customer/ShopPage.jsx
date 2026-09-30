@@ -4,6 +4,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ProductCard from '../../components/store/ProductCard';
 import StoreHeader from '../../components/storefront/StoreHeader';
 import StoreNav from '../../components/storefront/StoreNav';
+import StoreSearchBar from '../../components/storefront/StoreSearchBar';
 import StoreMenuDrawer from '../../components/storefront/StoreMenuDrawer';
 import MobileTabs from '../../components/storefront/MobileTabs';
 import CustomerAccountSheet from '../../components/storefront/CustomerAccountSheet';
@@ -55,6 +56,23 @@ export default function ShopPage() {
     const cat = params.get('category');
     if (cat && cat !== category) setCategory(cat);
   }, [location.search, category]);
+
+  /*
+   * The catalogue narrowed to the active category, BEFORE the search term.
+   *
+   * The search bar suggests from this rather than from the whole store. The
+   * grid ANDs the two filters, so a suggestion drawn from the unfiltered list
+   * could offer "Whole Milk" while the Drinks category is selected - and
+   * tapping it would then show nothing at all. Suggesting only from what can
+   * actually match keeps every suggestion a promise the grid will keep.
+   */
+  const inCategory = useMemo(
+    () =>
+      category === 'all'
+        ? products
+        : products.filter((product) => product.category === category),
+    [products, category],
+  );
 
   /* Remember which storefront this is: signing out later - even from
      /profile - brings the shopper back to THE store they were visiting. */
@@ -131,11 +149,32 @@ export default function ShopPage() {
       />
       {store ? <StoreNav menu={menu} /> : null}
 
-            <div className="filters">
+      {/*
+        The prominent search. It sits directly under the store's own header and
+        nav, above the category filter, because searching is the main way into
+        a catalogue and filtering is the secondary one. The old <input> was
+        sharing a flex row with the category <select> at equal weight, which
+        made it read as one of two filters rather than as the store's front
+        door.
+      */}
+      <StoreSearchBar
+        products={inCategory}
+        value={search}
+        onChange={setSearch}
+        inputRef={searchRef}
+        resultCount={visible.length}
+        placeholder={`Search ${store?.name || 'this store'}…`}
+      />
+
+      {/* The category filter kept its own row. The search took over the search
+          input's job, so all that is left here is the one control it never
+          did. */}
+      <div className="filters">
         <select
           className="filters__select"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
+          aria-label="Filter by category"
         >
           {categories.map((c) => (
             <option key={c} value={c}>
@@ -143,15 +182,6 @@ export default function ShopPage() {
             </option>
           ))}
         </select>
-
-        <input
-          type="search"
-          ref={searchRef}
-          className="filters__search"
-          placeholder="Search this store…"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
       </div>
 
       {/*

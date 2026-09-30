@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import ProductCard from '../../components/store/ProductCard';
+import StoreSearchBar from '../../components/storefront/StoreSearchBar';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useCart } from '../../context/CartContext';
 import productService from '../../services/productService';
@@ -58,6 +59,17 @@ export default function Storefront() {
     });
   }, [products, search, category]);
 
+  /* What the search bar may suggest: the active category, before the term. See
+     the same note in ShopPage - a suggestion the grid would immediately filter
+     out again is worse than no suggestion. */
+  const inCategory = useMemo(
+    () =>
+      category === 'all'
+        ? products
+        : products.filter((product) => product.category === category),
+    [products, category],
+  );
+
   return (
     <div className="page page--customer">
       <header className="page__header">
@@ -73,19 +85,24 @@ export default function Storefront() {
         </button>
       </header>
 
-      <div className="filters">
-        <input
-          type="search"
-          className="filters__search"
-          placeholder="Search products…"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+      {/* Same prominent search as a store's own page - it is the same job
+          (find a product in a catalogue), and leaving one of the two screens
+          with the old cramped input just moves the inconsistency to whichever
+          page the shopper happens to arrive on. */}
+      <StoreSearchBar
+        products={inCategory}
+        value={search}
+        onChange={setSearch}
+        resultCount={visible.length}
+        placeholder="Search products…"
+      />
 
+      <div className="filters">
         <select
           className="filters__select"
           value={category}
           onChange={(event) => setCategory(event.target.value)}
+          aria-label="Filter by category"
         >
           {categories.map((option) => (
             <option key={option} value={option}>
