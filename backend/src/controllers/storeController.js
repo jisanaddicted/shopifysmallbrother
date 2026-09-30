@@ -15,6 +15,15 @@ import {
   STORE_ROLES,
 } from '../utils/storeAccess.js';
 import { customersForStore } from '../utils/storeCustomer.js';
+import {
+  dedupe,
+  getCached,
+  getCachedBySlug,
+  invalidateStore,
+  rememberSlug,
+  setCached,
+  SLOTS,
+} from '../utils/storefrontCache.js';
 
 /**
  * GET /api/stores/:id/customers -> { customers, total, newThisWeek }
@@ -117,16 +126,84 @@ export const getPublicStore = asyncHandler(async (req, res) => {
   const slug = slugify(req.params.slug, '');
   if (!slug) throw new HttpError(404, 'That store does not exist.');
 
+  /* Answer from memory with NO database contact, if this process has seen the
+     slug before.
+
+     Checked BEFORE resolving the store, and that ordering is the whole trick.
+     The route is addressed by slug but the cache is keyed by store id, so
+     resolving the id first would mean a `Store.findOne` on every single request
+     - and against a remote cluster that one round trip was measured at ~4s,
+     which meant the "cached" path was no faster than the uncached one. Looking
+     the slug up in memory first is what makes a repeat visit instant instead of
+     merely cheaper.
+
+     The tradeoff is a closed store: this trusts the cached copy and so does not
+     re-check `isActive` on every request. That is bounded by the 30s TTL, and
+     closing a store goes through `updateMyStore`, which invalidates it - so the
+     window is "until the next expiry", not "forever". */
+  const warm = getCachedBySlug(slug, SLOTS.STORE);
+  if (warm) {
+    res.json(warm);
+    return;
+  }
+
+  /* Cold: resolve the slug, then read the products.
+   *
+   * These are sequential because the products query is keyed on the store's id
+   * and cannot start until the first returns. That is unavoidable - but it is
+   * now paid once per TTL instead of once per page view. */
   const store = await Store.findOne({ slug });
   if (!store || !store.isActive) {
     throw new HttpError(404, 'That store does not exist or is closed.');
   }
 
-  const products = await Product.find({ store: store._id }).sort({
-    createdAt: -1,
+  // A slug is stable for the life of a store, and the warm path above depends on
+  // this mapping existing, so record it as soon as it is known.
+  rememberSlug(store.slug, store._id);
+
+  const cached = getCached(store._id, SLOTS.STORE);
+  if (cached) {
+    res.json(cached);
+    return;
+  }
+
+  /* Two shoppers opening the same shop at the same moment - or the ShopPage and
+     the Navbar on ONE page, which both ask for this - would otherwise run this
+     query twice and both wait for it. `dedupe` lets the second caller await the
+     first one's result, so the duplication costs one slow request rather than
+     two. This is the single largest saving on a first visit, because it halves
+     a multi-second wait rather than shaving a millisecond off it. */
+  const payload = await dedupe(SLOTS.STORE, store._id, async () => {
+    // Re-check inside: a request that queued behind this one may have just
+    // populated the cache, and re-querying would defeat the point of waiting.
+    const fresh = getCached(store._id, SLOTS.STORE);
+    if (fresh) return fresh;
+
+    /* NO `.lean()` HERE, and that is not an oversight.
+     *
+     * `Product` sets `toJSON: { virtuals: true }`, so a hydrated document
+     * serialises with far more than its stored fields: `id` (the `_id` as a
+     * string), `hasVariants`, `effectivePrice`, `inventoryValue`,
+     * `channelCount`, and the rest. `.lean()` returns raw POJOs and skips
+     * `toJSON` entirely, so it would quietly drop every one of them from the
+     * PUBLIC storefront payload.
+     *
+     * This was caught by `testSections.mjs` ("no product is duplicated across
+     * sections"), which failed only because `p.id` became `undefined` for every
+     * product - the other missing virtuals broke the page in ways that test does
+     * not assert on. A fast endpoint serving a subtly different shape is a worse
+     * outcome than a slow one serving the right shape, and against a 1-4s network
+     * round trip the hydration cost is not what makes this page slow anyway. */
+    const products = await Product.find({ store: store._id }).sort({
+      createdAt: -1,
+    });
+
+    const built = { store, products };
+    setCached(store._id, SLOTS.STORE, built, store.slug);
+    return built;
   });
 
-  res.json({ store, products });
+  res.json(payload);
 });
 
 /**
@@ -270,6 +347,13 @@ export const updateMyStore = asyncHandler(async (req, res) => {
   }
 
   await store.save();
+
+  // The public store endpoint is cached, and this is the write that most often
+  // changes what it returns - switching theme changes the whole storefront's
+  // shape. Without this, a merchant who switches to Theme 2 and refreshes sees
+  // Theme 1 still, and reasonably concludes the switch did not save.
+  invalidateStore(store._id);
+
   res.json({ store });
 });
 

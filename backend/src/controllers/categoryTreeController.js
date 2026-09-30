@@ -6,6 +6,15 @@ import { HttpError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { MAX_CATEGORY_DEPTH } from '../utils/constants.js';
 import { loadManageableStore } from '../utils/storeAccess.js';
+import {
+  dedupe,
+  getCached,
+  getCachedBySlug,
+  invalidateStore,
+  rememberSlug,
+  setCached,
+  SLOTS,
+} from '../utils/storefrontCache.js';
 
 /**
  * The Theme 2 category TREE: the structure a shopper drills down through.
@@ -269,6 +278,10 @@ export const createTreeNode = asyncHandler(async (req, res) => {
     position: lastPosition + 1,
   });
 
+  // The public tree is cached, and a new branch changes what a shopper sees the
+  // moment they open the store.
+  invalidateStore(store._id);
+
   res.status(201).json({ node: serialize(node, 0) });
 });
 
@@ -365,6 +378,10 @@ export const updateTreeNode = asyncHandler(async (req, res) => {
 
   await node.save();
 
+  // Renames and pictures are both storefront content, and both would otherwise
+  // sit behind the cache's TTL.
+  invalidateStore(store._id);
+
   const childCount = await CategoryNode.countDocuments({
     store: store._id,
     parent: node._id,
@@ -400,6 +417,11 @@ export const deleteTreeNode = asyncHandler(async (req, res) => {
   );
   await CategoryNode.deleteMany({ _id: { $in: ids }, store: store._id });
 
+  // Two things just changed for shoppers, not one: the branches are gone, and
+  // the products that were filed under them have been unfiled (so the counts on
+  // every remaining node moved). Both live in the cached payloads.
+  invalidateStore(store._id);
+
   res.json({
     deleted: ids.length,
     clearedProducts: unfiled.modifiedCount || 0,
@@ -421,42 +443,72 @@ export const deleteTreeNode = asyncHandler(async (req, res) => {
  * its own, its children, or both.
  */
 export const getPublicCategoryTree = asyncHandler(async (req, res) => {
+  // Same warm-first ordering as getPublicStore, and for the same reason: the
+  // slug->store lookup would otherwise be a round trip on every request, which
+  // is the entire cost this cache exists to avoid.
+  const warm = getCachedBySlug(req.params.slug, SLOTS.TREE);
+  if (warm) {
+    res.json(warm);
+    return;
+  }
+
   const store = await Store.findOne({ slug: req.params.slug }).select(
     '_id slug name theme',
   );
   if (!store) throw new HttpError(404, 'That store does not exist.');
 
-  const nodes = await CategoryNode.find({ store: store._id })
-    .sort({ position: 1, name: 1 })
-    .lean();
+  rememberSlug(store.slug, store._id);
 
-  const publicStore = { slug: store.slug, name: store.name, theme: store.theme };
-  if (!nodes.length) {
-    res.json({ store: publicStore, tree: [] });
+  const cached = getCached(store._id, SLOTS.TREE);
+  if (cached) {
+    res.json(cached);
     return;
   }
 
-  // One grouped count rather than a query per node.
-  const counts = await Product.aggregate([
-    { $match: { store: store._id, categoryId: { $in: nodes.map((n) => n._id) } } },
-    { $group: { _id: '$categoryId', n: { $sum: 1 } } },
-  ]);
-  const productsPerNode = new Map(counts.map((row) => [String(row._id), row.n]));
+  const payload = await dedupe(SLOTS.TREE, store._id, async () => {
+    const fresh = getCached(store._id, SLOTS.TREE);
+    if (fresh) return fresh;
 
-  const childCounts = new Map();
-  for (const node of nodes) {
-    if (!node.parent) continue;
-    const key = String(node.parent);
-    childCounts.set(key, (childCounts.get(key) || 0) + 1);
-  }
+    const nodes = await CategoryNode.find({ store: store._id })
+      .sort({ position: 1, name: 1 })
+      .lean();
 
-  res.json({
-    store: publicStore,
-    tree: nodes.map((node) => ({
-      ...serialize(node, childCounts.get(String(node._id)) || 0),
-      productCount: productsPerNode.get(String(node._id)) || 0,
-    })),
+    const publicStore = { slug: store.slug, name: store.name, theme: store.theme };
+    if (!nodes.length) {
+      const empty = { store: publicStore, tree: [] };
+      setCached(store._id, SLOTS.TREE, empty, store.slug);
+      return empty;
+    }
+
+    // One grouped count rather than a query per node. Measured: a third of the
+    // round trips this route used to make, and on a remote cluster round trips
+    // are the entire cost.
+    const counts = await Product.aggregate([
+      { $match: { store: store._id, categoryId: { $in: nodes.map((n) => n._id) } } },
+      { $group: { _id: '$categoryId', n: { $sum: 1 } } },
+    ]);
+    const productsPerNode = new Map(counts.map((row) => [String(row._id), row.n]));
+
+    const childCounts = new Map();
+    for (const node of nodes) {
+      if (!node.parent) continue;
+      const key = String(node.parent);
+      childCounts.set(key, (childCounts.get(key) || 0) + 1);
+    }
+
+    const built = {
+      store: publicStore,
+      tree: nodes.map((node) => ({
+        ...serialize(node, childCounts.get(String(node._id)) || 0),
+        productCount: productsPerNode.get(String(node._id)) || 0,
+      })),
+    };
+
+    setCached(store._id, SLOTS.TREE, built, store.slug);
+    return built;
   });
+
+  res.json(payload);
 });
 
 export default {

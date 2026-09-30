@@ -7,6 +7,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { PRODUCT_STATUS, PRODUCT_STATUS_VALUES } from '../utils/constants.js';
 import { slugify } from '../utils/slug.js';
 import { managedStoreIds, storesForUser } from '../utils/storeAccess.js';
+import { invalidateStore } from '../utils/storefrontCache.js';
 import { hasVariants, variantTitle } from '../utils/variants.js';
 
 // Guardrails on the variant matrix, matching the 100-variant ceiling every
@@ -576,6 +577,12 @@ export const createProduct = asyncHandler(async (req, res) => {
   Object.assign(payload, readOrganisationBlock(req.body));
 
   const product = await Product.create(payload);
+
+  // The storefront serves this product from cache (see utils/storefrontCache),
+  // so a new one has to push it out or a shopper would be told the shop has
+  // nothing new until the TTL expired.
+  invalidateStore(product.store);
+
   res.status(201).json({ product });
 });
 
@@ -651,6 +658,11 @@ export const updateProduct = asyncHandler(async (req, res) => {
 
   await product.save();
 
+  // Same reason as create: the edit is not on the storefront until this drops
+  // the cached copy, and "I saved it but the shop still shows the old price" is
+  // the failure this prevents.
+  invalidateStore(product.store);
+
   res.json({ product });
 });
 
@@ -658,6 +670,10 @@ export const updateProduct = asyncHandler(async (req, res) => {
 export const deleteProduct = asyncHandler(async (req, res) => {
   const product = await loadEditableProduct(req.params.id, req.user);
   await product.deleteOne();
+
+  // A deleted product that lingers on the storefront is worse than a slow one:
+  // it is a product a shopper can still try to buy.
+  invalidateStore(product.store);
 
   res.json({ deleted: true, id: String(product._id) });
 });
@@ -863,6 +879,8 @@ export const bulkUpdateProducts = asyncHandler(async (req, res) => {
   const updated = [];
   const skipped = [];
   const failed = [];
+  // Store ids touched by this edit, for one cache invalidation each afterwards.
+  const touched = new Set();
 
   for (const id of ids) {
     const product = byId.get(id);
@@ -911,12 +929,22 @@ export const bulkUpdateProducts = asyncHandler(async (req, res) => {
       // eslint-disable-next-line no-await-in-loop
       await product.save();
       updated.push({ id, name: product.name });
+      // Collected in a side set rather than added to `updated`, so the response
+      // shape stays exactly what the client already parses.
+      touched.add(String(product.store));
     } catch (err) {
       // One product failing (a validation error, say) must not abandon the
       // rest, so it is recorded and the loop carries on.
       failed.push({ id, reason: err.message || 'Could not save that product.' });
     }
   }
+
+  /* One invalidation per store touched, not one per product.
+   *
+   * A bulk edit can span several stores (an admin running more than one), so the
+   * ids are de-duplicated first - invalidating once per product would be fifty
+   * identical no-ops for a fifty-row selection. */
+  for (const storeId of touched) invalidateStore(storeId);
 
   res.json({ updated, skipped, failed, total: ids.length });
 });
@@ -958,6 +986,13 @@ export const bulkDeleteProducts = asyncHandler(async (req, res) => {
   // Deleted in one operation rather than N round trips - the per-product store
   // check has already happened above, so there is nothing left to verify.
   const result = await Product.deleteMany({ _id: { $in: deletable.map((p) => p._id) } });
+
+  // Same rule as the bulk edit above: one invalidation per store, not per
+  // product. Bulk-deleting is the case where this matters most - a deleted
+  // product still listed on the storefront is one a shopper can try to buy.
+  for (const storeId of new Set(deletable.map((p) => String(p.store)))) {
+    invalidateStore(storeId);
+  }
 
   res.json({
     deleted: result.deletedCount || 0,

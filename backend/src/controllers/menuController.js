@@ -6,6 +6,15 @@ import { HttpError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { slugify } from '../utils/slug.js';
 import { loadManageableStore } from '../utils/storeAccess.js';
+import {
+  dedupe,
+  getCached,
+  getCachedBySlug,
+  invalidateStore,
+  rememberSlug,
+  setCached,
+  SLOTS,
+} from '../utils/storefrontCache.js';
 
 /** Public nav targets a merchant can wire a menu item to. */
 const VALID_TARGETS = ['product', 'category', 'url'];
@@ -184,58 +193,89 @@ export const getStoreMenu = asyncHandler(async (req, res) => {
   const slug = slugify(req.params.slug, '');
   if (!slug) throw new HttpError(404, 'That store does not exist.');
 
+  /* Warm-first, like the two public store routes and for the same measured
+     reason: this route used to cost ~3.2s on every storefront load, and
+     ShopPage fires it IN PARALLEL with the store request - so however fast the
+     store endpoint became, the page still waited on this one. Caching it is what
+     actually makes opening a shop quick, not just making half of it quick. */
+  const warm = getCachedBySlug(slug, SLOTS.MENU);
+  if (warm) {
+    res.json(warm);
+    return;
+  }
+
   const store = await Store.findOne({ slug, isActive: true });
   if (!store) throw new HttpError(404, 'That store does not exist or is closed.');
 
-  let items = await NavMenu.find({ store: store._id, isVisible: true })
-    .sort({ position: 1 })
-    .lean();
+  rememberSlug(store.slug, store._id);
 
-  /* Auto-seed from the store's categories when the menu has never been built.
-     Reads the curated list too, not just the product-derived names, so a
-     section the merchant created in the theme builder is nav-able from the
-     moment it exists. */
-  if (!items.length) {
-    const categories = await listCategories(
-    store._id,
-    store.categories,
-    null,
-    store.categoryImages,
-  );
-    if (categories.length) {
-      const seed = categories.map((cat, i) => ({
-        store: store._id,
-        label: cat.name,
-        targetType: 'category',
-        target: cat.name,
-        position: i,
-        isVisible: true,
-      }));
-      await NavMenu.insertMany(seed);
-      items = await NavMenu.find({ store: store._id, isVisible: true })
-        .sort({ position: 1 })
-        .lean();
-    }
+  const cached = getCached(store._id, SLOTS.MENU);
+  if (cached) {
+    res.json(cached);
+    return;
   }
 
-  /* Resolve product names/categories so the public nav needs no extra calls. */
-  const productMap = new Map();
-  const productTargets = items
-    .filter(
-      (i) =>
-        i.targetType === 'product' && i.target &&
-        mongoose.isValidObjectId(i.target)
-    )
-    .map((i) => i.target);
+  /* The Navbar and the ShopPage both ask for the menu on one page load, so the
+     same collapse as the store route: concurrent callers share one execution
+     rather than each paying its own multi-second build. */
+  const payload = await dedupe(SLOTS.MENU, store._id, async () => {
+    const fresh = getCached(store._id, SLOTS.MENU);
+    if (fresh) return fresh;
 
-  if (productTargets.length) {
-    const products = await Product.find({ _id: { $in: productTargets } })
-      .select('name category')
+    let items = await NavMenu.find({ store: store._id, isVisible: true })
+      .sort({ position: 1 })
       .lean();
-    for (const p of products) productMap.set(String(p._id), p);
-  }
 
-    res.json({ menu: buildTree(items, productMap), store });
+    /* Auto-seed from the store's categories when the menu has never been built.
+       Reads the curated list too, not just the product-derived names, so a
+       section the merchant created in the theme builder is nav-able from the
+       moment it exists. */
+    if (!items.length) {
+      const categories = await listCategories(
+        store._id,
+        store.categories,
+        null,
+        store.categoryImages,
+      );
+      if (categories.length) {
+        const seed = categories.map((cat, i) => ({
+          store: store._id,
+          label: cat.name,
+          targetType: 'category',
+          target: cat.name,
+          position: i,
+          isVisible: true,
+        }));
+        await NavMenu.insertMany(seed);
+        items = await NavMenu.find({ store: store._id, isVisible: true })
+          .sort({ position: 1 })
+          .lean();
+      }
+    }
+
+    /* Resolve product names/categories so the public nav needs no extra calls. */
+    const productMap = new Map();
+    const productTargets = items
+      .filter(
+        (i) =>
+          i.targetType === 'product' && i.target &&
+          mongoose.isValidObjectId(i.target),
+      )
+      .map((i) => i.target);
+
+    if (productTargets.length) {
+      const products = await Product.find({ _id: { $in: productTargets } })
+        .select('name category')
+        .lean();
+      for (const p of products) productMap.set(String(p._id), p);
+    }
+
+    const built = { menu: buildTree(items, productMap), store };
+    setCached(store._id, SLOTS.MENU, built, store.slug);
+    return built;
+  });
+
+  res.json(payload);
 });
 
 /**
@@ -395,6 +435,12 @@ export const saveStoreMenu = asyncHandler(async (req, res) => {
     .sort({ position: 1 })
     .lean();
 
+  // The storefront nav is one of the cached public reads, and this rewrote all
+  // of it. Invalidated after the transaction commits, never inside it: dropping
+  // the cache is not part of the write, and a rollback must not leave the cache
+  // cleared for a menu that was never saved.
+  invalidateStore(store._id);
+
   res.json({
     items: updated.map((i) => ({
       id: String(i._id),
@@ -453,6 +499,10 @@ export const createCategory = asyncHandler(async (req, res) => {
   // The model's setter trims and de-dupes, so this append is all it takes.
   store.categories = [...current, name];
   await store.save();
+
+  // Theme 1 sections are read from the cached store document on every
+  // storefront load, so a new one has to push it out.
+  invalidateStore(store._id);
 
   res.status(201).json({
     categories: await listCategories(
@@ -585,6 +635,10 @@ export const deleteCategory = asyncHandler(async (req, res) => {
     $set: { category: '' },
   });
 
+  /* The products that were in this category have just lost it, so the cached
+     product list is wrong as well as the cached section list. */
+  invalidateStore(store._id);
+
   /* Drop the picture too.
 
      The image lives in a SEPARATE map keyed by name, so removing the category
@@ -702,6 +756,9 @@ export const setCategoryImage = asyncHandler(async (req, res) => {
 
   store.categoryImages = images;
   await store.save();
+
+  // A picture is storefront content, and this is the write that changes it.
+  invalidateStore(store._id);
 
   res.json({
     categories: await listCategories(
