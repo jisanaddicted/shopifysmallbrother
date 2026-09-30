@@ -42,6 +42,7 @@ const PaymentFailed = lazy(() => import('./pages/customer/PaymentFailed'));
 const PaymentSuccess = lazy(() => import('./pages/customer/PaymentSuccess'));
 const ShopPage = lazy(() => import('./pages/customer/ShopPage'));
 const CategoryPage = lazy(() => import('./pages/customer/CategoryPage'));
+const ProductPage = lazy(() => import('./pages/customer/ProductPage'));
 const Storefront = lazy(() => import('./pages/customer/Storefront'));
 const MerchantDashboard = lazy(() => import('./pages/store/MerchantDashboard'));
 const StoreRiderAnalytics = lazy(() =>
@@ -374,6 +375,7 @@ export default function App() {
               two-segment path and cannot swallow this three-segment one, but
               keeping the more general route first reads correctly. */}
           <Route path={ROUTES.SHOP_CATEGORY} element={<CategoryPage />} />
+          <Route path={ROUTES.SHOP_PRODUCT} element={<ProductPage />} />
 
           <Route path="*" element={<NotFound />} />
           </Routes>

@@ -9,11 +9,20 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
  * suggestions, because on a phone it is the only control big enough to aim at
  * and the only one that can be used without first opening a menu.
  *
- * SUGGESTED TAGS ARE DERIVED, NOT HARDCODED. A fixed list like "Milk, Eggs,
+ * SUGGESTIONS ARE DERIVED, NOT HARDCODED. A fixed list like "Milk, Eggs,
  * Lay's" would be advertising products this store may not stock - dead tags on
- * a grocery that sells only hardware are worse than no tags. So the tags come
- * from this store's own catalogue: its categories first (the broadest things it
- * sells), topped up with product names. Always relevant, never a lie.
+ * a grocery that sells only hardware are worse than no tags. So the suggestions
+ * come from this store's own catalogue: its categories as well as its product
+ * names, so "fresh" can surface a "Fresh Vegetables" shelf that no single item
+ * spells out. Always relevant, never a lie.
+ *
+ * There used to be a "Popular" row of the same derived strings as permanent
+ * chips under the field. It is gone. Those chips repeated the category list the
+ * category slider above already shows - on the storefront the two sat close
+ * enough together to be the same control drawn twice, and on a category page
+ * they listed that one category and its products, which is what the page is
+ * already showing. Typing still brings up the same strings, ranked and
+ * filtered, which is when a suggestion is actually wanted.
  */
 
 /**
@@ -32,7 +41,6 @@ function scoreMatch(text, term) {
 }
 
 const MAX_SUGGESTIONS = 6;
-const MAX_TAGS = 6;
 
 export default function StoreSearchBar({
   products = [],
@@ -76,26 +84,6 @@ export default function StoreSearchBar({
     return scored.slice(0, MAX_SUGGESTIONS);
   }, [products, term]);
 
-  /* The tag row under the field. See the note at the top of this file for why
-     these are derived rather than fixed. */
-  const suggestedTags = useMemo(() => {
-    const out = [];
-    const seen = new Set();
-
-    const push = (value) => {
-      const text = String(value || '').trim();
-      if (!text) return;
-      const key = text.toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key);
-      out.push(text);
-    };
-
-    products.forEach((p) => push(p.category));
-    products.forEach((p) => push(p.name));
-
-    return out.slice(0, MAX_TAGS);
-  }, [products]);
   // A new query means the old highlighted row is meaningless - and can be out
   // of range, which would leave aria-activedescendant pointing at nothing.
   useEffect(() => {
@@ -245,26 +233,6 @@ export default function StoreSearchBar({
             </li>
           )}
         </ul>
-      ) : null}
-
-      {/* Tags double as a shortcut and as a hint of what this store sells. */}
-      {suggestedTags.length ? (
-        <div className="store-search__tags">
-          <span className="store-search__tags-label">Popular</span>
-          <div className="store-search__tags-row">
-            {suggestedTags.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                className="store-search__tag"
-                onClick={() => choose(tag)}
-                aria-pressed={value === tag}
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        </div>
       ) : null}
 
       {/* Announced politely rather than shown: the grid below changes as you

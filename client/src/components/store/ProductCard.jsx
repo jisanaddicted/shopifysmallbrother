@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
-import { formatCurrency, truncate } from '../../utils/formatters';
+import { productPath } from '../../utils/constants';
+import { formatCurrency } from '../../utils/formatters';
 import {
   availableOptionValues,
   defaultSelection,
@@ -11,6 +13,16 @@ import {
 
 export default function ProductCard({ product }) {
   const { addItem } = useCart();
+
+  /* The store slug, straight off the route.
+
+     Every card lives under /s/:slug/…, so React Router already has it and there
+     is no reason for the four different pages that render grids to each pass it
+     down. Without a slug the card simply is not a link - it stays fully usable
+     for adding to the cart, it just has no "open" target. */
+  const { slug } = useParams();
+  const productId = product?._id || product?.id;
+  const detailPath = slug && productId ? productPath(slug, productId) : null;
 
   const hasChoices = Boolean(product?.hasVariants);
 
@@ -150,13 +162,42 @@ export default function ProductCard({ product }) {
 
   return (
     <article className="product-card">
+      {/* The photo and the name are one link to the product's own page.
+
+          Not the whole card: the option chips and the add-to-cart button live
+          inside it, and nesting buttons or a link inside another link is invalid
+          and breaks keyboard navigation in ways that are hard to see. So the
+          card is a card, with one clearly-signposted way into the detail page -
+          exactly how a category card works.
+
+          The stretch target sits behind both, which means tapping anywhere on
+          the photo or the name goes to the product, while the quantity stepper
+          and add button below stay tappable in their own right. */}
       <div className="product-card__media">
-        {shownImage ? (
-          <img src={shownImage} alt={product?.name} loading="lazy" />
+        {/* aria-hidden and out of the tab order on purpose: the title link just
+            below is the same destination and is the one a keyboard or screen
+            reader should meet. This one only widens the tap target. */}
+        {detailPath ? (
+          <Link
+            className="product-card__open"
+            to={detailPath}
+            tabIndex={-1}
+            aria-hidden="true"
+          >
+            {shownImage ? (
+              <img src={shownImage} alt="" loading="lazy" />
+            ) : (
+              <span className="product-card__placeholder">🛍️</span>
+            )}
+          </Link>
         ) : (
-          <span className="product-card__placeholder" aria-hidden="true">
-            🛍️
-          </span>
+          <div className="product-card__open">
+            {shownImage ? (
+              <img src={shownImage} alt="" loading="lazy" />
+            ) : (
+              <span className="product-card__placeholder">🛍️</span>
+            )}
+          </div>
         )}
 
         {outOfStock && <span className="chip chip--danger">Out of stock</span>}
@@ -172,14 +213,18 @@ export default function ProductCard({ product }) {
       </div>
 
       <div className="product-card__body">
-        {product?.category ? (
-          <span className="chip">{product.category}</span>
-        ) : null}
-
-        <h3 className="product-card__title">{product?.name}</h3>
-        <p className="product-card__desc">
-          {truncate(product?.description || 'No description yet.', 70)}
-        </p>
+        {/* No description and no category badge here any more. Both moved to the
+            product page: a 70-character slice of copy and a chip were taking three
+            of a card's five lines, and neither told a shopper anything they could
+            act on from a grid - the grid's job is "what is this and what does it
+            cost", and the name and price already answer that. */}
+        {detailPath ? (
+          <h3 className="product-card__title">
+            <Link to={detailPath}>{product?.name}</Link>
+          </h3>
+        ) : (
+          <h3 className="product-card__title">{product?.name}</h3>
+        )}
 
         {/* The option picker. A real fieldset per option with a real legend,
             because "Colour: Red" announced by a screen reader is strictly better

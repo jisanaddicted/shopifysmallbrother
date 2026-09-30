@@ -414,6 +414,158 @@ check(
   /\.product-card__buy \.btn \{[\s\S]{0,160}min-width: 0/.test(css),
 );
 
+/* --- The card is now a doorway, not a summary -------------------------- */
+check(
+  'the card no longer renders a description (it lives on the product page)',
+  !/product-card__desc/.test(cardSrc) && !/truncate\(/.test(cardSrc),
+);
+check(
+  'and the dead .product-card__desc CSS went with it',
+  !/\.product-card__desc/.test(css),
+);
+check(
+  'the card no longer shows a category badge (also on the product page now)',
+  !/\{product\?\.category \?/.test(cardSrc),
+);
+check(
+  'the card takes the store slug off the route rather than a prop',
+  /useParams\(\)/.test(cardSrc) && /productPath\(slug, productId\)/.test(cardSrc),
+);
+check(
+  'the card photo is a link to the product page',
+  /className="product-card__open"[\s\S]{0,80}to=\{detailPath\}/.test(cardSrc),
+);
+check(
+  'the photo link is hidden from assistive tech (the title link is the real one)',
+  /product-card__open[\s\S]{0,220}tabIndex=\{-1\}[\s\S]{0,40}aria-hidden="true"/.test(
+    cardSrc,
+  ),
+);
+check(
+  'the photo link is out of the flow, so the stock and options chips stay above it',
+  /\.product-card__open \{[\s\S]{0,120}position: absolute[\s\S]{0,40}inset: 0/.test(css),
+);
+check(
+  'the card title is a link that does not shout',
+  /\.product-card__title a \{[\s\S]{0,80}text-decoration: none/.test(css),
+);
+
+/* The squeeze. Side by side in a ~150px card the label truncated to "Add 3 to…";
+   the button now claims a full line of its own instead. */
+check(
+  'the phone footer wraps instead of forcing the stepper and button onto one line',
+  /\.product-card__footer \{[\s\S]{0,140}flex-wrap: wrap/.test(css),
+);
+check(
+  'the buy wrapper dissolves so the button can reach the second line',
+  /\.product-card__buy \{\s*display: contents;/.test(css),
+);
+check(
+  'the add button takes the full card width on a phone (this is the squeeze fix)',
+  /\.product-card__buy \.btn \{[\s\S]{0,700}flex: 0 0 100%/.test(css),
+);
+check(
+  'and the stepper moves to the right of the price rather than off the card',
+  /\.product-card__buy \.qty--card \{[\s\S]{0,80}margin-left: auto/.test(css),
+);
+
+/* --- Product page ------------------------------------------------------ */
+check(
+  'the product route is registered',
+  /SHOP_PRODUCT: '\/s\/:slug\/p\/:productId'/.test(constantsSrc),
+);
+check(
+  'productPath encodes the id',
+  /export const productPath[\s\S]{0,200}encodeURIComponent/.test(constantsSrc),
+);
+check('the product page is routed', /ROUTES\.SHOP_PRODUCT\}/.test(appSrc));
+check(
+  'the product page is code-split like every other page',
+  /lazy\(\(\) => import\('\.\/pages\/customer\/ProductPage'\)\)/.test(appSrc),
+);
+
+const prodPageSrc = fs.readFileSync(
+  new URL('../../client/src/pages/customer/ProductPage.jsx', import.meta.url),
+  'utf8',
+);
+check(
+  'it loads the product by id',
+  /productService\.getProductById\(productId\)/.test(prodPageSrc),
+);
+check(
+  'it renders the FULL description, which is why the card stopped carrying one',
+  /product-page__desc[\s\S]{0,200}<p>\{product\.description\}<\/p>/.test(prodPageSrc),
+);
+check(
+  'the description keeps the merchant\'s own line breaks',
+  /\.product-page__desc p \{[\s\S]{0,200}white-space: pre-line/.test(css),
+);
+check(
+  'it shows the category the card used to badge',
+  /product-page__category[\s\S]{0,120}\{category\}/.test(prodPageSrc),
+);
+check(
+  'it says how many are left, which no card had room for',
+  /product-page__stock/.test(prodPageSrc),
+);
+check(
+  'the purchase bar sticks, so a long description cannot hide the only buy button',
+  /\.product-page__buy \{[\s\S]{0,120}position: sticky[\s\S]{0,40}bottom: 0/.test(css),
+);
+check(
+  'the buy button takes the remaining width beside the stepper',
+  /\.product-page__add \{[\s\S]{0,80}flex: 1/.test(css),
+);
+check(
+  'a gallery of thumbnails only appears when there is a choice to make',
+  /gallery\.length > 1 \?/.test(prodPageSrc),
+);
+check(
+  'the chosen variant\'s own photo leads the gallery',
+  /push\(chosen\?\.image\);[\s\S]{0,60}push\(product\?\.image\)/.test(prodPageSrc),
+);
+check(
+  'picking an option resets the gallery to that option\'s picture',
+  /setActiveImage\(0\);[\s\S]{0,40}\}, \[selection/.test(prodPageSrc),
+);
+check(
+  'it caps one tap at the same 20 the card uses',
+  /const MAX_ADD_PER_TAP = 20/.test(prodPageSrc),
+);
+check(
+  'and honours the chosen variant\'s stock, like the card',
+  /Math\.min\(MAX_ADD_PER_TAP, Number\(stock\) \|\| 0\)/.test(prodPageSrc),
+);
+check(
+  'it adds the chosen VARIANT, so the cart line keys on the right row',
+  /variantId: chosen\._id \|\| chosen\.id[\s\S]{0,120}price: chosen\.price/.test(
+    prodPageSrc,
+  ),
+);
+check(
+  'it destructures addItem (its absence is what shipped "addItem is not defined")',
+  /const \{ addItem, itemCount, openCart \} = useCart\(\);/.test(prodPageSrc),
+);
+check(
+  'the "Added" confirmation is not scoped to the card, so the product page shows it too',
+  /\.btn-primary\.is-added \{[\s\S]{0,120}var\(--ok\)/.test(css) &&
+    !/\.product-card__footer \.btn\.is-added/.test(css),
+);
+check(
+  'it offers more from the same category instead of a dead end',
+  /More in \{category\}/.test(prodPageSrc),
+);
+check(
+  'and that strip reuses the shared card, so it links onward to more pages',
+  /<ProductCard key=\{item\._id \|\| item\.id\} product=\{item\} \/>/.test(prodPageSrc),
+);
+check(
+  'the page stacks on a phone and splits into two columns above 640px',
+  /@media \(min-width: 641px\)[\s\S]{0,120}product-page__layout[\s\S]{0,160}minmax\(0, 1fr\) minmax\(0, 1fr\)/.test(
+    css,
+  ),
+);
+
 /* --- Static identifier guard ------------------------------------------
    A guard, because the bug this catches is invisible to the build.
 
@@ -426,31 +578,6 @@ check(
 
    So: every identifier ThemeBuilder.jsx calls should be declared in the file,
    imported, or a known global. Anything else is a name that does not exist. */
-const themeSrc = fs.readFileSync(
-  new URL('../../client/src/pages/store/ThemeBuilder.jsx', import.meta.url),
-  'utf8',
-);
-
-/* Scan JS only, not JSX.
-
-   In JSX, `<span>Added ✓</span>` is text, but a naive scan reads the word after
-   a tag as if it were being CALLED, and every word inside a string or comment
-   looks the same. Both produce noise that buries the one real finding.
-
-   So strip, in order: comments, string/template literals, then JSX elements. */
-const themeJs = themeSrc
-  .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .replace(/\/\/[^\n]*/g, ' ')
-  .replace(/`(?:\\.|[^`\\])*`/g, '""')
-  .replace(/'(?:\\.|[^'\\])*'/g, '""')
-  .replace(/"(?:\\.|[^"\\])*"/g, '""')
-  .replace(/<[A-Za-z][^<>]*\/>/g, ' ')
-  .replace(/<[A-Za-z][^<>]*>[\s\S]*?<\/[A-Za-z][^<>]*>/g, ' ')
-  .replace(/<>/g, ' ')
-  .replace(/<\/[^<>]*>/g, ' ');
-
-/* What JSX and the runtime provide. Anything called that is not declared,
-   imported, or listed here is undefined. */
 const GLOBALS = new Set([
   'console', 'fetch', 'setTimeout', 'clearTimeout', 'setInterval',
   'clearInterval', 'window', 'document', 'localStorage', 'sessionStorage',
@@ -463,65 +590,109 @@ const GLOBALS = new Set([
 
 /* Keywords are matched when they precede a paren, so they are removed by hand.
    Anything NOT on this list gets reported as a missing identifier. */
-const calledBare = new Set();
-for (const m of themeJs.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) {
-  calledBare.add(m[1]);
-}
-for (const kw of [
+const KEYWORDS = [
   'if', 'for', 'while', 'switch', 'catch', 'return', 'function', 'typeof',
   'async', 'await', 'new', 'delete', 'void', 'in', 'of', 'do', 'else',
   'yield', 'throw', 'case', 'instanceof',
+];
+
+/**
+ * Every bare name `src` calls that is not declared in it, imported by it, or
+ * provided by the runtime.
+ *
+ * Applied to more than one file now. `addItem is not defined` has shipped twice
+ * in this codebase - once on a card, once on a page - and both times it was a
+ * name that was called but never pulled out of the hook that provides it. Each
+ * of those is a one-line omission in a component that builds perfectly.
+ */
+function undefinedIdentifiers(src) {
+  /* Scan JS only, not JSX.
+
+     In JSX, `<span>Added ✓</span>` is text, but a naive scan reads the word after
+     a tag as if it were being CALLED, and every word inside a string or comment
+     looks the same. Both produce noise that buries the one real finding.
+
+     So strip, in order: comments, string/template literals, then JSX elements. */
+  const js = src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ')
+    .replace(/`(?:\\.|[^`\\])*`/g, '""')
+    .replace(/'(?:\\.|[^'\\])*'/g, '""')
+    .replace(/"(?:\\.|[^"\\])*"/g, '""')
+    .replace(/<[A-Za-z][^<>]*\/>/g, ' ')
+    .replace(/<[A-Za-z][^<>]*>[\s\S]*?<\/[A-Za-z][^<>]*>/g, ' ')
+    .replace(/<>/g, ' ')
+    .replace(/<\/[^<>]*>/g, ' ');
+
+  const calledBare = new Set();
+  for (const m of js.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)) {
+    calledBare.add(m[1]);
+  }
+  for (const kw of KEYWORDS) calledBare.delete(kw);
+
+  const declared = new Set();
+  for (const m of js.matchAll(/(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) {
+    declared.add(m[1]);
+  }
+  /* Destructured state and props. The array form matters most here: the SETTER
+     lives in the brackets, and it is the setter that gets called -
+     `const [errorMsg, setError] = useState('')`. */
+  for (const m of js.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {
+    for (const part of m[1].split(',')) {
+      const name = part.split(':').pop().split('=')[0].trim().replace(/^\.\.\./, '');
+      if (name) declared.add(name);
+    }
+  }
+  for (const m of js.matchAll(/(?:const|let|var)\s*\[([^\]]*)\]\s*=/g)) {
+    for (const part of m[1].split(',')) {
+      const name = part.split(':').pop().trim().replace(/^\.\.\./, '');
+      if (name) declared.add(name);
+    }
+  }
+  /* Function parameters are local names, not globals. */
+  for (const m of js.matchAll(/\(([^()]*)\)\s*=>/g)) {
+    for (const part of m[1].split(',')) {
+      const name = part.split('=')[0].trim().replace(/^\.\.\./, '');
+      if (/^[A-Za-z_$][\w$]*$/.test(name)) declared.add(name);
+    }
+  }
+  for (const m of js.matchAll(/function\s*\*?\s*[A-Za-z_$][\w$]*\s*\(([^()]*)\)/g)) {
+    for (const part of m[1].split(',')) {
+      const name = part.split('=')[0].trim().replace(/^\.\.\./, '');
+      if (/^[A-Za-z_$][\w$]*$/.test(name)) declared.add(name);
+    }
+  }
+  /* Imports come from the ORIGINAL source: the string pass above rewrites
+     `'./storeService'` to `""`, which would hide the names being looked for.
+
+     `[\s\S]` rather than `.` because most files here import several names across
+     a multi-line block, and a dot does not cross a newline - so a non-greedy
+     `.+?` would fail to match those imports at all and report every name in them
+     as undefined. That is a false positive, and a guard that cries wolf gets
+     ignored. */
+  for (const m of src.matchAll(/import\s+([\s\S]+?)\s+from/g)) {
+    for (const part of m[1].replace(/[{}]/g, ',').split(',')) {
+      const name = part.trim().split(/\s+as\s+/).pop().trim();
+      if (name && /^[A-Za-z_$][\w$]*$/.test(name)) declared.add(name);
+    }
+  }
+
+  return [...calledBare]
+    .filter((n) => !declared.has(n) && !GLOBALS.has(n))
+    .sort();
+}
+
+for (const [label, relative] of [
+  ['ThemeBuilder.jsx', '../../client/src/pages/store/ThemeBuilder.jsx'],
+  ['ProductPage.jsx', '../../client/src/pages/customer/ProductPage.jsx'],
+  ['ProductCard.jsx', '../../client/src/components/store/ProductCard.jsx'],
+  ['CategoryPage.jsx', '../../client/src/pages/customer/CategoryPage.jsx'],
 ]) {
-  calledBare.delete(kw);
+  const src = fs.readFileSync(new URL(relative, import.meta.url), 'utf8');
+  const missing = undefinedIdentifiers(src);
+  console.log(
+    missing.length === 0
+      ? `PASS  every function called in ${label} resolves to something real`
+      : `FAIL  undefined identifier(s) called in ${label}:\n  ${missing.join('\n  ')}`,
+  );
 }
-
-const declared = new Set();
-for (const m of themeJs.matchAll(/(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/g)) {
-  declared.add(m[1]);
-}
-/* Destructured state and props. The array form matters most here: the SETTER
-   lives in the brackets, and it is the setter that gets called -
-   `const [errorMsg, setError] = useState('')`. */
-for (const m of themeJs.matchAll(/(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {
-  for (const part of m[1].split(',')) {
-    const name = part.split(':').pop().split('=')[0].trim().replace(/^\.\.\./, '');
-    if (name) declared.add(name);
-  }
-}
-for (const m of themeJs.matchAll(/(?:const|let|var)\s*\[([^\]]*)\]\s*=/g)) {
-  for (const part of m[1].split(',')) {
-    const name = part.split(':').pop().trim().replace(/^\.\.\./, '');
-    if (name) declared.add(name);
-  }
-}
-/* Function parameters are local names, not globals. */
-for (const m of themeJs.matchAll(/\(([^()]*)\)\s*=>/g)) {
-  for (const part of m[1].split(',')) {
-    const name = part.split('=')[0].trim().replace(/^\.\.\./, '');
-    if (/^[A-Za-z_$][\w$]*$/.test(name)) declared.add(name);
-  }
-}
-for (const m of themeJs.matchAll(/function\s*\*?\s*[A-Za-z_$][\w$]*\s*\(([^()]*)\)/g)) {
-  for (const part of m[1].split(',')) {
-    const name = part.split('=')[0].trim().replace(/^\.\.\./, '');
-    if (/^[A-Za-z_$][\w$]*$/.test(name)) declared.add(name);
-  }
-}
-/* Imports come from the ORIGINAL source: the string pass above rewrites
-   `'./storeService'` to `""`, which would hide the names being looked for. */
-for (const m of themeSrc.matchAll(/import\s+(.+?)\s+from/g)) {
-  for (const part of m[1].replace(/[{}]/g, ',').split(',')) {
-    const name = part.trim().split(/\s+as\s+/).pop().trim();
-    if (name && /^[A-Za-z_$][\w$]*$/.test(name)) declared.add(name);
-  }
-}
-
-const missing = [...calledBare]
-  .filter((n) => !declared.has(n) && !GLOBALS.has(n))
-  .sort();
-
-console.log(
-  missing.length === 0
-    ? 'PASS  every function called in ThemeBuilder.jsx resolves to something real'
-    : `FAIL  undefined identifier(s) called in ThemeBuilder.jsx:\n  ${missing.join('\n  ')}`,
-);

@@ -56,10 +56,52 @@ export default function CategoryRail({ name, products, showAllLabel }) {
         {showAllLabel ? <span className="rail__count">{showAllLabel}</span> : null}
       </header>
 
-      <div className="rail__viewport">
+      {/* The track gets the FULL width of the section.
+          It used to share a row with the two arrows, which cost about 76px of a
+          360px phone's content width (two 30px buttons plus their gaps) - enough
+          to push the second product card off the edge. Moving the arrows to
+          their own row below gives the track every pixel, so a whole number of
+          cards fits instead of one and a sliver. */}
+      <div
+        className="rail__track"
+        ref={trackRef}
+        tabIndex={0}
+        role="group"
+        aria-label={`${name} products`}
+      >
+        {/* NO category card here.
+
+            There used to be one - the category's picture and name as the
+            first item in its own rail. It moved out to <CategorySlider>,
+            which sits above every section, for two reasons:
+
+              - `.store-sections` is hidden above 640px, so a card living in
+                here disappeared on desktop entirely.
+              - A card that scrolls away with its own section is no use as
+                navigation: to learn what the shop sells you had to swipe
+                through every section to discover it.
+
+            Repeating it here as well would show the same category twice on a
+            phone, once at the top of the screen and once an inch below it. */}
+        {products.map((product) => (
+          <ProductCard key={product._id || product.id} product={product} />
+        ))}
+      </div>
+
+      {/* The arrows sit BELOW the row, centred.
+
+          Beside the track they ate a card's worth of width and sat exactly
+          where a thumb is already swiping, so a tap fought the gesture. Under
+          the row they cost no width at all, and the middle of the bottom of a
+          section is the easiest place on a phone to reach without changing grip.
+
+          Both are always rendered rather than hidden at the ends: a button that
+          appears and disappears shifts the row's content under the shopper's
+          finger mid-swipe, and a disabled one is simply quieter. */}
+      <div className="rail__nav">
         <button
           type="button"
-          className="rail__arrow rail__arrow--prev"
+          className="rail__arrow"
           onClick={() => scrollByCard(-1)}
           aria-label={`Scroll ${name} left`}
         >
@@ -75,38 +117,9 @@ export default function CategoryRail({ name, products, showAllLabel }) {
           </svg>
         </button>
 
-        {/* The scroll container. `tabIndex` makes it focusable so the arrows
-            below are reachable by keyboard, and the group role announces what
-            it is rather than leaving a bare scrollable div unlabelled. */}
-        <div
-          className="rail__track"
-          ref={trackRef}
-          tabIndex={0}
-          role="group"
-          aria-label={`${name} products`}
-        >
-          {/* NO category card here.
-
-              There used to be one - the category's picture and name as the
-              first item in its own rail. It moved out to <CategorySlider>,
-              which sits above every section, for two reasons:
-
-                - `.store-sections` is hidden above 640px, so a card living in
-                  here disappeared on desktop entirely.
-                - A card that scrolls away with its own section is no use as
-                  navigation: to learn what the shop sells you had to swipe
-                  through every section to discover it.
-
-              Repeating it here as well would show the same category twice on a
-              phone, once at the top of the screen and once an inch below it. */}
-          {products.map((product) => (
-            <ProductCard key={product._id || product.id} product={product} />
-          ))}
-        </div>
-
         <button
           type="button"
-          className="rail__arrow rail__arrow--next"
+          className="rail__arrow"
           onClick={() => scrollByCard(1)}
           aria-label={`Scroll ${name} right`}
         >

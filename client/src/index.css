@@ -902,14 +902,35 @@ ol {
   place-items: center;
 }
 
-.product-card__media img {
+/* The tap target that opens the product page.
+
+   Absolutely positioned over the whole media box rather than wrapping it in
+   flow, so the "Out of stock" chip and the "N options" chip stay above it
+   instead of being pushed around by it. `> *` stretches to fill the box: the
+   image needs it to crop with object-fit, and the placeholder needs it so its
+   glyph lands in the middle rather than the top-left corner. */
+.product-card__open {
+  position: absolute;
+  inset: 0;
+  display: grid;
+}
+
+.product-card__open > * {
+  grid-area: 1 / 1;
   width: 100%;
   height: 100%;
-  object-fit: cover;
 }
 
 .product-card__placeholder {
   font-size: 2.2rem;
+  display: grid;
+  place-items: center;
+}
+
+.product-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .product-card__media .chip {
@@ -926,14 +947,24 @@ ol {
   flex: 1;
 }
 
+/* The product name, which is the card's link to its own page.
+
+   The link inside inherits the heading's look rather than being restyled as
+   "a link": an underlined, brand-coloured name in the middle of every card in a
+   grid reads as a call to action, and the card already has one - the button
+   below. It should read as a heading that happens to be tappable. */
 .product-card__title {
   font-size: 1rem;
 }
 
-.product-card__desc {
-  flex: 1;
-  color: var(--muted);
-  font-size: 0.85rem;
+.product-card__title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.product-card__title a:hover,
+.product-card__title a:focus-visible {
+  text-decoration: underline;
 }
 
 .product-card__footer {
@@ -1040,24 +1071,16 @@ ol {
     overflow-wrap: anywhere;
   }
 
-  .product-card__desc {
-    font-size: 0.75rem;
-    /* Two lines, then it stops. The full text lives on the product page, and
-       an unclamped description makes the two cards in a row sit at visibly
-       different heights, which is exactly what a two-up grid looks bad at. */
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
+  /* The footer becomes a wrapping row instead of a column.
 
+     The button below is now `flex: 0 0 100%`, which on a ROW footer's wrap means
+     it claims a line of its own. That is the whole fix for the squeeze: the
+     price and the stepper share the first line and the "Add to cart" button gets
+     the full card width underneath, instead of fighting the stepper for it. */
   .product-card__footer {
-    /* Stacked, full-width button. Side by side, a price and an "Add to cart"
-       in a 155px column either wrap mid-phrase or squeeze the button into
-       three words. */
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 0.4rem;
   }
 
@@ -1065,25 +1088,37 @@ ol {
     width: 100%;
   }
 
-  /* The stepper sits BESIDE the button, not above it.
-     Stacked, the card grows by a whole extra row and the two-up grid loses its
-     "scan a row of products" quality - the eye ends up bouncing between a
-     number and a button on separate lines. Side by side the pair reads as one
-     control and the card keeps its height.
+  /* `display: contents` dissolves the buy wrapper so the stepper and the button
+     stop being a nested flex row and become flex items of the footer itself -
+     which is what lets the price / stepper / button arrangement above apply to
+     them.
 
-     At ~155px wide this is tight, so the button is allowed to shrink and the
-     stepper is pinned: the two buttons and the number are fixed, and the label
-     ("Add 3 to cart") takes whatever is left, truncating rather than wrapping. */
+     The wrapper stays in the DOM, so `.product-card__buy .btn` still matches it;
+     only its box is removed. Without this the stepper would remain locked inside
+     an inline-flex row with the button and the button could never escape to the
+     second line. */
   .product-card__buy {
-    width: 100%;
+    display: contents;
+  }
+
+  /* Pushed to the right of the price, so the price stays readable at the left
+     edge and the stepper lines up with the card's right edge like the rest of
+     the card's controls. */
+  .product-card__buy .qty--card {
+    margin-left: auto;
   }
 
   .product-card__buy .btn {
-    /* `min-width: 0` is what lets a flex item actually shrink below its
-       content width; without it the button refuses to give ground and pushes
-       the stepper out of the card. */
+    /* `min-width: 0` lets a flex item shrink below its content width, so a long
+       price or a long label on a narrow screen cannot push the row wider than
+       the card. */
     min-width: 0;
-    flex: 1;
+    /* `0 0 100%`: no grow, no shrink, and always the full card width - so the
+       label never truncates to "Add 3 to…". The ellipsis below stays as a
+       backstop for a pathologically narrow screen, not as the normal state. */
+    flex: 0 0 100%;
+    /* Comfortably tappable on a phone, and level with the stepper above. */
+    padding-block: 0.5rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3133,48 +3168,6 @@ ol {
   font-size: 0.9rem;
 }
 
-/* Tags: a shortcut AND a hint of what the store sells. */
-.store-search__tags {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
-  margin-top: 0.7rem;
-  flex-wrap: wrap;
-}
-
-.store-search__tags-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-
-.store-search__tags-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.store-search__tag {
-  padding: 0.3rem 0.7rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink-soft);
-  font: inherit;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.store-search__tag:hover,
-.store-search__tag[aria-pressed='true'] {
-  background: var(--brand-soft);
-  border-color: var(--brand);
-  color: var(--brand-dark);
-}
-
 /* Screen-reader-only. It reports the hit count as the shopper types, which the
    grid changing below already shows visually. */
 .store-search__count {
@@ -4017,10 +4010,16 @@ ol {
   pointer-events: none;
 }
 
-/* The "Added ✓" state on a product card's button. Green, because the cart
-   really did change - but it is the button's own label that swaps, so it can
-   never cover the product the shopper is looking at. */
-.product-card__footer .btn.is-added {
+/* The "Added ✓" state on an add-to-cart button. Green, because the cart really
+   did change - but it is the button's own label that swaps, so it can never cover
+   the product the shopper is looking at.
+
+   Scoped to `.btn-primary` rather than to the card, because both places that
+   add to the cart use it: the grid card and the product page. Left scoped to the
+   card, the product page's button would swap its label to "Added 2 ✓" while
+   staying brand blue - the text changes and nothing else does, which reads as a
+   glitch rather than a confirmation. */
+.btn-primary.is-added {
   background: var(--ok);
   border-color: var(--ok);
   color: #fff;
@@ -4690,19 +4689,14 @@ ol {
   font-size: 0.8rem;
 }
 
-/* The scroll container and the two arrows share a row. The track takes the
-   slack; the arrows are fixed, so they never squeeze the cards. */
-.rail__viewport {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
+/* The scroll row. It no longer shares a line with the arrows - they moved to
+   their own centred row underneath, so the track here gets the section's FULL
+   width. That is what lets two whole product cards fit a phone: with the arrows
+   beside it, two 30px buttons plus gaps took ~76px of the ~304px available at
+   360px, leaving room for one card and a sliver. */
 .rail__track {
   display: flex;
   gap: 0.65rem;
-  flex: 1;
   min-width: 0;
   overflow-x: auto;
   /* Native horizontal scroll, for momentum, rubber-banding at the ends and
@@ -4723,13 +4717,47 @@ ol {
   display: none;
 }
 
-/* One card per slot, sized for a phone. `flex: 0 0 auto` is what stops the
-   cards stretching to fill the track — without it they share the width and
-   the rail never overflows, which defeats the whole point. */
+/* Card width: EXACTLY half the usable width, less half the gap.
+
+   Two cards and the one gap between them must equal the row's width, so
+   w = (usable - gap) / 2. The usable width is the viewport minus .app-main's
+   0.75rem and .page--customer's 1rem on each side, i.e. 100vw - 56px, and the
+   gap is 0.65rem = 10.4px. That reduces to calc(50vw - 33.2px).
+
+   This is derived rather than a guessed constant because a guessed constant is
+   only right at one screen size. The previous 150px fitted two cards on a 390px
+   phone and NOT on a 360px one - it needs 310px and only 304px exist, so the
+   second card hung off the edge, which is the bug being fixed. The formula is
+   right at every width instead: 126.8px at 320, 146.8 at 360, 161.8 at 390.
+
+   The 150px cap is a floor on how small a card may become - below that the
+   product photo is too small to recognise - and a ceiling on how large: a rail
+   card much wider than the ~220px grid column stops reading as a card. So it
+   clamps rather than scaling without limit.
+
+   `flex: 0 0 auto` stops them stretching to fill the track - without it they
+   share the width, the rail never overflows, and there is nothing to scroll. */
 .rail__track > .product-card {
   flex: 0 0 auto;
-  width: 150px;
+  width: clamp(126px, calc(50vw - 33.2px), 150px);
   scroll-snap-align: start;
+}
+
+/* The arrows, centred UNDER the row.
+
+   Beside the track they ate a card's worth of width AND sat exactly where a
+   thumb is already swiping, so a tap fought the gesture. Below the row they
+   cost no width, and centred they are the easiest place on a phone to reach
+   without changing grip.
+
+   Both are always rendered rather than hidden at the ends: a button that
+   appears and disappears shifts the row's content under a finger mid-swipe. */
+.rail__nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
 }
 
 /* --- Category card slider ---------------------------------------------- */
@@ -4959,11 +4987,14 @@ ol {
 }
 
 .rail__arrow {
-  flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  /* 34px, up from the 30px this used beside the cards. It is now the ONLY way to
+     reach a card by tapping, rather than one of two controls competing with a
+     swipe, so it can afford to be a more forgiving target - and the width is no
+     longer competing with the cards for room. */
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 50%;
@@ -4971,6 +5002,7 @@ ol {
   color: var(--ink-soft);
   cursor: pointer;
   box-shadow: var(--shadow-sm);
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .rail__arrow:hover {
@@ -5255,3 +5287,219 @@ ol {
 .menu-row__grip:hover .menu-icon {
   color: var(--ink-soft);
 }
+/* --- Product page ------------------------------------------------------- */
+/*
+ * /s/<slug>/p/<productId> - one product, as its own page.
+ *
+ * The card is the doorway here, so this page owns everything the card gave up:
+ * the description in full, the category, the stock count, and a purchase bar
+ * that survives a long read. Desktop puts the gallery beside the details; a
+ * phone stacks them, because a 320px-wide two-column layout would give each
+ * column ~150px, which is card width - too narrow to read a description in.
+ */
+.product-page {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.product-page__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  align-self: flex-start;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+}
+
+.product-page__back:hover {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.product-page__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.1rem;
+  align-items: start;
+}
+
+.product-page__hero {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: grid;
+}
+
+.product-page__hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-page__placeholder {
+  display: grid;
+  place-items: center;
+  font-size: 4rem;
+}
+
+.product-page__hero .chip {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+}
+
+.product-page__thumbs {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  /* A rail of its own: a product with many variant photos would otherwise wrap
+     onto a second line and shove the thumbnails against the details below. */
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.product-page__thumb {
+  flex: 0 0 auto;
+  width: 58px;
+  height: 58px;
+  padding: 0;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.product-page__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.product-page__thumb.is-active {
+  border-color: var(--brand);
+}
+
+.product-page__thumb:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.product-page__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.product-page__title {
+  margin: 0;
+  font-size: 1.45rem;
+  /* A product name is free text. "Hand-thrown Stoneware Espresso Cups (Set of
+     4)" must wrap rather than push the price off the row. */
+  overflow-wrap: anywhere;
+}
+
+.product-page__category {
+  align-self: flex-start;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.product-page__category:hover {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.product-page__price {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.product-page__stock {
+  margin: 0;
+}
+
+.product-page__desc {
+  border-top: 1px solid var(--line);
+  padding-top: 0.85rem;
+}
+
+.product-page__desc p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  /* Merchant copy is pasted in and contains its own line breaks and runs of
+     whitespace. `white-space: pre-line` keeps the author's paragraphs without
+     rendering a wall of collapsed runs, and `overflow-wrap: anywhere` stops one
+     long pasted URL from widening the page. */
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.product-page__section {
+  font-size: 0.95rem;
+  margin: 0 0 0.45rem;
+}
+
+/* The purchase bar.
+
+   `position: sticky` on its own grid item is what keeps it on screen while a
+   long description scrolls past. It sticks within `.product-page`, so it stops
+   at the end of the page rather than floating over the footer forever. */
+.product-page__buy {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.product-page__add {
+  flex: 1;
+  min-width: 0;
+  padding-block: 0.65rem;
+  font-size: 1rem;
+}
+
+.product-page__related {
+  margin-top: 0.5rem;
+}
+
+/* Desktop: gallery left, details right. 480px is roughly the point where a
+   single full-width image stops being bigger than the screen is tall enough to
+   show usefully, and a side-by-side pair stops being cramped. */
+@media (min-width: 641px) {
+  .product-page__layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.6rem;
+  }
+
+  .product-page__buy {
+    max-width: 32rem;
+  }
+}
+
+/* A phone: the gallery stays full width (a product photo is the reason most
+   people tapped through), and the purchase bar keeps its single row because a
+   sticky bar has to be short - it eats whatever height it takes from the
+   description. The stepper is ~92px, so the button keeps ~200px of a 320px
+   screen, which fits "Add to cart" without truncating. */
+@media (max-width: 400px) {
+  .product-page__add {
+    font-size: 0.92rem;
+  }
+}
+
