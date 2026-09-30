@@ -73,16 +73,83 @@ function buildTree(items, productMap) {
   return root.sort(byPosition);
 }
 
-/** Unique, alphabetically-sorted category names used by a store's products. */
-async function listCategories(storeId) {
-  const rows = await Product.find({
-    store: storeId,
-    category: { $ne: '', $exists: true },
-  })
-    .select('category')
-    .lean();
-    return [...new Set(rows.map((r) => r.category).filter(Boolean))].sort((a, b) =>
-    a.toLowerCase().localeCompare(b.toLowerCase())
+/** Ceiling on a store's curated category list, so the picker cannot grow
+ *  without bound. A real shop is nowhere near this. */
+const MAX_CATEGORIES = 60;
+
+/** Longest a single category name may be. */
+const MAX_CATEGORY_NAME = 60;
+
+/**
+ * Escape a string for literal use inside a RegExp.
+ *
+ * A category name is typed by a human, so it can legally contain characters
+ * that mean something to a pattern. Deleting "Drinks" must never turn into
+ * deleting every product whose category merely *starts* the same way, and a
+ * name containing a `(` must not throw a SyntaxError.
+ */
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Every category a store trades in, as `[{ name, count }]`, sorted by name.
+ *
+ * TWO sources, unioned, and both are needed:
+ *
+ *   1. The store's own curated `categories` list. A merchant can create a
+ *      section in the theme builder BEFORE the first product exists, which is
+ *      the point of being able to create one at all.
+ *   2. The distinct `category` strings already sitting on the store's
+ *      products, so every product ever filed still gets a section even if
+ *      nobody ever curated anything.
+ *
+ * Matching is CASE-INSENSITIVE: "Drinks" and "drinks" are one category, not
+ * two that each show half the stock under a heading that looks identical. When
+ * the two sources disagree on spelling, the CURATED one wins, because that is
+ * the name the merchant typed and therefore the one they expect to read as
+ * their section heading. So curated names are seeded into the map first.
+ *
+ * `count` is how many products are actually filed under the name, which is 0
+ * for a section created ahead of its first product. The theme builder shows
+ * it so a merchant can see which of their sections are still empty.
+ *
+ * `productRows` lets a caller pass a projection it has already loaded, so the
+ * theme editor - which needs product names anyway - does not read the same
+ * collection twice.
+ */
+async function listCategories(storeId, storeCategories = [], productRows = null) {
+  const rows =
+    productRows ??
+    (await Product.find({ store: storeId }).select('category').lean());
+
+  // What is genuinely on the shelf. Counted first, and separately, because a
+  // curated name is a heading and does not make a product exist.
+  const counts = new Map();
+  for (const row of rows) {
+    const name = String(row?.category || '').trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+
+  const byKey = new Map();
+  const put = (rawName) => {
+    const name = String(rawName || '').trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    // First spelling wins, and curated names are offered first.
+    if (byKey.has(key)) return;
+    byKey.set(key, { name, count: counts.get(key) || 0 });
+  };
+
+  for (const name of Array.isArray(storeCategories) ? storeCategories : []) {
+    put(name);
+  }
+  for (const row of rows) put(row.category);
+
+  return [...byKey.values()].sort((a, b) =>
+    a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
   );
 }
 
@@ -105,15 +172,18 @@ export const getStoreMenu = asyncHandler(async (req, res) => {
     .sort({ position: 1 })
     .lean();
 
-  /* Auto-seed from product categories when the menu has never been built. */
+  /* Auto-seed from the store's categories when the menu has never been built.
+     Reads the curated list too, not just the product-derived names, so a
+     section the merchant created in the theme builder is nav-able from the
+     moment it exists. */
   if (!items.length) {
-    const categories = await listCategories(store._id);
+    const categories = await listCategories(store._id, store.categories);
     if (categories.length) {
       const seed = categories.map((cat, i) => ({
         store: store._id,
-        label: cat,
+        label: cat.name,
         targetType: 'category',
-        target: cat,
+        target: cat.name,
         position: i,
         isVisible: true,
       }));
@@ -145,26 +215,27 @@ export const getStoreMenu = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET /api/menu/edit/:storeId  (store owner / platform admin)
+ * GET /api/menu/edit/:storeId  (store owner / store admin / platform admin)
  *
  * The theme editor loads the flat list (each item with its `parentId` so the
- * UI can rebuild the tree), plus the store's existing categories and products
- * so the dropdowns are pre-populated.
+ * UI can rebuild the tree), plus the store's categories and products so the
+ * dropdowns are pre-populated and the category panel can show what each
+ * section currently holds.
+ *
+ * The product projection is loaded unconditionally rather than only when some
+ * menu item points at a product. It is two fields, and the category counts it
+ * feeds are shown on the page whether or not the nav uses any - a conditional
+ * load would mean the editor's own category panel silently shows "0 products"
+ * for a store that has never wired a product into its nav.
  */
 export const listStoreMenu = asyncHandler(async (req, res) => {
   const { store } = await loadManageableStore(req.params.storeId, req.user);
 
-  const [items, categories] = await Promise.all([
+  const [items, products, categories] = await Promise.all([
     NavMenu.find({ store: store._id }).sort({ position: 1 }).lean(),
-    listCategories(store._id),
+    Product.find({ store: store._id }).select('name category').lean(),
+    listCategories(store._id, store.categories),
   ]);
-
-  let products = [];
-  if (items.some((i) => i.targetType === 'product')) {
-    products = await Product.find({ store: store._id })
-      .select('name category')
-      .lean();
-  }
 
   res.json({
     store,
@@ -313,8 +384,145 @@ export const saveStoreMenu = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * POST /api/menu/edit/:storeId/categories  (store owner / store admin / admin)
+ *
+ * Create a category. Body: `{ name }`.
+ *
+ * This is the "add a section" action in the theme builder, and the name it
+ * takes is the storefront section heading - "Drinks" here is the "Drinks" a
+ * shopper scrolls past on their phone.
+ *
+ * Creating one does NOT need a product to exist yet. The whole reason to
+ * curate a list separately from the products is that a merchant lays out their
+ * shop before they stock it, and every product filed under this name later
+ * drops into the section automatically - nothing has to be re-linked by hand.
+ *
+ * Duplicates are rejected rather than merged. Same name in a different case
+ * ("drinks" when "Drinks" exists) is the same category, and silently creating a
+ * second one would split the section in two, each showing half the stock under
+ * a heading that looks the same.
+ */
+export const createCategory = asyncHandler(async (req, res) => {
+  const { store } = await loadManageableStore(req.params.storeId, req.user);
+
+  const name = String(req.body?.name || '').trim();
+  if (!name) throw new HttpError(400, 'A category needs a name.');
+  if (name.length > MAX_CATEGORY_NAME) {
+    throw new HttpError(
+      400,
+      `A category name can be at most ${MAX_CATEGORY_NAME} characters.`,
+    );
+  }
+
+  const current = Array.isArray(store.categories) ? store.categories : [];
+  if (current.some((entry) => String(entry).trim().toLowerCase() === name.toLowerCase())) {
+    throw new HttpError(409, `"${name}" is already a category.`);
+  }
+  if (current.length >= MAX_CATEGORIES) {
+    throw new HttpError(
+      400,
+      `A store can have at most ${MAX_CATEGORIES} categories.`,
+    );
+  }
+
+  // The model's setter trims and de-dupes, so this append is all it takes.
+  store.categories = [...current, name];
+  await store.save();
+
+  res.status(201).json({
+    categories: await listCategories(store._id, store.categories),
+  });
+});
+
+/**
+ * DELETE /api/menu/edit/:storeId/categories/:name
+ *
+ * Delete a category, and unfile the products that were in it.
+ *
+ * The two halves HAVE to move together, which is worth spelling out because it
+ * is the one destructive decision in this feature. A storefront section is
+ * built from BOTH the curated list and the names on the products, so
+ * un-curating on its own would leave "Drinks" visible in this panel while its
+ * products silently slid into an "Other items" section - the heading would
+ * still be there, holding nothing. Deleting a category means "we stopped
+ * selling this", so the products have to move too.
+ *
+ * They are UNFILED, never destroyed. `category` is cleared to '' and the
+ * products stay exactly as they are - still listed, still buyable, still with
+ * their full history. A re-created "Drinks" picks them straight back up. The
+ * alternative, refusing to delete a non-empty category, would mean a merchant
+ * could never get rid of a section without first editing every product in it.
+ *
+ * A category exists in EITHER of two places, and the delete button appears for
+ * both, so this handler has to accept both:
+ *
+ *   - the store's curated `categories` list (created in the theme builder)
+ *   - the distinct names on the store's products (a product was filed under
+ *     "Bakery" and the name was never curated)
+ *
+ * The second is the common case, and it is why the "does this exist?" test
+ * below looks at the products too. Checking only the curated list made delete
+ * return 404 for almost every category the panel displayed - the row was there,
+ * the button was there, and pressing it silently did nothing.
+ *
+ * The name is matched case-insensitively against the whole field, not as a
+ * prefix: "Drinks" must not take "Drinks &Juices" with it.
+ */
+export const deleteCategory = asyncHandler(async (req, res) => {
+  const { store } = await loadManageableStore(req.params.storeId, req.user);
+
+  // Express has already percent-decoded the path segment, so this must NOT be
+  // decoded again - a category literally named "100% juice" would come back as
+  // a malformed URI.
+  const name = String(req.params.name || '').trim();
+  if (!name) throw new HttpError(400, 'A category needs a name.');
+
+  const key = name.toLowerCase();
+  const current = Array.isArray(store.categories) ? store.categories : [];
+  const next = current.filter((entry) => String(entry).trim().toLowerCase() !== key);
+  const wasCurated = next.length !== current.length;
+
+  /* The same whole-field, case-insensitive match the product update below uses.
+     Both have to agree, or a category could be reported as deleted while its
+     products quietly kept the old name. */
+  const categoryFilter = {
+    store: store._id,
+    category: { $regex: `^${escapeRegExp(key)}$`, $options: 'i' },
+  };
+
+  /* Only a 404 if the name is in NEITHER place. Counting the products first
+     also means a category that exists solely as a product name still clears
+     those products instead of being rejected as unknown. */
+  const inUse = await Product.countDocuments(categoryFilter);
+  if (!wasCurated && inUse === 0) {
+    throw new HttpError(404, `"${name}" is not one of this store's categories.`);
+  }
+
+  /* Only write when the curated list actually changes. A delete of a
+     product-only category leaves `store.categories` alone, which avoids a
+     pointless write and, more importantly, avoids running the model's setter
+     over a list we did not mean to touch. */
+  if (wasCurated) {
+    store.categories = next;
+    await store.save();
+  }
+
+  const cleared = await Product.updateMany(categoryFilter, {
+    $set: { category: '' },
+  });
+
+  res.json({
+    categories: await listCategories(store._id, store.categories),
+    // So the panel can say what happened rather than the list simply changing.
+    clearedProducts: cleared.modifiedCount || 0,
+  });
+});
+
 export default {
   getStoreMenu,
   listStoreMenu,
   saveStoreMenu,
+  createCategory,
+  deleteCategory,
 };

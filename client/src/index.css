@@ -3805,6 +3805,84 @@ ol {
   margin: 0;
 }
 
+/* --- Category panel (theme builder) ------------------------------------ */
+/*
+ * The list of storefront section headings a merchant curates, with a live
+ * product count beside each. Sits above the menu editor because a category is
+ * a bigger decision than a menu row: the menu says where a shopper can jump,
+ * a category decides what the storefront is actually divided into.
+ */
+.cat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.cat-panel__head .panel__title {
+  margin-bottom: 0.25rem;
+}
+
+.cat-panel__head p {
+  margin: 0;
+  /* The explanation is a couple of lines on a phone; letting it run the full
+     width of a desktop panel makes it a very long, very thin paragraph. */
+  max-width: 62ch;
+}
+
+.cat-panel__add {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Grows to take the slack so the Add button sits at the far right on a wide
+   screen and directly under the field on a narrow one. */
+.cat-panel__field {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.cat-panel__empty {
+  margin: 0;
+}
+
+.cat-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.cat-row__name {
+  flex: 1;
+  min-width: 0;
+  /* One category name is one line. A long unbroken name would otherwise push
+     the badge and the delete button off the panel. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cat-row .badge {
+  flex: 0 0 auto;
+  font-weight: 500;
+  /* The base .badge rule carries a left margin because in a table cell it is a
+     trailing marker after some text. Here the gap already spaces it from the
+     name, so the margin would only push it further off-centre. */
+  margin-left: 0;
+}
+
 .btn.is-disabled {
   opacity: 0.6;
   pointer-events: none;
@@ -4435,7 +4513,134 @@ ol {
    styled. What is left here is deliberately plain: a list of boxes that read as
    a list, because that is what a menu is. */
 
-/* The card the whole list sits in - the reference frames the menu in one
+/* --- Storefront category sections ---------------------------------------- */
+/*
+ * The phone view of a store's catalogue: one section per category, each a
+ * horizontal rail of that category's product cards.
+ *
+ * The grid below and these rails render the SAME products, so exactly one of
+ * the two is ever visible. The split is a media query rather than a JS check
+ * because it is a layout decision, not a state one — and because rendering both
+ * keeps the section headings in the DOM for a screen reader navigating by
+ * heading and for search engines, instead of making them a phone-only
+ * afterthought.
+ */
+.store-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+/* The grid is the desktop view. Hidden wherever the rails are shown, and vice
+   versa, so a product is never listed twice on one screen. */
+.store-sections__grid {
+  display: none;
+}
+
+.rail__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+}
+
+.rail__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  /* A section title must never be the thing that breaks the layout. A category
+     called "Freshly Squeezed Fruit Juices & Smoothies" is a legitimate name and
+     a 1rem heading is wide enough to reach past a 360px phone on its own. */
+  overflow-wrap: anywhere;
+}
+
+.rail__count {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* The scroll container and the two arrows share a row. The track takes the
+   slack; the arrows are fixed, so they never squeeze the cards. */
+.rail__viewport {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.rail__track {
+  display: flex;
+  gap: 0.65rem;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  /* Native horizontal scroll, for momentum, rubber-banding at the ends and
+     trackpad support - all things a custom drag handler has to re-earn. */
+  scroll-snap-type: x proximity;
+  /* The scrollbar is hidden, not disabled: the row still scrolls by swipe,
+     trackpad and arrow key, it just does not draw a grey bar under the
+     product photos. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* Room for the cards' own box-shadows, which a scroll container would
+     otherwise clip at the top and bottom edges. */
+  padding: 4px;
+  margin: -4px;
+}
+
+.rail__track::-webkit-scrollbar {
+  display: none;
+}
+
+/* One card per slot, sized for a phone. `flex: 0 0 auto` is what stops the
+   cards stretching to fill the track — without it they share the width and
+   the rail never overflows, which defeats the whole point. */
+.rail__track > .product-card {
+  flex: 0 0 auto;
+  width: 150px;
+  scroll-snap-align: start;
+}
+
+.rail__arrow {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.rail__arrow:hover {
+  color: var(--ink);
+}
+
+.rail__arrow:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* One media query, one switch. The rails are the default (a phone is the
+   common case for a delivery storefront) and the grid takes over above it, so
+   there is no window where a product is listed twice or not at all. */
+@media (min-width: 641px) {
+  .store-sections {
+    display: none;
+  }
+
+  .store-sections__grid {
+    display: grid;
+  }
+}
+
+/* The card the whole menu list sits in - the reference frames the menu in one
    bordered panel rather than floating each row on the page. */
 /* The section wrapper is transparent - the heading is plain page text and
    the CARD is the bordered box, which is the shape in the reference. */

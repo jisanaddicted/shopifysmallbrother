@@ -119,6 +119,19 @@ export default function ThemeBuilder() {
   const [logoPreview, setLogoPreview] = useState('');
   const [logoBusy, setLogoBusy] = useState(false);
 
+  /* --- Category creation -----------------------------------------------
+     A category is the storefront's section heading: every product filed under
+     "Drinks" is shown under a "Drinks" heading, in a rail of cards the
+     shopper swipes sideways on a phone (see ShopPage.jsx). So this list is
+     what the merchant is really authoring on this screen.
+
+     `categories` arrives as `[{ name, count }]` from the API, so the count
+     beside each row is live - it tells a merchant which of their sections are
+     still empty, and a section created before its first product is exactly
+     what this feature is for. */
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryBusy, setCategoryBusy] = useState(false);
+
   // Which menu rows are showing their children, and which are showing their
   // edit form. Two separate sets on purpose: browsing the tree and editing an
   // item are different intentions, and collapsing a parent must never throw
@@ -490,6 +503,87 @@ export default function ThemeBuilder() {
     }
   };
 
+  /* --- Category create / delete -----------------------------------------
+     Each action saves immediately and independently, unlike the menu, which is
+     a wholesale replacement the merchant edits and then saves. The reason is
+     that a category is a NAME in its own right, not part of the menu tree - so
+     creating one must never depend on the menu having unsaved edits, or on the
+     merchant pressing "Save menu" at all. Losing a category to an unrelated
+     pending menu change would be a nasty surprise. */
+
+  const handleCategoryAdd = async (event) => {
+    event.preventDefault();
+    const storeId = store?._id || store?.id;
+    const name = categoryName.trim();
+    if (!storeId || !name || categoryBusy) return;
+
+    setCategoryBusy(true);
+    try {
+      /* The clearing of the previous message is INSIDE the try on purpose.
+         Anything thrown between here and the `finally` would otherwise leave
+         `categoryBusy` stuck true, and the Add button would sit on "Adding…"
+         forever with nothing happening - the one failure mode a busy flag must
+         never have. Inside, a throw is caught and the flag is still released. */
+      setError('');
+      setSuccess('');
+
+      const next = await menuService.createCategory(storeId, name);
+      setCategories(next);
+      // Cleared so the field is ready for the next category instead of sitting
+      // there with the one just added.
+      setCategoryName('');
+      setSuccess(`"${name}" is ready. Products filed under it show in that section.`);
+      setTimeout(() => setSuccess(''), 3500);
+    } catch (err) {
+      setError(err.message || 'Could not add that category.');
+    } finally {
+      setCategoryBusy(false);
+    }
+  };
+
+  const handleCategoryRemove = async (name) => {
+    const storeId = store?._id || store?.id;
+    if (!storeId || categoryBusy) return;
+
+    const count = categories.find((c) => c.name === name)?.count ?? 0;
+    // Confirmed, because this is the only action on this screen that changes
+    // products rather than navigation. The wording spells out what happens to
+    // them: a bin button next to "6 products" would otherwise read as "delete
+    // my six products". Named after the section the storefront actually shows
+    // (UNCATEGORISED in ShopPage.jsx), so the promise here matches what the
+    // shopper will see.
+    // eslint-disable-next-line no-alert
+    if (
+      !window.confirm(
+        count > 0
+          ? `Delete the "${name}" category?\n\nThe ${count} product(s) in it are not deleted - they stop being filed under a category and move to the "Other items" section.`
+          : `Delete the "${name}" category?`,
+      )
+    ) {
+      return;
+    }
+
+    setCategoryBusy(true);
+    try {
+      setError('');
+      setSuccess('');
+
+      const { categories: next, clearedProducts } =
+        await menuService.deleteCategory(storeId, name);
+      setCategories(next);
+      setSuccess(
+        clearedProducts > 0
+          ? `Deleted "${name}". ${clearedProducts} product(s) moved to the "Other items" section.`
+          : `Deleted "${name}".`,
+      );
+      setTimeout(() => setSuccess(''), 4000);
+    } catch (err) {
+      setError(err.message || 'Could not delete that category.');
+    } finally {
+      setCategoryBusy(false);
+    }
+  };
+
   const handleStoreSelect = (storeId) => {
     const s = allStores.find((st) => String(st._id) === storeId);
         applyStore(s);
@@ -658,10 +752,17 @@ export default function ThemeBuilder() {
                     onChange={(e) => updateItem(item.id, 'target', e.target.value)}
                   >
                     <option value="">Pick a category</option>
+                    {/* `categories` is `[{ name, count }]`, not a list of
+                        strings - see the category panel above. */}
                     {categories.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                      <option key={c.name} value={c.name}>{c.name}</option>
                     ))}
-                    {item.target && !categories.includes(item.target) ? (
+                    {/* A menu item already pointing at a category that is no
+                        longer in the list (a product-derived name the merchant
+                        has since cleared off every product) still needs to be
+                        selectable, or saving the menu would silently drop the
+                        link out from under them. */}
+                    {item.target && !categories.some((c) => c.name === item.target) ? (
                       <option value={item.target}>&ldquo;{item.target}&rdquo;</option>
                     ) : null}
                   </select>
@@ -865,6 +966,74 @@ export default function ThemeBuilder() {
               ) : null}
             </div>
           </div>
+        </section>
+      ) : null}
+
+      {store ? (
+        <section className="panel cat-panel">
+          <div className="cat-panel__head">
+            <h2 className="panel__title">Product categories</h2>
+            <p className="muted small">
+              Every product filed under a category shows on your storefront
+              under that name as its own section — the title, with the products
+              in a row you swipe sideways. Create the category here first,
+              then set it on your products and the section fills itself in.
+            </p>
+          </div>
+
+          <form className="cat-panel__add" onSubmit={handleCategoryAdd}>
+            <label className="field field--sm cat-panel__field">
+              <span>New category</span>
+              <input
+                type="text"
+                value={categoryName}
+                maxLength={60}
+                placeholder="e.g. Drinks"
+                onChange={(e) => setCategoryName(e.target.value)}
+                disabled={categoryBusy}
+              />
+            </label>
+            <button
+              type="submit"
+              className="btn btn-primary btn-sm"
+              disabled={categoryBusy || !categoryName.trim()}
+            >
+              {categoryBusy ? 'Adding…' : 'Add category'}
+            </button>
+          </form>
+
+          {categories.length === 0 ? (
+            <p className="muted small cat-panel__empty">
+              No categories yet. Add one above, or set a category on a product
+              and it appears here on its own.
+            </p>
+          ) : (
+            <ul className="cat-panel__list">
+              {categories.map((category) => (
+                <li key={category.name} className="cat-row">
+                  <span className="cat-row__name">{category.name}</span>
+                  {/* The count is the point of the panel: it shows which
+                      sections are real and which are still waiting for their
+                      first product. */}
+                  <span
+                    className={`badge${category.count ? ' badge--info' : ' badge--muted'}`}
+                  >
+                    {category.count} {category.count === 1 ? 'product' : 'products'}
+                  </span>
+                  <button
+                    type="button"
+                    className="menu-row__action menu-row__action--danger"
+                    onClick={() => handleCategoryRemove(category.name)}
+                    disabled={categoryBusy}
+                    title={`Delete ${category.name}`}
+                    aria-label={`Delete ${category.name}`}
+                  >
+                    <Icon name="trash" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       ) : null}
 

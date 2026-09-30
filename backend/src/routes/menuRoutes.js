@@ -3,6 +3,8 @@ import {
   getStoreMenu,
   listStoreMenu,
   saveStoreMenu,
+  createCategory,
+  deleteCategory,
 } from '../controllers/menuController.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -28,5 +30,20 @@ router.use(requireAuth);
  */
 router.get('/edit/:storeId', listStoreMenu);
 router.put('/edit/:storeId', saveStoreMenu);
+
+/**
+ * The theme builder's category panel.
+ *
+ * POST   /api/menu/edit/:storeId/categories        — create one ({ name })
+ * DELETE /api/menu/edit/:storeId/categories/:name  — delete one, and unfile
+ *                                                      the products in it
+ *
+ * Both sit under `/edit/` and are registered after the auth middleware above,
+ * so they inherit the same owner / store-admin / platform-admin check as the
+ * menu itself. `:name` is the category NAME rather than an id - a category is
+ * a heading, and headings are words (see models/Store.js).
+ */
+router.post('/edit/:storeId/categories', createCategory);
+router.delete('/edit/:storeId/categories/:name', deleteCategory);
 
 export default router;

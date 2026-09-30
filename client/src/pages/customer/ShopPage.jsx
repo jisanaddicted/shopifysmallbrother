@@ -6,6 +6,7 @@ import StoreHeader from '../../components/storefront/StoreHeader';
 import StoreNav from '../../components/storefront/StoreNav';
 import StoreSearchBar from '../../components/storefront/StoreSearchBar';
 import StoreMenuDrawer from '../../components/storefront/StoreMenuDrawer';
+import CategoryRail from '../../components/storefront/CategoryRail';
 import MobileTabs from '../../components/storefront/MobileTabs';
 import CustomerAccountSheet from '../../components/storefront/CustomerAccountSheet';
 import { useAuth } from '../../context/AuthContext';
@@ -13,6 +14,17 @@ import { useCart } from '../../context/CartContext';
 import storeService from '../../services/storeService';
 import menuService from '../../services/menuService';
 import { ROUTES, rememberStoreVisit } from '../../utils/constants';
+
+/**
+ * Heading for products filed under no category.
+ *
+ * Only ever used as a display label - it is not a real category name, so it is
+ * never written back to a product and never put in a `?category=` link, which
+ * would filter on a string no product has. Held in one constant so the
+ * storefront and the theme builder's confirmation copy can name the same
+ * destination.
+ */
+const UNCATEGORISED = 'Other items';
 
 /**
  * A store's public page: /s/<slug>
@@ -118,6 +130,37 @@ export default function ShopPage() {
     });
   }, [products, search, category]);
 
+  /*
+   * The catalogue grouped into one section per category — "Drinks", then
+   * "Pizza", each a horizontal rail of its own products.
+   *
+   * Built from `visible`, not from `products`, and that is deliberate: it
+   * inherits the active category filter AND the search term, so the sections
+   * always describe what is actually on screen. A shopper who searches "cola"
+   * gets one "Drinks" rail holding the three that matched, rather than every
+   * section reappearing with the other nine drinks hidden inside it.
+   *
+   * The uncategorised bucket is the reason this is a fold rather than just
+   * `product.category`. A product with no category used to appear in the plain
+   * grid with nothing above it; with section headings everywhere else on the
+   * page it would have nowhere to live, so those products are gathered into one
+   * clearly-labelled section instead of quietly disappearing on a phone.
+   */
+  const sections = useMemo(() => {
+    const groups = new Map();
+
+    for (const product of visible) {
+      // Trimmed here as well as in the controller, because a product whose
+      // category is only whitespace must not create a section with a blank
+      // heading - and must not create a second "Other items" bucket either.
+      const name = String(product.category || '').trim() || UNCATEGORISED;
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(product);
+    }
+
+    return [...groups.entries()].map(([name, items]) => ({ name, items }));
+  }, [visible]);
+
   if (loading) return <LoadingSpinner fullPage label="Loading the store…" />;
 
   if (error) {
@@ -200,12 +243,43 @@ export default function ShopPage() {
           This store has not listed any products yet. Check back soon.
         </p>
       ) : (
-        <div className="grid">
+        /* One section per category, each a horizontally scrolling rail of that
+           category's product cards — the layout a phone shopper actually wants,
+           and the whole reason the theme builder has a category panel.
+
+           On a desktop the plain grid below takes over instead, via CSS: at
+           that width a shopper can see a whole screen of products at once and
+           has no reason to swipe, so forcing them into rails would only add a
+           scroll gesture to reach the next item. Both are rendered and the
+           stylesheet decides which one is visible — that keeps the section
+           list in the DOM for search engines and for a screen reader
+           navigating by heading, instead of being a phone-only afterthought. */
+        <div className="store-sections">
+          {sections.map((section) => (
+            <CategoryRail
+              key={section.name}
+              name={section.name}
+              products={section.items}
+              showAllLabel={
+                section.items.length > 1
+                  ? `${section.items.length} items`
+                  : null
+              }
+            />
+          ))}
+        </div>
+      )}
+
+      {/* The grid is the desktop view of the very same `visible` list. Kept as
+          its own element rather than swapped in JS on a media query, so there
+          is exactly one source of truth for "which products are showing". */}
+      {visible.length > 0 ? (
+        <div className="grid store-sections__grid">
           {visible.map((product) => (
             <ProductCard key={product._id || product.id} product={product} />
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* The store's own menu, as a drawer from the left. Opened by the
           three-line button in the header; phones only. */}
