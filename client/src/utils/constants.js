@@ -162,6 +162,58 @@ export const PRODUCT_STATUS = {
 
 export const PRODUCT_STATUS_VALUES = Object.values(PRODUCT_STATUS);
 
+// --- Storefront themes ------------------------------------------------------
+// Mirrors THEMES in backend/src/utils/constants.js - the API validates the value
+// the browser sends, so the two have to agree on the exact strings.
+export const THEME = {
+  ONE: 'theme1',
+  TWO: 'theme2',
+};
+
+export const THEME_VALUES = Object.values(THEME);
+
+/** What the Theme tab's picker offers, and what it calls each one. */
+export const THEME_OPTIONS = [
+  {
+    value: THEME.ONE,
+    label: 'Theme 1',
+    summary:
+      'A strip of category cards, then one row of products per category. Everything on one page.',
+  },
+  {
+    value: THEME.TWO,
+    label: 'Theme 2',
+    summary:
+      'A category tree. Tap a category to open what is inside it, keep going as deep as you built, and see the products on any branch.',
+  },
+];
+
+/**
+ * The label for a theme value, falling back to Theme 1.
+ *
+ * The fallback matters: a store whose `theme` is missing entirely - every store
+ * that existed before this feature - must still render a valid theme, not an
+ * empty picker and not a crash. See `Store.theme`'s default.
+ */
+export const themeLabel = (value) =>
+  THEME_OPTIONS.find((option) => option.value === value)?.label || THEME.ONE;
+
+/**
+ * How deep a Theme 2 category tree may be built.
+ *
+ * Mirrors MAX_CATEGORY_DEPTH in backend/src/utils/constants.js. The server is
+ * the authority - it refuses the write - but the Theme tab needs the number to
+ * decide whether to OFFER the "add inside" button at all. A button that is
+ * always going to fail is worse than one that is simply not there, so the two
+ * copies have to agree or the editor will offer an action the API rejects.
+ *
+ * Five is far more than any real shop needs. The cap exists because a tree with
+ * no ceiling is one misclick from being unusable: a category forty levels down
+ * is a shopper holding Back forty times to escape it, and the breadcrumb becomes
+ * unreadable.
+ */
+export const MAX_CATEGORY_DEPTH = 5;
+
 // What the products table and the status picker print. A product that somehow
 // arrives without a status (an older API, a hand-edited row) reads as Active,
 // because that is what it was before statuses existed.

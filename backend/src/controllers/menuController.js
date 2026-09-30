@@ -493,6 +493,17 @@ export const listStoreCategories = asyncHandler(async (req, res) => {
   const categories = await listCategories(store._id, store.categories);
 
   res.json({
+    /* The store's active theme, so the product form can decide which category
+       picker to show from THIS response rather than needing a second call just
+       to find out.
+
+       It matters which endpoint carries it. This one is what every catalogue
+       editor calls, and on Theme 1 - which is every store that has not
+       deliberately switched - it is the ONLY call they make. Putting the theme on
+       the tree endpoint instead would mean asking every Theme 1 merchant to
+       fetch a tree they will never use, purely to be told which theme they are
+       already on. */
+    theme: store.theme || 'theme1',
     categories: categories.map(({ name, count }) => ({ name, count })),
   });
 });

@@ -42,6 +42,32 @@ const storeSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
 
     // -------------------------------------------------------------------------
+    // Which storefront layout this store presents. See THEME_VALUES in
+    // utils/constants.js.
+    //
+    // A single field rather than a bag of booleans, so "one theme is active" is
+    // true BY CONSTRUCTION - two layouts can never be half-on at once, which is
+    // the failure a `showClassicSections` / `showTreeSections` pair would invite
+    // the first time somebody toggled both.
+    //
+    // Defaulting to theme1 is what makes this safe to ship: every store that
+    // exists today has no value here at all, and reads as theme1, so nothing
+    // about the current storefront changes until a merchant deliberately picks
+    // something else.
+    //
+    // The two layouts share NOTHING but this field. Theme 1 reads
+    // `categories` (below) and each product's `category` string; theme 2 reads
+    // the CategoryNode tree and each product's `categoryId`. Switching between
+    // them rewrites no data on either side, so a store can go back and forth
+    // and lose nothing.
+    // -------------------------------------------------------------------------
+    theme: {
+      type: String,
+      enum: ['theme1', 'theme2'],
+      default: 'theme1',
+    },
+
+    // -------------------------------------------------------------------------
     // The categories this store trades in, curated by the merchant.
     //
     // A category is the storefront's section title: every product filed under

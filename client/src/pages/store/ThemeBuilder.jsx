@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import CategoryTreeEditor from '../../components/storefront/CategoryTreeEditor';
+import ThemePicker from '../../components/storefront/ThemePicker';
 import storeService from '../../services/storeService';
 import menuService from '../../services/menuService';
+import { THEME } from '../../utils/constants';
 
 const TARGET_TYPES = [
   { value: 'category', label: 'Category' },
@@ -958,6 +961,16 @@ export default function ThemeBuilder() {
 
   const topLevel = useMemo(() => buildTree(items), [items]);
 
+  /* Which layout this store is showing. Falls back to Theme 1 for a store whose
+     `theme` is absent - which is every store that existed before this feature,
+     and the server's own default. Reading it here rather than passing it down is
+     what lets the category panel below show the Theme 1 list or the Theme 2 tree
+     without either of those components knowing which theme is active.
+
+     Read from the store object rather than from a second fetch, so switching
+     themes on this screen updates the panel below in the same render. */
+  const isTreeTheme = store?.theme === THEME.TWO;
+
   if (loading && !store && !allStores.length) {
     return <LoadingSpinner fullPage label="Loading…" />;
   }
@@ -1020,6 +1033,13 @@ export default function ThemeBuilder() {
       {successMsg ? <div className="alert alert--ok">{successMsg}</div> : null}
 
       {store ? (
+        <ThemePicker
+          store={store}
+          onChanged={(updated) => setStore((prev) => ({ ...prev, ...updated }))}
+        />
+      ) : null}
+
+      {store ? (
         <section className="panel theme-logo">
           <div className="theme-logo__preview">
             {logoPreview ? (
@@ -1062,7 +1082,24 @@ export default function ThemeBuilder() {
         </section>
       ) : null}
 
-      {store ? (
+      {/* The two themes author DIFFERENT structures, so the panel shows the
+          editor for whichever one is active rather than stacking both.
+
+          They are alternatives, not views of the same thing: Theme 1's list is
+          flat heading strings and Theme 2's is a tree of nodes, and a merchant
+          looking at one of them while Theme 2 is live would be editing something
+          the shop is not showing. The inactive one is still on the server,
+          untouched, and comes back the moment they switch. */}
+      {store && isTreeTheme ? (
+        <section className="panel cat-panel">
+          <CategoryTreeEditor
+            storeId={String(store._id || store.id)}
+            onChanged={() => {}}
+          />
+        </section>
+      ) : null}
+
+      {store && !isTreeTheme ? (
         <section className="panel cat-panel">
           <div className="cat-panel__head">
             <h2 className="panel__title">Product categories</h2>

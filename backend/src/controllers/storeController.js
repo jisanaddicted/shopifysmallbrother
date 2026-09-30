@@ -5,7 +5,7 @@ import Store from '../models/Store.js';
 import StoreRider from '../models/StoreRider.js';
 import User from '../models/User.js';
 import { HttpError } from '../middleware/errorHandler.js';
-import { CANCELLED_STATUSES, ROLES, STORE_RIDER_STATUS } from '../utils/constants.js';
+import { CANCELLED_STATUSES, ROLES, STORE_RIDER_STATUS, THEME_VALUES } from '../utils/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { normaliseUsername, slugify, uniqueSlug } from '../utils/slug.js';
 import {
@@ -233,6 +233,25 @@ export const updateMyStore = asyncHandler(async (req, res) => {
   if (image !== undefined) store.image = String(image).trim();
   if (logo !== undefined) store.logo = String(logo || '').trim();
   if (isActive !== undefined) store.isActive = Boolean(isActive);
+
+  /* Which storefront layout this store shows. See Store.theme.
+
+     Validated rather than cast, because this is a closed set of two and a typo
+     would otherwise be stored and then fail to match either - leaving the
+     storefront with no theme at all and the merchant with no way to say why.
+     The model enum would also reject it at save time, but by then the merchant
+     has already lost the setting they were trying to change, with a 500 rather
+     than a message that names the problem. */
+  if (req.body?.theme !== undefined) {
+    const theme = String(req.body.theme || '').trim();
+    if (!THEME_VALUES.includes(theme)) {
+      throw new HttpError(
+        400,
+        `“${theme || '(blank)'}” is not a theme. Use ${THEME_VALUES.join(' or ')}.`,
+      );
+    }
+    store.theme = theme;
+  }
 
   if (address !== undefined) {
     store.address = {

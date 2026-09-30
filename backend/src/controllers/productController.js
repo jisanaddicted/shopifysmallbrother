@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import CategoryNode from '../models/CategoryNode.js';
 import Product from '../models/Product.js';
 import Store from '../models/Store.js';
 import { HttpError } from '../middleware/errorHandler.js';
@@ -110,6 +111,17 @@ function readProductPayload(body = {}) {
     name: String(body.name || '').trim(),
     price: toNumber(body.price, 0),
     category: String(body.category || '').trim(),
+    /* The Theme 2 tree node, when the client sends one.
+
+       Absent means "leave it alone", which is NOT the same as sending null: this
+       is how the storefront's unfile-on-delete works, and how a Theme 1 edit
+       leaves a product's place in the tree alone. An old client that has never
+       heard of `categoryId` therefore cannot unfile a product by omitting the
+       key, exactly as it cannot unpublish one. */
+    categoryId:
+      body.categoryId === null || body.categoryId === ''
+        ? null
+        : body.categoryId || undefined,
     rack: String(body.rack || '').trim(),
     shelf: String(body.shelf || '').trim(),
     stock: body.stock === '' || body.stock === undefined ? 0 : toNumber(body.stock, 0),
@@ -493,6 +505,42 @@ async function assertSkusAvailable(storeId, variants, excludeProductId = null) {
 }
 
 /**
+/**
+ * File a product on a Theme 2 tree node, or unfile it with `null`.
+ *
+ * `undefined` means "the client did not mention it" and this refuses to act -
+ * which is the whole point. See `readProductPayload`: an absent key must leave
+ * the product where it is, or every ordinary Theme 1 edit (a price change, a
+ * stock count) would silently unfile the product from the merchant Theme 2
+ * branch. Changing the THEME 1 `category` string never disturbs this.
+ *
+ * Validated against the store the product will END UP in, for the same reason a
+ * store move is: a crafted request must not be able to file a product into
+ * another merchant tree, where it would appear on their public storefront. It
+ * cannot be left to the schema - a perfectly valid ObjectId belonging to the
+ * wrong store is still the wrong store, and Mongo will happily store it.
+ *
+ * Shared by create and update so the two cannot drift. Validating only the
+ * update path would leave create as a way straight around it.
+ */
+async function fileProductOnNode(product, categoryId, storeId) {
+  if (categoryId === undefined) return;
+
+  if (categoryId !== null) {
+    if (!mongoose.isValidObjectId(categoryId)) {
+      throw new HttpError(400, 'That category id is not valid.');
+    }
+
+    const exists = await CategoryNode.exists({ _id: categoryId, store: storeId });
+    if (!exists) {
+      throw new HttpError(404, 'That category does not exist in this store.');
+    }
+  }
+
+  product.categoryId = categoryId;
+}
+
+/**
  * POST /api/products (store owner, or the store admins that owner appointed;
  * a platform admin through the stores they run) -> { product }
  *
@@ -516,6 +564,11 @@ export const createProduct = asyncHandler(async (req, res) => {
     payload.options = variantBlock.options;
     payload.variants = variantBlock.variants;
   }
+  // The Theme 2 tree link, checked against the store the product is going to
+  // (just resolved above). Without this a crafted POST could file a product
+  // into another merchant tree - the update path validates, and leaving
+  // create unchecked would be a way straight around that check.
+  await fileProductOnNode(payload, payload.categoryId, payload.store);
 
   // Publishing + organisation, applied only for the keys the client sent. A
   // create with none of them gets the schema defaults - `active`, stock
@@ -550,7 +603,25 @@ export const updateProduct = asyncHandler(async (req, res) => {
     product.store = req.body.storeId;
   }
 
-  Object.assign(product, payload);
+  /* `categoryId` is PULLED OUT of the payload rather than assigned with the
+     rest.
+
+     This is the whole reason the tree link is handled separately, and getting it
+     wrong is silent: `Object.assign(product, { categoryId: undefined })` copies
+     the `undefined` onto the document, which MARKS the path as modified, and the
+     save then writes the node away. A merchant editing a price on a Theme 2
+     store would quietly strip every product off their tree, one save at a time,
+     with a 200 and no message. Stripping the key out is what makes "absent means
+     leave it alone" true rather than merely intended - the bug it fixes was
+     caught by `testProductFiling.mjs`, not by looking at this code. */
+  const { categoryId: requestedNode, ...assigned } = payload;
+  Object.assign(product, assigned);
+
+  /* Now it is applied, and only if the client actually sent the key: null
+     unfiles, an id files, absent does nothing. Validated against the store the
+     product will END UP in, so a crafted request cannot file a product into
+     another merchant's tree. See `fileProductOnNode`. */
+  await fileProductOnNode(product, requestedNode, product.store);
 
   // Same rule as the variant block below: only the keys actually sent are
   // written, so a client that does not manage publishing cannot un-publish a

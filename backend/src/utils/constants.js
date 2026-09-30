@@ -58,6 +58,37 @@ export const STORE_MEMBER_ROLES = {
 export const STORE_MEMBER_ROLE_VALUES = Object.values(STORE_MEMBER_ROLES);
 
 // ---------------------------------------------------------------------------
+// Storefront themes.
+//
+// Two layouts, exactly one active at a time. See `Store.theme`.
+//
+//   THEME1 - the original: a strip of category cards, then one swipable section
+//            per category. Groups products by their `category` string.
+//   THEME2 - a category TREE: tap a category to open its subcategories, keep
+//            going as deep as the merchant built, and products appear on the
+//            node they are filed under. Groups by `categoryId`.
+//
+// A single enum, not a set of booleans, so "one is active" is true by
+// construction. The Store model's enum and this list must stay in sync.
+// ---------------------------------------------------------------------------
+export const THEME1 = 'theme1';
+export const THEME2 = 'theme2';
+export const THEMES = [THEME1, THEME2];
+export const THEME_VALUES = THEMES;
+
+/**
+ * How deep a Theme 2 category tree may be built.
+ *
+ * "As many levels as the merchant wants" is the intent, and this does not get
+ * in the way of that - five is far more than any real shop needs. It exists
+ * because a tree with no ceiling is one accidental click away from being
+ * unusable: a category 40 levels down is a shopper holding Back 40 times to
+ * escape it, and the breadcrumb becomes unreadable. Better to refuse the
+ * creation than to accept a store nobody can navigate out of.
+ */
+export const MAX_CATEGORY_DEPTH = 5;
+
+// ---------------------------------------------------------------------------
 // Store <-> customer binding.
 //
 // A shopper who signs up from a store's public page (/s/<slug>) creates their

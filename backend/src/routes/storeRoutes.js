@@ -12,6 +12,7 @@ import {
 } from '../controllers/storeController.js';
 import { requireAuth, requireRole, requireStoreStaff } from '../middleware/auth.js';
 import { listStoreReviews } from '../controllers/reviewController.js';
+import { getPublicCategoryTree } from '../controllers/categoryTreeController.js';
 import { ROLES } from '../utils/constants.js';
 
 const router = Router();
@@ -56,6 +57,11 @@ router.get('/:id/customers', requireAuth, requireStoreStaff, listStoreCustomers)
 router.get('/:id/reviews', requireAuth, requireStoreStaff, listStoreReviews);
 
 // --- Public storefront: this is what /s/<slug> loads, no login required -----
+/* Registered BEFORE "/:slug" so the literal "tree" segment is never read as a
+   storefront slug. Public for the same reason the storefront is - anyone with
+   the store's link can browse its catalogue, and the tree is only headings and
+   product counts. */
+router.get('/:slug/tree', getPublicCategoryTree);
 router.get('/:slug', getPublicStore);
 
 export default router;

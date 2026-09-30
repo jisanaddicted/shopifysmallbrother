@@ -8,13 +8,14 @@ import StoreSearchBar from '../../components/storefront/StoreSearchBar';
 import StoreMenuDrawer from '../../components/storefront/StoreMenuDrawer';
 import CategoryRail from '../../components/storefront/CategoryRail';
 import CategorySlider from '../../components/storefront/CategorySlider';
+import CategoryTreeView from '../../components/storefront/CategoryTreeView';
 import MobileTabs from '../../components/storefront/MobileTabs';
 import CustomerAccountSheet from '../../components/storefront/CustomerAccountSheet';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import storeService from '../../services/storeService';
 import menuService from '../../services/menuService';
-import { categoryPath, ROUTES, rememberStoreVisit } from '../../utils/constants';
+import { categoryPath, ROUTES, rememberStoreVisit, THEME } from '../../utils/constants';
 
 /**
  * Heading for products filed under no category.
@@ -171,6 +172,15 @@ export default function ShopPage() {
   useEffect(() => {
     rememberStoreVisit(slug);
   }, [slug]);
+
+  /* Which layout this store shows. Read off the store the page already loaded -
+     `getPublicStore` returns the whole store document - so this costs nothing
+     extra and cannot disagree with what the Theme tab set.
+
+     The `!store` guard matters for the same reason the theme's own default does:
+     a store fetched before this feature existed has no `theme` at all, and must
+     render the layout it always rendered rather than a blank tree. */
+  const isTreeTheme = Boolean(store) && store.theme === THEME.TWO;
 
   const loadStore = useCallback(async () => {
     setLoading(true);
@@ -356,6 +366,28 @@ export default function ShopPage() {
         top answers "what is here?" in one glance, and stays put as a way back
         when a section is filtered down to a single category.
       */}
+      {/*
+        THEME 2 - the category tree.
+
+        A whole different layout, branched on the store's own `theme`, rather
+        than a flag threaded through the Theme 1 sections below. Two layouts
+        that share half their markup are two layouts that end up agreeing about
+        nothing, and every Theme 1 behaviour on this page - the strip, the
+        dropdown, the per-category rails - is specific to that theme and has no
+        meaning here.
+
+        Rendered INSTEAD of everything below, not above it, so a Theme 2 store
+        never briefly paints the Theme 1 layout on the way to the tree. */}
+      {isTreeTheme ? (
+        <CategoryTreeView
+          slug={slug}
+          products={products}
+          searchTerm={search}
+        />
+      ) : null}
+
+      {!isTreeTheme ? (
+        <>
       <CategorySlider
         categories={stripCategories}
         activeCategory={category}
@@ -431,6 +463,8 @@ export default function ShopPage() {
             <ProductCard key={product._id || product.id} product={product} />
           ))}
         </div>
+      ) : null}
+        </>
       ) : null}
 
       {/* The store's own menu, as a drawer from the left. Opened by the

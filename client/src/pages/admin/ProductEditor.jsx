@@ -4,12 +4,14 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import VariantMatrix from '../../components/store/VariantMatrix';
 import { useAuth } from '../../context/AuthContext';
 import productService from '../../services/productService';
+import { buildCategoryTree, flattenTreeForSelect } from '../../utils/categoryTree';
 import menuService from '../../services/menuService';
 import { statusOf, tracksInventory } from '../../utils/catalog';
 import {
   PRODUCT_STATUS,
   PRODUCT_STATUS_LABELS,
   PRODUCT_STATUS_VALUES,
+  THEME,
   productEditPath,
 } from '../../utils/constants';
 import { truncate } from '../../utils/formatters';
@@ -18,6 +20,10 @@ const EMPTY_FORM = {
   name: '',
   price: '',
   category: '',
+  // The Theme 2 tree node, as a node id. Kept BESIDE `category` rather than
+  // replacing it: the two belong to different themes and are set independently,
+  // so a store can switch layouts without a single product being rewritten.
+  categoryId: '',
   stock: '',
   rack: '',
   shelf: '',
@@ -81,6 +87,17 @@ export default function ProductEditor({ basePath }) {
      disturb a half-filled form. */
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
+
+  /* Which layout this store shows, and its Theme 2 tree.
+   *
+   * The theme arrives in the SAME response as the flat category list, so on
+   * Theme 1 - every store that has not deliberately switched - deciding which
+   * picker to render costs nothing extra. Only a Theme 2 store pays for a second
+   * request, and only for the tree it actually needs. See
+   * menuService.getStoreCategories. */
+  const [storeTheme, setStoreTheme] = useState('theme1');
+  const [treeNodes, setTreeNodes] = useState([]);
+  const [treeLoading, setTreeLoading] = useState(false);
   // Held apart from `form` for the same reason ProductManager does it: the
   // matrix re-renders on every keystroke, and dragging the whole form with it
   // would remount inputs under the merchant mid-edit.
@@ -105,6 +122,11 @@ export default function ProductEditor({ basePath }) {
    * above - and two shops do not share a category list. Changing store
    * therefore reloads the options.
    *
+   * The response also says which THEME the store is on, so the same read decides
+   * which picker this form renders. A Theme 2 store then needs its tree, which
+   * is a second request - deliberately not fired for a Theme 1 store, which
+   * would pay for a tree it will never show.
+   *
    * A failed load is NOT surfaced as a form error and does not block saving.
    * The dropdown degrades to whatever it already had, and because the current
    * category is always rendered as an option (see `categoryOptions`), a product
@@ -115,6 +137,7 @@ export default function ProductEditor({ basePath }) {
   useEffect(() => {
     if (!storeId) {
       setCategories([]);
+      setTreeNodes([]);
       return undefined;
     }
 
@@ -123,11 +146,39 @@ export default function ProductEditor({ basePath }) {
 
     menuService
       .getStoreCategories(storeId)
-      .then((next) => {
-        if (active) setCategories(next);
+      .then(({ theme, categories: next }) => {
+        if (!active) return;
+
+        setStoreTheme(theme);
+        setCategories(next);
+
+        // Only a Theme 2 store has a tree to read. Doing it here rather than in
+        // a second effect keyed on the theme keeps the two loads in one place
+        // and one `active` flag, so a store switch cannot land the tree of the
+        // shop the merchant just left in the picker for the new one.
+        if (theme === THEME.TWO) {
+          setTreeLoading(true);
+
+          return menuService
+            .loadCategoryTree(storeId)
+            .then((rows) => {
+              if (active) setTreeNodes(rows);
+            })
+            .catch(() => {
+              if (active) setTreeNodes([]);
+            })
+            .finally(() => {
+              if (active) setTreeLoading(false);
+            });
+        }
+
+        setTreeNodes([]);
+        return undefined;
       })
       .catch(() => {
-        if (active) setCategories([]);
+        if (!active) return;
+        setCategories([]);
+        setTreeNodes([]);
       })
       .finally(() => {
         if (active) setCategoriesLoading(false);
@@ -140,6 +191,40 @@ export default function ProductEditor({ basePath }) {
       active = false;
     };
   }, [storeId]);
+
+  /**
+   * The tree, flattened into one `<option>` per node.
+   *
+   * Every node appears, not just the leaves. A product can be filed on a
+   * BRANCH as well as on a leaf, and a shopper reaching that branch sees its
+   * products - so hiding branches would make those products unreachable by
+   * filing rather than by accident.
+   */
+  const treeOptions = useMemo(
+    () => flattenTreeForSelect(buildCategoryTree(treeNodes)),
+    [treeNodes],
+  );
+
+  /**
+   * The option the tree picker is held on.
+   *
+   * The same rule as `selectedCategory` above, and for the same reason: a
+   * `<select>` whose value matches no option renders blank and would save `''`,
+   * silently unfiling the product. The product's stored node is therefore always
+   * kept in the list - see the note on that field.
+   */
+  const selectedTreeNode = useMemo(() => {
+    const current = String(form.categoryId || '').trim();
+    if (!current) return '';
+
+    return (
+      treeOptions.find((row) => row.id === current)?.id ||
+      /* Not in the list - a node deleted in the Theme tab while this form was
+         open, or a tree that failed to load. Keep it selectable so saving does
+         not quietly unfile the product. */
+      current
+    );
+  }, [treeOptions, form.categoryId]);
 
   /**
    * The category options actually rendered.
@@ -212,6 +297,12 @@ export default function ProductEditor({ basePath }) {
         name: loaded?.name || '',
         price: String(loaded?.price ?? ''),
         category: loaded?.category || '',
+        // The Theme 2 node, if this product is filed on one. Kept as-is even
+        // when the store is on Theme 1: it is a different field from
+        // `category`, and clearing it because a different picker is showing
+        // would quietly unfile the product from a tree the merchant may switch
+        // back to in a moment.
+        categoryId: loaded?.categoryId || '',
         stock: String(loaded?.stock ?? ''),
         rack: loaded?.rack || '',
         shelf: loaded?.shelf || '',
@@ -295,6 +386,20 @@ export default function ProductEditor({ basePath }) {
       name: form.name.trim(),
       price: Number(form.price) || 0,
       category: form.category.trim(),
+
+      /* The Theme 2 node, sent on EVERY save - like `category`, and for a
+         sharper version of the same reason.
+
+         `undefined` at the server means "leave it alone", and `null` means
+         "unfile". So omitting the key would be safe, but sending it explicitly
+         is what makes the box above work: if the merchant clears the picker, the
+         select holds '', this sends null, and the product comes off the branch.
+
+         Sending it even while the store is on Theme 1 is deliberate. The two
+         fields are populated independently, so a merchant who files a product
+         under a tree node, switches back to Theme 1 for a while, and later
+         returns must find that node untouched. */
+      categoryId: selectedTreeNode || null,
       stock: form.stock === '' ? 0 : Number(form.stock),
       rack: form.rack.trim(),
       shelf: form.shelf.trim(),
@@ -608,7 +713,7 @@ export default function ProductEditor({ basePath }) {
                     // the automatic store defaulting below (which sets
                     // `storeId` too) from wiping the category that a loaded
                     // product brought with it.
-                    setForm((prev) => ({ ...prev, category: '' }));
+                    setForm((prev) => ({ ...prev, category: '', categoryId: '' }));
                   }}
                 >
                   {memberStores.map((store) => (
@@ -620,6 +725,55 @@ export default function ProductEditor({ basePath }) {
               </label>
             ) : null}
 
+            {/* ONE category field, showing the picker that matches the store
+                active theme. They are not two views of the same thing: Theme 1
+                files a product under a heading string, Theme 2 under a node in
+                a tree, and a store is on exactly one of them. Showing both would
+                ask the merchant to pick between two different answers when only
+                one of them changes what their shop looks like. */}
+            {storeTheme === THEME.TWO ? (
+              <>
+                <label className="field">
+                  <span>Category</span>
+                  {/* The merchant tree, flattened - "Drinks > Cold > Juice" - so
+                      a subcategory is never mistaken for a top-level one that
+                      happens to share its name. */}
+                  <select
+                    name="categoryId"
+                    value={selectedTreeNode}
+                    onChange={handleChange}
+                    disabled={
+                      (categoriesLoading || treeLoading) && !treeOptions.length
+                    }
+                  >
+                    <option value="">No category</option>
+                    {treeOptions.map((row) => (
+                      <option key={row.id} value={row.id}>
+                        {row.label}
+                      </option>
+                    ))}
+                    {/* The stored node, if the tree no longer lists it. Without
+                        this the select renders blank and saving quietly unfiles
+                        the product - see `selectedTreeNode`. */}
+                    {selectedTreeNode &&
+                    !treeOptions.some((row) => row.id === selectedTreeNode) ? (
+                      <option value={selectedTreeNode}>
+                        {selectedTreeNode} (no longer in your tree)
+                      </option>
+                    ) : null}
+                  </select>
+                </label>
+
+                <p className="muted small">
+                  {treeLoading
+                    ? 'Loading your categories…'
+                    : treeOptions.length === 0
+                      ? 'This store has no categories yet. Build one in the Theme tab, then file products under it here.'
+                      : 'This product appears under whichever category you pick, on your Theme 2 storefront. Build and rename categories in the Theme tab.'}
+                </p>
+              </>
+            ) : (
+              <>
             <label className="field">
               <span>Category</span>
               {/* A picker over the store's real categories rather than a
@@ -654,6 +808,8 @@ export default function ProductEditor({ basePath }) {
                   ? 'This store has no categories yet. Create one in the Theme tab, and it becomes a section you can file products under.'
                   : 'Every product filed under a category shows on your storefront as its own section. Add or rename categories in the Theme tab.'}
             </p>
+              </>
+            )}
 
             <label className="field">
               <span>Type</span>

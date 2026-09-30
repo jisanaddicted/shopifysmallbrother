@@ -15,6 +15,9 @@
     "test:variants:db": "node scripts/testVariantIntegration.mjs",
     "test:categories": "node scripts/testCategories.mjs",
     "test:categories:clean": "node scripts/cleanupTestCategories.mjs",
+    "test:tree": "node scripts/testCategoryTree.mjs",
+    "test:theme2": "node scripts/testTheme2.mjs",
+    "test:filing": "node scripts/testProductFiling.mjs",
     "test:sections": "node scripts/testSections.mjs",
     "test:bulk": "node scripts/testBulkEdit.mjs"
   },

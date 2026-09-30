@@ -32,8 +32,15 @@ export const saveStoreMenu = (storeId, items) =>
  * GET /api/menu/edit/:storeId/categories  (store owner / admin)
  *
  * Just the store's category names, for a picker - the product form's Category
- * dropdown - so it resolves to an array of `[{ name, count }]` matching the
- * panel's shape.
+ * dropdown - so it resolves to `{ theme, categories }`, where `categories` is
+ * `[{ name, count }]` matching the panel's shape and `theme` is the store's
+ * active layout.
+ *
+ * The theme rides along deliberately. The product form has to render one picker
+ * or the other, and asking for that in a second request would be a second round
+ * trip to a database that is measurably slow from this machine - on Theme 1,
+ * which is every store that has not deliberately switched, this stays the form's
+ * ONLY call.
  *
  * Separate from `loadStoreMenu` rather than a field of it, because that call is
  * the theme editor's whole payload: the nav tree, every product in the store,
@@ -50,7 +57,114 @@ export const saveStoreMenu = (storeId, items) =>
 export const getStoreCategories = (storeId) =>
   api
     .get(`/menu/edit/${storeId}/categories`)
-    .then((res) => res.data.categories || []);
+    .then((res) => ({
+      /* The store's active theme, from the same call. See the controller: the
+         product form needs to know which picker to render, and a second request
+         just to read one field is a second round trip to a database that is slow
+         from here. */
+      theme: res.data.theme || 'theme1',
+      categories: res.data.categories || [],
+    }));
+
+/**
+ * GET /api/menu/edit/:storeId/tree  (store owner / admin)
+ *
+ * The store's Theme 2 category tree, FLAT: `[{ id, name, parent, position,
+ * image, childCount }]`, siblings in position order.
+ *
+ * Flat on purpose - the client folds it into a tree itself, the same way
+ * `buildTree` in ThemeBuilder.jsx already folds the menu. The server and the
+ * browser therefore hold one shared definition of the tree rather than two that
+ * can drift.
+ *
+ * `childCount` on each node is what tells the editor whether a row can be
+ * opened, and what tells the storefront whether tapping a card reveals more
+ * categories or the products on it.
+ */
+export const loadCategoryTree = (storeId) =>
+  api
+    .get(`/menu/edit/${storeId}/tree`)
+    .then((res) => res.data.tree || []);
+
+/**
+ * POST /api/menu/edit/:storeId/tree  — add a category.
+ *
+ * `parent` omitted (or null) makes a top-level category; passing a node id
+ * makes this one its child. The server refuses a parent that would push the
+ * tree past its depth cap, so a client never has to count levels itself to
+ * avoid offering an action that would be rejected.
+ */
+export const createTreeNode = (storeId, name, parent = null) =>
+  api
+    .post(`/menu/edit/${storeId}/tree`, { name, parent })
+    .then((res) => res.data.node);
+
+/**
+ * PUT /api/menu/edit/:storeId/tree/:nodeId
+ *
+ * Rename, repicture or MOVE a node. A partial update: only the keys passed are
+ * applied, so renaming a category leaves its picture and its place in the tree
+ * alone - the same contract `updateProduct` and `saveStoreMenu` already have.
+ */
+export const updateTreeNode = (storeId, nodeId, changes) =>
+  api
+    .put(`/menu/edit/${storeId}/tree/${nodeId}`, changes)
+    .then((res) => res.data.node);
+
+/**
+ * PUT /api/menu/edit/:storeId/tree/:nodeId  — set or clear a node's picture.
+ *
+ * `image` is a File to be downscaled, or `''` to remove the picture. An empty
+ * string is the "no picture" value across this project's schemas - `Store.image`
+ * and `Product.image` default to it - so clearing sends the same thing an unset
+ * picture is, and the row goes back to its empty placeholder.
+ *
+ * The client-side downscale and the 1MB server cap are the same pair Theme 1
+ * category pictures use, deliberately. A Theme 2 card and a Theme 1 card are the
+ * same kind of thing - a picture on a public storefront, read on every page
+ * load - so two different limits would mean one of them is wrong. `maxSize` is
+ * the edge the client downscales TO, roughly 3x the rendered size, so a phone
+ * photo never reaches the database whole.
+ */
+export const setTreeNodeImage = (storeId, nodeId, image, maxSize = 480) =>
+  imageToDataUrl(image, maxSize).then((dataUrl) =>
+    api
+      .put(`/menu/edit/${storeId}/tree/${nodeId}`, { image: dataUrl })
+      .then((res) => res.data.node),
+  );
+
+/**
+ * DELETE /api/menu/edit/:storeId/tree/:nodeId
+ *
+ * Delete a category AND everything under it. Products filed in any of them are
+ * unfiled rather than deleted, and the Theme 1 `category` string on each one is
+ * left exactly as it was - so a store can switch back to Theme 1 afterwards and
+ * find its catalogue untouched.
+ *
+ * Resolves to `{ deleted, clearedProducts }`, where `deleted` is the size of the
+ * whole subtree, so the panel can say what actually went instead of letting the
+ * list quietly shrink by an unknown amount.
+ */
+export const deleteTreeNode = (storeId, nodeId) =>
+  api
+    .delete(`/menu/edit/${storeId}/tree/${nodeId}`)
+    .then((res) => ({
+      deleted: res.data.deleted || 0,
+      clearedProducts: res.data.clearedProducts || 0,
+    }));
+
+/**
+ * GET /api/stores/:slug/tree  (public - no login required)
+ *
+ * The tree the storefront browses, with a `productCount` on every node. The
+ * same public data the storefront already exposes, arranged as a hierarchy, so
+ * it needs no more protection than the catalogue itself.
+ */
+export const getPublicCategoryTree = (slug) =>
+  api.get(`/stores/${slug}/tree`).then((res) => ({
+    store: res.data.store || null,
+    tree: res.data.tree || [],
+  }));
 
 /**
  * POST /api/menu/edit/:storeId/categories  — create a category.
@@ -168,6 +282,12 @@ export default {
   getPublicStoreMenu,
   loadStoreMenu,
   getStoreCategories,
+  loadCategoryTree,
+  createTreeNode,
+  updateTreeNode,
+  setTreeNodeImage,
+  deleteTreeNode,
+  getPublicCategoryTree,
   saveStoreMenu,
   createCategory,
   deleteCategory,

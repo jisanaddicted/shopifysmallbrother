@@ -8,6 +8,12 @@ import {
   deleteCategory,
   setCategoryImage,
 } from '../controllers/menuController.js';
+import {
+  listCategoryTree,
+  createTreeNode,
+  updateTreeNode,
+  deleteTreeNode,
+} from '../controllers/categoryTreeController.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
@@ -64,5 +70,28 @@ router.get('/edit/:storeId/categories', listStoreCategories);
 router.post('/edit/:storeId/categories', createCategory);
 router.put('/edit/:storeId/categories/:name/image', setCategoryImage);
 router.delete('/edit/:storeId/categories/:name', deleteCategory);
+
+/**
+ * The Theme 2 category TREE, edited in the same panel as the Theme 1 list.
+ *
+ * Separate routes from `/categories` above even though the two are sibling
+ * features, because they are different RESOURCES: `/categories` is a flat list
+ * of heading strings that Theme 1 groups products by, while `/tree` is a
+ * hierarchy of documents with ids that Theme 2 browses. Sharing one path would
+ * mean every call site had to know which of the two it was asking for.
+ *
+ * `:nodeId` is a real id here, not a name - see models/CategoryNode.js for why a
+ * node cannot be addressed by its name. It is a fixed two-segment shape
+ * (`/tree/:nodeId`) against a one-segment `/categories`, so the two can never
+ * collide, and `GET /edit/:storeId` is two segments as well.
+ *
+ * Renaming, repointing a picture and MOVING a node are all one `PUT` with only
+ * the keys the client sent applied, so the editor can rename a category and
+ * leave its picture and its position alone.
+ */
+router.get('/edit/:storeId/tree', listCategoryTree);
+router.post('/edit/:storeId/tree', createTreeNode);
+router.put('/edit/:storeId/tree/:nodeId', updateTreeNode);
+router.delete('/edit/:storeId/tree/:nodeId', deleteTreeNode);
 
 export default router;

@@ -96,6 +96,27 @@ const productSchema = new mongoose.Schema(
       default: 0,
     },
     category: { type: String, trim: true, default: '', index: true },
+    // -------------------------------------------------------------------------
+    // The Theme 2 tree node this product is filed under, if any.
+    //
+    // SEPARATE from `category` rather than replacing it. `category` is a
+    // heading string and is what Theme 1 groups by; this is a node id and is
+    // what Theme 2 browses. They are populated independently, so a product can
+    // be filed under a tree node while also carrying a Theme 1 category, and a
+    // store can switch between the two themes without a single product being
+    // rewritten - which is the entire reason the store keeps one `theme` field
+    // rather than a "migrate the catalogue" button.
+    //
+    // A product with no `categoryId` is simply not filed in the tree. That is
+    // the state of every product in the database today, and it is valid: it
+    // still appears in Theme 1, and in Theme 2 it is reachable by search and
+    // from the store's top level rather than under a branch.
+    // -------------------------------------------------------------------------
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'CategoryNode',
+      default: null,
+    },
     // Where the item physically sits in the shop, so staff can find it in a
     // big store: the rack/aisle and the shelf (bin) on it. Both optional and
     // free text - "A3" + "2" and "Chilled" + "Bottom shelf" are both valid
