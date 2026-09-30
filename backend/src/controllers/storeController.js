@@ -18,9 +18,10 @@ import {
 import { customersForStore } from '../utils/storeCustomer.js';
 import {
   dedupe,
+  getAnyBySlug,
   getCached,
-  getCachedBySlug,
   invalidateStore,
+  refreshInBackground,
   rememberSlug,
   setCached,
   SLOTS,
@@ -145,6 +146,92 @@ function publicStoreFor(store) {
   return plain;
 }
 
+/**
+ * Build the public storefront payload for a store that is already loaded.
+ *
+ * Extracted out of the route handler so there is ONE definition of "what a
+ * storefront response is". Three callers need it now - the blocking cold path,
+ * the background revalidation behind an expired entry, and the boot warm-up - and
+ * three copies would be three chances for them to disagree about a shape the
+ * whole shop renders from. The `.lean()` note below is exactly the kind of trap a
+ * second copy would eventually miss.
+ */
+async function buildPublicStorePayload(store) {
+  /* A Theme 2 storefront needs the tree as much as it needs the products, and
+   * the client cannot ask for both at once - it does not know the theme until
+   * this response lands. So the tree comes back INSIDE this one.
+   *
+   * That turns what was three round trips (products, then a second request for
+   * the tree) into one, and it removes the second loading state a shopper would
+   * otherwise watch: the page used to render its header, then visibly fill in
+   * the categories a moment later.
+   *
+   * The `theme` check is what keeps Theme 1 fast. A Theme 1 store never shows
+   * this tree, and making it wait on two extra queries to a database a network
+   * round trip away would slow down every store that does not use the feature. */
+  const wantsTree = store.theme === THEME2;
+
+  /* NO `.lean()` HERE, and that is not an oversight.
+   *
+   * `Product` sets `toJSON: { virtuals: true }`, so a hydrated document
+   * serialises with far more than its stored fields: `id` (the `_id` as a
+   * string), `hasVariants`, `effectivePrice`, `inventoryValue`, `channelCount`,
+   * and the rest. `.lean()` returns raw POJOs and skips `toJSON` entirely, so
+   * it would quietly drop every one of them from the PUBLIC storefront payload.
+   *
+   * This was caught by `testSections.mjs` ("no product is duplicated across
+   * sections"), which failed only because `p.id` became `undefined` for every
+   * product - the other missing virtuals broke the page in ways that test does
+   * not assert on. A fast endpoint serving a subtly different shape is a worse
+   * outcome than a slow one serving the right shape. */
+  const products = await Product.find({ store: store._id }).sort({
+    createdAt: -1,
+  });
+
+  /* The tree is built AFTER the products, and from them.
+   *
+   * Sequential on purpose, which reads like a step backwards but is the whole
+   * point: the tree needs a per-category product count, and the alternative
+   * was a `$group` aggregation over the products collection. Given the
+   * products we are already holding, that count is a loop over an array -
+   * no query, no round trip, no collection scan. Measured on a cold load over
+   * the same link: 7.5s before, because of that scan. */
+  const tree = wantsTree ? await buildPublicTree(store, products) : null;
+
+  // `tree` is null - not [] - for a Theme 1 store, so the client can tell
+  // "this store has no tree" from "this store is not a tree store" and never
+  // renders a category panel for a theme that has none.
+  const built = wantsTree
+    ? { store: publicStoreFor(store), products, tree: tree.tree }
+    : { store, products };
+
+  setCached(store._id, SLOTS.STORE, built, store.slug);
+
+  return built;
+}
+
+/**
+ * Rebuild a storefront knowing only its slug, for the background refresh.
+ *
+ * Returns null when the store has since been closed or deleted - and in that
+ * case DROPS the cached copy, which is the part that matters. The warm path
+ * trusts the cached entry and does not re-check `isActive` on every request, so
+ * without this a store closed while nobody was looking would keep being served
+ * from an entry that every rebuild then politely refused to overwrite: a closed
+ * shop staying open forever, which is worse than the 30s window the old code
+ * had. Clearing it sends the next request down the cold path, which answers 404.
+ */
+async function rebuildPublicStore(slug) {
+  const store = await Store.findOne({ slug });
+
+  if (!store || !store.isActive) {
+    invalidateStore(slug);
+    return null;
+  }
+
+  return buildPublicStorePayload(store);
+}
+
 export const getPublicStore = asyncHandler(async (req, res) => {
   const slug = slugify(req.params.slug, '');
   if (!slug) throw new HttpError(404, 'That store does not exist.');
@@ -160,13 +247,28 @@ export const getPublicStore = asyncHandler(async (req, res) => {
      the slug up in memory first is what makes a repeat visit instant instead of
      merely cheaper.
 
+     Two things come back from that lookup and BOTH are needed: the payload, and
+     whether it is still inside its TTL. An expired entry is still ANSWERED FROM
+     - see `getAnyBySlug` for why, and for the measurement that made this the most
+     valuable change in the whole load path (a 7.5s white screen became 15ms) -
+     and the rebuild is started behind the shopper instead of in front of them.
+     The only request that waits for the database is one that arrives when this
+     process has never seen the slug at all.
+
      The tradeoff is a closed store: this trusts the cached copy and so does not
-     re-check `isActive` on every request. That is bounded by the 30s TTL, and
-     closing a store goes through `updateMyStore`, which invalidates it - so the
-     window is "until the next expiry", not "forever". */
-  const warm = getCachedBySlug(slug, SLOTS.STORE);
-  if (warm) {
-    res.json(warm);
+     re-check `isActive` on every request. That is bounded by the 30s TTL - and
+     now also by the revalidation, which clears the entry outright the moment a
+     rebuild finds the store closed (see `rebuildPublicStore`) - so the window is
+     "until the next expiry", not "forever". */
+  const cached = getAnyBySlug(slug, SLOTS.STORE);
+  if (cached) {
+    res.json(cached.payload);
+
+    if (!cached.fresh) {
+      refreshInBackground(SLOTS.STORE, cached.storeId, () =>
+        rebuildPublicStore(slug),
+      );
+    }
     return;
   }
 
@@ -184,9 +286,9 @@ export const getPublicStore = asyncHandler(async (req, res) => {
   // this mapping existing, so record it as soon as it is known.
   rememberSlug(store.slug, store._id);
 
-  const cached = getCached(store._id, SLOTS.STORE);
-  if (cached) {
-    res.json(cached);
+  const alreadyBuilt = getCached(store._id, SLOTS.STORE);
+  if (alreadyBuilt) {
+    res.json(alreadyBuilt);
     return;
   }
 
@@ -202,60 +304,7 @@ export const getPublicStore = asyncHandler(async (req, res) => {
     const fresh = getCached(store._id, SLOTS.STORE);
     if (fresh) return fresh;
 
-    /* A Theme 2 storefront needs the tree as much as it needs the products, and
-     * the client cannot ask for both at once - it does not know the theme until
-     * this response lands. So the tree comes back INSIDE this one.
-     *
-     * That turns what was three round trips (products, then a second request for
-     * the tree) into one, and it removes the second loading state a shopper would
-     * otherwise watch: the page used to render its header, then visibly fill in
-     * the categories a moment later.
-     *
-     * The `theme` check is what keeps Theme 1 fast. A Theme 1 store never shows
-     * this tree, and making it wait on two extra queries to a database a network
-     * round trip away would slow down every store that does not use the feature. */
-    const wantsTree = store.theme === THEME2;
-
-    /* NO `.lean()` HERE, and that is not an oversight.
-     *
-     * `Product` sets `toJSON: { virtuals: true }`, so a hydrated document
-     * serialises with far more than its stored fields: `id` (the `_id` as a
-     * string), `hasVariants`, `effectivePrice`, `inventoryValue`, `channelCount`,
-     * and the rest. `.lean()` returns raw POJOs and skips `toJSON` entirely, so
-     * it would quietly drop every one of them from the PUBLIC storefront payload.
-     *
-     * This was caught by `testSections.mjs` ("no product is duplicated across
-     * sections"), which failed only because `p.id` became `undefined` for every
-     * product - the other missing virtuals broke the page in ways that test does
-     * not assert on. A fast endpoint serving a subtly different shape is a worse
-     * outcome than a slow one serving the right shape. */
-    const products = await Product.find({ store: store._id }).sort({
-      createdAt: -1,
-    });
-
-    /* The tree is built AFTER the products, and from them.
-     *
-     * Sequential on purpose, which reads like a step backwards but is the whole
-     * point: the tree needs a per-category product count, and the alternative
-     * was a `$group` aggregation over the products collection. Given the
-     * products we are already holding, that count is a loop over an array -
-     * no query, no round trip, no collection scan. Measured on a cold load over
-     * the same link: 7.5s before, because of that scan; the two round trips this
-     * genuinely needs now run back to back and cost about what Theme 1 costs.
-     *
-     * The nodes query is the only thing still outstanding, and it is a small
-     * indexed lookup on a collection capped at 400 rows per store. */
-    const tree = wantsTree ? await buildPublicTree(store, products) : null;
-
-    // `tree` is null - not [] - for a Theme 1 store, so the client can tell
-    // "this store has no tree" from "this store is not a tree store" and never
-    // renders a category panel for a theme that has none.
-    const built = wantsTree
-      ? { store: publicStoreFor(store), products, tree: tree.tree }
-      : { store, products };
-
-    setCached(store._id, SLOTS.STORE, built, store.slug);
-    return built;
+    return buildPublicStorePayload(store);
   });
 
   res.json(payload);
@@ -593,6 +642,40 @@ export const removeStoreRider = asyncHandler(async (req, res) => {
 
   res.json({ removed: true, riderId: String(link.rider) });
 });
+
+/**
+ * Warm the storefront cache for the stores most likely to be opened next.
+ *
+ * The cache is process-local, so EVERY restart of the API starts it empty - and
+ * in development the API restarts on every file save (`node --watch`), which made
+ * "the first visit is always the slow one" the normal experience rather than an
+ * occasional one. Measured on this project's own data: the first
+ * `/stores/:slug` after a restart took 7.5s, the next one 15ms.
+ *
+ * The set to warm is "the stores a merchant most recently changed", which is the
+ * cheapest useful guess available without a request log: `updatedAt` is already
+ * on every store, and a shop somebody has just been working on is a shop about to
+ * be opened. It is only a GUESS, so it is capped, and it is never allowed to
+ * matter: the caller does not await it, each store is built independently, and a
+ * failure in any one of them is counted and dropped rather than retried or
+ * thrown. Nothing here can delay the server accepting traffic, and a store that
+ * is not in this list is not broken - it just pays the cold path once, exactly as
+ * it did before.
+ */
+export async function warmStorefronts(limit = 4) {
+  const stores = await Store.find({ isActive: true })
+    .sort({ updatedAt: -1 })
+    .limit(limit);
+
+  const results = await Promise.allSettled(
+    stores.map((store) => buildPublicStorePayload(store)),
+  );
+
+  const warmed = results.filter((result) => result.status === 'fulfilled');
+  const failed = results.length - warmed.length;
+
+  return { warmed: warmed.length, failed, slugs: stores.map((store) => store.slug) };
+}
 
 export default {
   getPublicStore,

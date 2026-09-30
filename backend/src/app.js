@@ -7,6 +7,7 @@ import { config } from './config/env.js';
 import routes from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { corsOriginFn } from './config/cors.js';
+import { compressResponses } from './middleware/compress.js';
 
 // The browser talks to this API from a different origin (Vite dev server on
 // 5173, or a Cloudflare quick-tunnel URL), so CORS has to name the allowed
@@ -24,6 +25,15 @@ export function createApp() {
   app.use(cors(corsOptions));
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
+
+  /* Compressible responses go out gzipped (brotli when the client offers it).
+   *
+   * Mounted before the routes AND before the static handler, so both the API's
+   * JSON and the built client's assets are covered - a storefront response is
+   * ~942KB and the JS bundle is another ~500KB, and neither was compressed
+   * before this. See middleware/compress.js for what it refuses to touch and
+   * why. */
+  app.use(compressResponses());
 
   // Compact request log - noisy enough to help, quiet enough to leave on.
   if (config.nodeEnv !== 'production') {

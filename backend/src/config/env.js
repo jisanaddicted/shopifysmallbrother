@@ -43,6 +43,17 @@ export const config = {
   ]),
   autoSeed: String(process.env.AUTO_SEED ?? 'true').toLowerCase() !== 'false',
 
+  // --- Public storefront cache (utils/storefrontCache.js) --------------------
+  // How long a cached storefront payload is served before a rebuild is started
+  // in the background. It is NOT a hard expiry: an entry past this age is still
+  // answered from, and the rebuild happens behind the shopper - see that module
+  // for why that is the difference between a 7.5s and a 15ms storefront open.
+  //
+  // The override exists so the revalidation can actually be TESTED without
+  // sleeping for it: run the API with STOREFRONT_CACHE_TTL_MS=1000 and the
+  // serve-stale-then-refresh path is reachable in a second instead of thirty.
+  storefrontCacheTtlMs: toInt(process.env.STOREFRONT_CACHE_TTL_MS, 30_000),
+
   // --- SSLCommerz (sandbox) ------------------------------------------------
   // Online payment for the `card` method. Cash on delivery needs none of this -
   // it is the absence of a gateway, not a gateway configured differently.

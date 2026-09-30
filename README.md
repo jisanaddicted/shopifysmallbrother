@@ -441,6 +441,54 @@ join an order room you own, are delivering, or administer.
   which the panel reports as *No location* rather than inventing a shelf.
 - `backend/.env` is git-ignored; only `.env.example` is committed.
 
+## Why a storefront opens fast now (all of it measured)
+
+Every number below came from this project's own setup — a local API in front of a
+remote Atlas cluster, so **every database round trip is a network round trip**
+(50–80ms when the link is calm, multi-second spikes when it is not).
+
+| Symptom (before) | Now |
+| --- | --- |
+| `GET /api/stores/<slug>` cold: **7,487–8,575ms** | **15–80ms** — nobody waits for a rebuild |
+| …and the 30s TTL meant *every* trader's first visit after it paid that | used to be one unlucky visitor every 30s, all day |
+| One storefront response: **942,386 bytes**, `content-encoding: -` | **388,925 bytes** on the wire (brotli, −58.7%; gzip −24.9%) |
+| The JS bundle, same story | brotli/gzip, and unchanged hashed filenames keep their `immutable` cache |
+| First visit after every `node --watch` restart: always the slow one | the API warms the 4 most recently touched storefronts on boot |
+
+Four changes, and what each one protects:
+
+1. **Stale-while-revalidate** (`backend/src/utils/storefrontCache.js`,
+   `getAnyBySlug` + `refreshInBackground`). A cached payload past its TTL is
+   still ANSWERED FROM while a rebuild runs behind the reader; the TTL now means
+   "when to refresh", not "when to make somebody wait". Rules that must not be
+   broken: **read `getAnyBySlug` before `getCached`** (the strict read consumes
+   an expired entry), a failed rebuild must leave the stale copy in place, and
+   every write path must still call `invalidateStore` — a merchant's own edit has
+   to show up on their own storefront immediately.
+2. **Compression** (`backend/src/middleware/compress.js`, `node:zlib`, no new
+   dependency). Brotli when offered, gzip otherwise, skipped below 1KB, for
+   already-encoded/range/bodiless responses, and whenever the result would not
+   actually be smaller (base64 PNGs). Measured through a Cloudflare quick
+   tunnel: the edge always sends `Accept-Encoding: gzip` to the origin and
+   never passes brotli across, so over the tunnel a browser gets the gzip
+   size (−24.9%) and brotli (−58.7%) applies to direct requests.
+3. **Boot warm-up** (`warmStorefronts`, called un-awaited from
+   `backend/src/server.js`). Cheap guess, capped at four stores, every failure
+   logged and dropped — it can never delay the server accepting traffic.
+4. **In-flight request sharing on the client**
+   (`client/src/services/storeService.js`). Dedupe only, no cached copy and no
+   TTL: several components ask for the same (large) storefront payload in one
+   navigation, and a client-side cache with a lifetime of its own is how a
+   merchant gets told their own save is not there yet.
+
+Verifying any of it:
+
+```bash
+npm --prefix backend run test:cache        # 19 checks, no database needed
+npm --prefix backend run test:compression  # 36 checks, no database needed
+STOREFRONT_CACHE_TTL_MS=1500 npm run dev:backend   # make the stale path reachable in 1.5s
+```
+
 ## File map for AI editors
 
 ```

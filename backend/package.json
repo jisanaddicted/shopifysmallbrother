@@ -11,6 +11,8 @@
     "seed": "node src/seed.js",
     "backfill:customers": "node scripts/backfillStoreCustomers.mjs",
     "test:smoke": "node scripts/smokeTest.mjs",
+    "test:cache": "node scripts/testStorefrontCache.mjs",
+    "test:compression": "node scripts/testCompression.mjs",
     "test:variants": "node scripts/testVariants.mjs && node scripts/testProductModel.mjs && node scripts/testVariantParity.mjs",
     "test:variants:db": "node scripts/testVariantIntegration.mjs",
     "test:categories": "node scripts/testCategories.mjs",

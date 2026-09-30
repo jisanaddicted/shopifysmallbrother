@@ -1,3 +1,5 @@
+import { config } from '../config/env.js';
+
 /**
  * A tiny in-process cache for the PUBLIC storefront reads.
  *
@@ -30,8 +32,18 @@
  * Deliberately short. The tempting value here is minutes, and it would be faster
  * still, but a merchant who adds a product and refreshes the shop must not be
  * told by their own storefront that it is not there yet.
+ *
+ * Note what expiry DOES now that the public routes serve stale and revalidate
+ * (see `getAnyBySlug` / `refreshInBackground`): it starts a rebuild in the
+ * background. It is no longer the moment a shopper starts waiting, which is why
+ * this can stay short without costing anyone seven seconds.
+ *
+ * Overridable from the environment (api/.env, or the shell) purely so the
+ * revalidation can be verified without sleeping 30 seconds in a test:
+ * STOREFRONT_CACHE_TTL_MS=1000 makes the stale path reachable in a second. The
+ * default is the value above and is what a normal run uses.
  */
-const TTL_MS = 30_000;
+const TTL_MS = config.storefrontCacheTtlMs;
 
 /**
  * Cap on cached stores.
@@ -181,6 +193,78 @@ export function invalidateStore(storeOrSlug) {
       slugToId.delete(slug);
     }
   }
+}
+
+/**
+ * A cached payload for a slug WHATEVER ITS AGE: `{ storeId, payload, fresh }`.
+ *
+ * This is the function that makes a repeat visit instant rather than merely
+ * cheaper, and it is the difference between `getCachedBySlug` above and this one.
+ *
+ * `getCachedBySlug` answers only while the entry is inside its TTL and DELETES it
+ * on the way out when it is not - so the request that arrives one second after
+ * the TTL expires pays the full cold path. Measured on this project's setup
+ * (Atlas over the internet, ~50-80ms per round trip when the network is calm and
+ * multi-second spikes when it is not), a cold `/stores/:slug` took 7.5 SECONDS
+ * while the warm one took 15ms. With a 30s TTL that means roughly every thirtieth
+ * second of traffic sends one unlucky shopper to a seven-second white screen -
+ * and it is always the FIRST one, which is also the one deciding whether to
+ * trust the shop.
+ *
+ * So the caller gets the age as well as the payload and decides. When `fresh` is
+ * false the controller serves the copy it has (a shopper looking at a 31-second
+ * old catalogue has no way to tell, and 31 seconds of staleness was already the
+ * documented contract of the TTL) and calls `refreshInBackground` to build a new
+ * one behind them. Nobody waits for a rebuild that only exists to keep the next
+ * request fast.
+ *
+ * Expired entries are deliberately NOT deleted here, unlike in `getCached`: the
+ * whole point is that the caller can still use one. The TTL becomes "when to
+ * start refreshing", not "when to stop answering".
+ */
+export function getAnyBySlug(slug, slot) {
+  if (!slug) return undefined;
+
+  const storeId = slugToId.get(slug);
+  if (!storeId) return undefined;
+
+  const hit = byStore.get(storeId)?.[slot];
+  if (!hit) return undefined;
+
+  return {
+    storeId,
+    payload: hit.payload,
+    fresh: Date.now() < hit.expiresAt,
+  };
+}
+
+/**
+ * Rebuild one slot in the background, sharing an in-flight build with anyone
+ * else who asks for the same one.
+ *
+ * Fire-and-forget by design: the caller has already answered the request with
+ * the copy it had, so there is nothing left to await. Three rules make that safe.
+ *
+ *  - Never two builds at once. `dedupe` claims the key synchronously, so a burst
+ *    of shoppers arriving on an expired entry triggers ONE rebuild, not one
+ *    each - which matters here because the rebuild itself is several slow
+ *    queries and the herd would be pointed straight at the database.
+ *  - Never an unhandled rejection. This promise is not returned to a route, so
+ *    a database hiccup inside it would otherwise take the whole process down.
+ *    The `.catch` swallows it, `dedupe`'s `finally` clears the in-flight entry,
+ *    and the still-cached stale payload keeps being served - a storefront that
+ *    is 40 seconds out of date is strictly better than an error page.
+ *  - Never resolved twice. If a rebuild fails, the expired entry is left exactly
+ *    where it was, so the next request tries again instead of finding nothing.
+ */
+export function refreshInBackground(slot, storeId, producer) {
+  const key = `${slot}:${String(storeId)}`;
+  if (inFlight.has(key)) return undefined;
+
+  const task = dedupe(slot, storeId, producer);
+  task.catch(() => {});
+
+  return task;
 }
 
 /**

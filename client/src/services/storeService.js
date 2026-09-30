@@ -1,16 +1,54 @@
 import api from './api';
 
+/**
+ * In-flight request sharing for the PUBLIC storefront reads.
+ *
+ * Why: `GET /stores/:slug` is ~942KB on this project's data (measured), and
+ * several components ask for it - on a storefront visit the ShopPage wants it,
+ * the Navbar wants the store's logo, the product and category pages want it too,
+ * and a customer's sign-in page wants the store's branding. They do not all fire
+ * in the same tick, so this cannot help every case, but the ones that DO overlap
+ * (ShopPage + Navbar on mount; a page and its neighbour while navigating) were
+ * downloading the whole catalogue twice and parsing it twice, for one screen.
+ *
+ * Dedupe ONLY - no cached copy, no TTL. The server already caches these payloads
+ * and invalidates them the moment a merchant edits something, and a client-side
+ * copy with a lifetime of its own is exactly how a merchant who saves a product
+ * and refreshes their own shop gets told the product is not there. Sharing the
+ * request that is ALREADY in flight has no such window: everyone waiting on it
+ * gets the answer the server gave, once.
+ *
+ * Failures are not remembered either - the entry is cleared in `finally`, so a
+ * retry after an error starts a fresh request rather than awaiting a rejection
+ * that has already passed.
+ */
+const inFlight = new Map();
+
+function share(key, request) {
+  const running = inFlight.get(key);
+  if (running) return running;
+
+  const task = request().finally(() => {
+    inFlight.delete(key);
+  });
+
+  inFlight.set(key, task);
+  return task;
+}
+
 // ---------------------------------------------------------------------------
 // Public storefront
 // ---------------------------------------------------------------------------
 
 /** GET /stores/:slug - what the public /s/<slug> page loads. { store, products } */
 export const getPublicStore = (slug) =>
-  api.get(`/stores/${slug}`).then((res) => res.data);
+  share(`store:${slug}`, () => api.get(`/stores/${slug}`).then((res) => res.data));
 
 /** GET /menu/:slug - the storefront navigation tree (public). */
 export const getPublicStoreMenu = (slug) =>
-  api.get(`/menu/${slug}`).then((res) => res.data.menu || []);
+  share(`menu:${slug}`, () =>
+    api.get(`/menu/${slug}`).then((res) => res.data.menu || []),
+  );
 
 // ---------------------------------------------------------------------------
 // Merchant (store owner)

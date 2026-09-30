@@ -4,6 +4,7 @@ import { connectDB, disconnectDB } from './config/db.js';
 import { createApp } from './app.js';
 import { initSockets } from './sockets/index.js';
 import { DEMO_PASSWORD, seedDemoData } from './seed.js';
+import { warmStorefronts } from './controllers/storeController.js';
 
 async function start() {
   console.log(`[api] starting in ${config.nodeEnv} mode`);
@@ -37,6 +38,28 @@ async function start() {
   console.log(`[api] REST   -> http://localhost:${config.port}/api`);
   console.log(`[api] socket -> http://localhost:${config.port}`);
   console.log(`[api] LAN    -> http://<this-machine-ip>:${config.port}/api (same Wi-Fi)`);
+
+  /* Warm the public storefront cache in the background.
+   *
+   * The cache lives in this process, so every restart starts it empty - and the
+   * first storefront visit after a restart pays for that: measured at 7.5s on
+   * this project's data, against 15ms once warm. In development `node --watch`
+   * restarts on every file save, which made the slow path the normal one.
+   *
+   * Deliberately NOT awaited, and after `listen` rather than before it: warming
+   * is a nice-to-have, and a slow or unreachable database must not delay the
+   * server answering anything. It cannot throw into startup either - every
+   * failure is caught and only ever logged. */
+  warmStorefronts()
+    .then(({ warmed, failed, slugs }) => {
+      console.log(
+        `[api] warmed ${warmed} storefront(s)${failed ? ` (${failed} failed)` : ''}` +
+          (slugs?.length ? `: ${slugs.join(', ')}` : ''),
+      );
+    })
+    .catch((err) => {
+      console.warn('[api] storefront warm-up skipped:', err.message);
+    });
 
   let shuttingDown = false;
   const shutdown = async (signal) => {

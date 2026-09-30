@@ -8,9 +8,10 @@ import { MAX_CATEGORY_DEPTH } from '../utils/constants.js';
 import { loadManageableStore } from '../utils/storeAccess.js';
 import {
   dedupe,
+  getAnyBySlug,
   getCached,
-  getCachedBySlug,
   invalidateStore,
+  refreshInBackground,
   rememberSlug,
   setCached,
   SLOTS,
@@ -530,13 +531,46 @@ export async function buildPublicTree(store, knownProducts) {
  * a script, a future page that is not the shop - and it is built by
  * `buildPublicTree`, the same function, so the two can never disagree.
  */
+/**
+ * Rebuild the tree knowing only the slug, for the background refresh.
+ *
+ * Deliberately selects the same three fields the cold path does, so a refreshed
+ * payload and a freshly built one are the same shape - `buildPublicTree` reads
+ * only these plus the store's own id.
+ */
+async function rebuildPublicTree(slug) {
+  const store = await Store.findOne({ slug }).select('_id slug name theme');
+  if (!store) {
+    invalidateStore(slug);
+    return null;
+  }
+
+  const built = await buildPublicTree(store);
+  setCached(store._id, SLOTS.TREE, built, store.slug);
+
+  return built;
+}
+
 export const getPublicCategoryTree = asyncHandler(async (req, res) => {
-  // Same warm-first ordering as getPublicStore, and for the same reason: the
-  // slug->store lookup would otherwise be a round trip on every request, which
-  // is the entire cost this cache exists to avoid.
-  const warm = getCachedBySlug(req.params.slug, SLOTS.TREE);
-  if (warm) {
-    res.json(warm);
+  /* Same warm-first ordering as getPublicStore, and for the same reason: the
+     slug->store lookup would otherwise be a round trip on every request, which
+     is the entire cost this cache exists to avoid.
+
+     And the same stale-while-revalidate rule, so an expired entry is still
+     answered from and the rebuild happens behind the reader. This route is not
+     what the storefront loads any more (the tree arrives inside the store
+     response - see storeController), which is exactly why it is worth keeping
+     honest here too: whoever does call it - a widget, a script, a future page -
+     should not be the one paying for the refresh. */
+  const cached = getAnyBySlug(req.params.slug, SLOTS.TREE);
+  if (cached) {
+    res.json(cached.payload);
+
+    if (!cached.fresh) {
+      refreshInBackground(SLOTS.TREE, cached.storeId, () =>
+        rebuildPublicTree(req.params.slug),
+      );
+    }
     return;
   }
 
@@ -547,9 +581,9 @@ export const getPublicCategoryTree = asyncHandler(async (req, res) => {
 
   rememberSlug(store.slug, store._id);
 
-  const cached = getCached(store._id, SLOTS.TREE);
-  if (cached) {
-    res.json(cached);
+  const builtAlready = getCached(store._id, SLOTS.TREE);
+  if (builtAlready) {
+    res.json(builtAlready);
     return;
   }
 
