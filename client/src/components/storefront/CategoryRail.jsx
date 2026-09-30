@@ -85,6 +85,20 @@ export default function CategoryRail({ name, products, showAllLabel }) {
           role="group"
           aria-label={`${name} products`}
         >
+          {/* NO category card here.
+
+              There used to be one - the category's picture and name as the
+              first item in its own rail. It moved out to <CategorySlider>,
+              which sits above every section, for two reasons:
+
+                - `.store-sections` is hidden above 640px, so a card living in
+                  here disappeared on desktop entirely.
+                - A card that scrolls away with its own section is no use as
+                  navigation: to learn what the shop sells you had to swipe
+                  through every section to discover it.
+
+              Repeating it here as well would show the same category twice on a
+              phone, once at the top of the screen and once an inch below it. */}
           {products.map((product) => (
             <ProductCard key={product._id || product.id} product={product} />
           ))}

@@ -114,14 +114,29 @@ function escapeRegExp(value) {
  * for a section created ahead of its first product. The theme builder shows
  * it so a merchant can see which of their sections are still empty.
  *
+ * `image` is the store's picture for the category, or '' when none was
+ * uploaded - it is what the storefront section card is built from. Looked up
+ * through the same lowercased key the rest of this function matches on, so a
+ * category filed as "DRINKS" still shows the picture uploaded for "Drinks".
+ *
  * `productRows` lets a caller pass a projection it has already loaded, so the
  * theme editor - which needs product names anyway - does not read the same
  * collection twice.
  */
-async function listCategories(storeId, storeCategories = [], productRows = null) {
+async function listCategories(
+  storeId,
+  storeCategories = [],
+  productRows = null,
+  categoryImages = {},
+) {
   const rows =
     productRows ??
     (await Product.find({ store: storeId }).select('category').lean());
+
+  // The image map is keyed by lowercased name. Read defensively: an older
+  // store document has no such field at all, and `undefined[key]` would throw.
+  const images =
+    categoryImages && typeof categoryImages === 'object' ? categoryImages : {};
 
   // What is genuinely on the shelf. Counted first, and separately, because a
   // curated name is a heading and does not make a product exist.
@@ -140,7 +155,11 @@ async function listCategories(storeId, storeCategories = [], productRows = null)
     const key = name.toLowerCase();
     // First spelling wins, and curated names are offered first.
     if (byKey.has(key)) return;
-    byKey.set(key, { name, count: counts.get(key) || 0 });
+    byKey.set(key, {
+      name,
+      count: counts.get(key) || 0,
+      image: String(images?.[key] || '').trim(),
+    });
   };
 
   for (const name of Array.isArray(storeCategories) ? storeCategories : []) {
@@ -177,7 +196,12 @@ export const getStoreMenu = asyncHandler(async (req, res) => {
      section the merchant created in the theme builder is nav-able from the
      moment it exists. */
   if (!items.length) {
-    const categories = await listCategories(store._id, store.categories);
+    const categories = await listCategories(
+    store._id,
+    store.categories,
+    null,
+    store.categoryImages,
+  );
     if (categories.length) {
       const seed = categories.map((cat, i) => ({
         store: store._id,
@@ -234,7 +258,7 @@ export const listStoreMenu = asyncHandler(async (req, res) => {
   const [items, products, categories] = await Promise.all([
     NavMenu.find({ store: store._id }).sort({ position: 1 }).lean(),
     Product.find({ store: store._id }).select('name category').lean(),
-    listCategories(store._id, store.categories),
+    listCategories(store._id, store.categories, null, store.categoryImages),
   ]);
 
   res.json({
@@ -431,7 +455,12 @@ export const createCategory = asyncHandler(async (req, res) => {
   await store.save();
 
   res.status(201).json({
-    categories: await listCategories(store._id, store.categories),
+    categories: await listCategories(
+      store._id,
+      store.categories,
+      null,
+      store.categoryImages,
+    ),
   });
 });
 
@@ -512,12 +541,134 @@ export const deleteCategory = asyncHandler(async (req, res) => {
     $set: { category: '' },
   });
 
+  /* Drop the picture too.
+
+     The image lives in a SEPARATE map keyed by name, so removing the category
+     from the curated list does not touch it - the entry is simply orphaned, and
+     orphaned is not cheap here: each value is a base64 data URL of up to 1MB
+     sitting inside the store document forever, on a document the storefront
+     reads on every single page load. Deleting a category has to take its
+     picture with it, or a merchant who reworks their sections grows the
+     document steadily while never seeing any of it on screen.
+
+     Written separately, and only when there was a picture, so the ordinary
+     delete stays a single save. */
+  const images = { ...(store.categoryImages || {}) };
+  if (Object.prototype.hasOwnProperty.call(images, key)) {
+    delete images[key];
+    store.categoryImages = images;
+    await store.save();
+  }
+
   res.json({
-    categories: await listCategories(store._id, store.categories),
+    categories: await listCategories(
+      store._id,
+      store.categories,
+      null,
+      store.categoryImages,
+    ),
     // So the panel can say what happened rather than the list simply changing.
     clearedProducts: cleared.modifiedCount || 0,
   });
 });
+
+/**
+ * Is `value` a base64 data URL for an image type we are willing to store?
+ *
+ * A category picture is rendered inside an <img> on a public storefront, so the
+ * value is attacker-controlled markup-adjacent data. Checking the prefix is
+ * what keeps an `http(s)://` URL (a tracker beacon that follows the shopper
+ * around, stored on someone else's host) or a `javascript:` URL out of the
+ * database. Only real inline image payloads are accepted.
+ *
+ * The length cap matters too: this is a resized PNG in a document, and an
+ * unbounded base64 string on a field the storefront reads on every page load
+ * is a denial-of-service lever aimed at the shopper's phone.
+ */
+const ALLOWED_IMAGE = /^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/]+=*$/;
+const MAX_IMAGE_BYTES = 1024 * 1024;
+
+function isAllowedImageDataUrl(value) {
+  if (typeof value !== 'string') return false;
+  if (!ALLOWED_IMAGE.test(value)) return false;
+
+  // The base64 payload is ~4 chars per 3 bytes; compare on the payload only,
+  // not the whole data URL, so the cap means what it says.
+  const base64 = value.slice(value.indexOf(',') + 1);
+  return Math.floor((base64.length * 3) / 4) <= MAX_IMAGE_BYTES;
+}
+
+/**
+ * PUT /api/menu/edit/:storeId/categories/:name/image
+ *
+ * Set or clear a category's picture. Body: `{ image }` - a base64 data URL, or
+ * '' to remove the picture.
+ *
+ * A data URL rather than a multipart upload, matching how the store logo is
+ * already handled (see services/storeService.js): the client downscales the
+ * file to a card-sized image on a canvas before sending, so what arrives is a
+ * small PNG with no file on disk, no upload directory, and no static route
+ * needed to serve it. A category picture is decorative and small, so a resized
+ * data URL is the whole story here.
+ *
+ * The name must already exist as a category - curated or product-derived - for
+ * the same reason delete insists on it: the picture decorates a section, and
+ * storing one for a name with no section would leave an image nothing could
+ * ever display.
+ */
+export const setCategoryImage = asyncHandler(async (req, res) => {
+  const { store } = await loadManageableStore(req.params.storeId, req.user);
+
+  // Express has already percent-decoded this segment - see deleteCategory.
+  const name = String(req.params.name || '').trim();
+  if (!name) throw new HttpError(400, 'A category needs a name.');
+
+  const key = name.toLowerCase();
+
+  /* The category has to exist. Reusing `listCategories` rather than repeating
+     its matching rule means this existence test and the list the client renders
+     can never disagree about what counts as a category. */
+  const existing = await listCategories(
+    store._id,
+    store.categories,
+    null,
+    store.categoryImages,
+  );
+  if (!existing.some((c) => c.name.toLowerCase() === key)) {
+    throw new HttpError(404, `"${name}" is not one of this store's categories.`);
+  }
+
+  const image = String(req.body?.image ?? '').trim();
+  const images = { ...(store.categoryImages || {}) };
+
+  if (!image) {
+    /* Clearing drops the key entirely rather than storing '', so a removed
+       picture leaves nothing behind for a later re-created category to
+       inherit. */
+    delete images[key];
+  } else {
+    if (!isAllowedImageDataUrl(image)) {
+      throw new HttpError(
+        400,
+        'That image could not be used. Pick a PNG, JPG, WEBP or GIF under 1 MB.',
+      );
+    }
+    images[key] = image;
+  }
+
+  store.categoryImages = images;
+  await store.save();
+
+  res.json({
+    categories: await listCategories(
+      store._id,
+      store.categories,
+      null,
+      store.categoryImages,
+    ),
+  });
+});
+
 
 export default {
   getStoreMenu,
@@ -525,4 +676,5 @@ export default {
   saveStoreMenu,
   createCategory,
   deleteCategory,
+  setCategoryImage,
 };

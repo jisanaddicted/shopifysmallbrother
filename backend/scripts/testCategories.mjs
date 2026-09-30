@@ -78,8 +78,39 @@ const blank = await call('POST', `/menu/edit/${storeId}/categories`, {
 check('a blank name is rejected', blank.status === 400, `${blank.status}`);
 
 // --- 4. The count is live: file a product under it -----------------------
-const pizza = (await call('GET', '/products', { token })).data?.products?.[0];
-const originalCategory = pizza.category;
+/* Pick a product that is NOT already sitting in a leftover test category.
+
+   This matters more than it looks. A previous run that was killed before its
+   cleanup left test categories behind, and choosing a product from one of those
+   means `originalCategory` is itself a test category - so this run's cleanup
+   deletes the category the product is filed under and "restores" it into a
+   category that no longer exists. The assertions then pass while the store
+   drifts further from its real data every run.
+
+   A product whose category is either empty or a real one (not stamped by this
+   script) keeps the test self-contained. */
+const CLEAN = /^(?!Test Section )/i;
+const all = (await call('GET', '/products?status=all&limit=100', { token })).data
+  ?.products || [];
+const pizza =
+  all.find((p) => !String(p.category || '').trim()) ||
+  all.find((p) => CLEAN.test(String(p.category || '').trim())) ||
+  all[0];
+
+if (!pizza) {
+  console.log('FAIL  this store has no products to test with');
+  process.exit(1);
+}
+const originalCategory = String(pizza.category || '').trim();
+
+/* If the chosen product is already filed somewhere real, that category is
+   ours to restore later, but we must never DELETE it. Refuse rather than risk
+   touching seeded data. */
+if (originalCategory && !CLEAN.test(originalCategory)) {
+  console.log(`FAIL  every product sits in a leftover test category (${originalCategory})`);
+  console.log('      clean those up before re-running this test');
+  process.exit(1);
+}
 
 /* PUT the product with everything it already had, changing only the
    category. The endpoint is a full replace, not a patch, so omitting a field
@@ -226,10 +257,143 @@ await call('DELETE', `/menu/edit/${storeId}/categories/${encodeURIComponent(MERG
   token,
 });
 
+/* --- 10. Category pictures --------------------------------------------
+   The upload is a base64 data URL, so the checks that matter are: a valid
+   image round-trips and comes back on the category, a bogus payload is
+   refused, and clearing removes it. Runs after the delete tests so the
+   category it uses is one this file created. */
+const PIC = `${CAT} Picture`;
+await call('POST', `/menu/edit/${storeId}/categories`, { token, body: { name: PIC } });
+await refile(PIC);
+
+// A real 1x1 PNG, so this is a genuine image payload and not a fake header.
+const PNG_1PX =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+const withImage = await call(
+  'PUT',
+  `/menu/edit/${storeId}/categories/${encodeURIComponent(PIC)}/image`,
+  { token, body: { image: PNG_1PX } },
+);
+check('a valid image is accepted', withImage.status === 200, `${withImage.status}`);
+const picRow = (withImage.data?.categories || []).find((c) => c.name === PIC);
+check(
+  'it comes back attached to that category',
+  picRow?.image === PNG_1PX,
+  `image length ${picRow?.image?.length ?? 0}`,
+);
+
+/* The picture must be readable by the STOREFRONT, which is the whole point.
+   Checked against the PUBLIC /stores/:slug response - the exact payload
+   ShopPage loads - rather than the edit endpoint that returned it, because
+   those are two different serialisations and only one of them is the one a
+   shopper ever sees.
+
+   Deliberately NOT /stores/mine: that endpoint runs a deliberate field
+   projection (see SESSION_STORE_FIELDS in utils/storeAccess.js) which omits
+   heavy image fields, so it would report an empty map even for a picture that
+   is stored and served perfectly. */
+const slug = store?.slug;
+const publicStore = await fetch(`${BASE}/stores/${slug}`).then((r) => r.json());
+const picKey = PIC.toLowerCase();
+check(
+  'it is persisted and served to the public storefront',
+  publicStore?.store?.categoryImages?.[picKey] === PNG_1PX,
+  `public keys: ${Object.keys(publicStore?.store?.categoryImages || {}).join(', ') || '(none)'}`,
+);
+
+/* Case-insensitive, like everything else about categories: a product filed as
+   a different spelling of the same name is still the same section, so it must
+   still find the picture. */
+const wrongCase = (withImage.data?.categories || []).filter(
+  (c) => c.name.toLowerCase() === PIC.toLowerCase(),
+);
+check(
+  'a differently-cased product still finds the picture',
+  wrongCase.length === 1 && wrongCase[0].image === PNG_1PX,
+);
+
+/* --- Rejections ------------------------------------------------------ */
+const badUrl = await call(
+  'PUT',
+  `/menu/edit/${storeId}/categories/${encodeURIComponent(PIC)}/image`,
+  { token, body: { image: 'https://evil.example/beacon.png' } },
+);
+check(
+  'a remote http(s) URL is refused',
+  badUrl.status === 400,
+  `${badUrl.status}`,
+);
+
+const scriptUrl = await call(
+  'PUT',
+  `/menu/edit/${storeId}/categories/${encodeURIComponent(PIC)}/image`,
+  { token, body: { image: 'javascript:alert(1)' } },
+);
+check('a javascript: URL is refused', scriptUrl.status === 400, `${scriptUrl.status}`);
+
+const wrongType = await call(
+  'PUT',
+  `/menu/edit/${storeId}/categories/${encodeURIComponent(PIC)}/image`,
+  { token, body: { image: 'data:text/html;base64,PHNjcmlwdD4=' } },
+);
+check('a non-image data URL is refused', wrongType.status === 400, `${wrongType.status}`);
+
+const unknownCat = await call(
+  'PUT',
+  `/menu/edit/${storeId}/categories/${encodeURIComponent('No Such Cat At All')}/image`,
+  { token, body: { image: PNG_1PX } },
+);
+check(
+  'a picture for a category that does not exist is a 404',
+  unknownCat.status === 404,
+  `${unknownCat.status}`,
+);
+
+const noAuthImg = await call(
+  'PUT',
+  `/menu/edit/${storeId}/categories/${encodeURIComponent(PIC)}/image`,
+  { body: { image: PNG_1PX } },
+);
+check('uploading without a token is refused', noAuthImg.status === 401, `${noAuthImg.status}`);
+
+const riderImg = await call(
+  'PUT',
+  `/menu/edit/${storeId}/categories/${encodeURIComponent(PIC)}/image`,
+  { token: rider.data.token, body: { image: PNG_1PX } },
+);
+check("a rider cannot upload to this store's categories", riderImg.status === 403, `${riderImg.status}`);
+
+/* The picture must have survived all of those rejections. */
+const survived = (await call('GET', `/menu/edit/${storeId}`, { token })).data
+  ?.categories || [];
+check(
+  'the picture survived the rejected uploads',
+  survived.find((c) => c.name === PIC)?.image === PNG_1PX,
+);
+
+/* --- Clearing -------------------------------------------------------- */
+const clearedImg = await call(
+  'PUT',
+  `/menu/edit/${storeId}/categories/${encodeURIComponent(PIC)}/image`,
+  { token, body: { image: '' } },
+);
+check('an empty image clears the picture', clearedImg.status === 200, `${clearedImg.status}`);
+check(
+  'and it is gone from the category',
+  !(clearedImg.data?.categories || []).find((c) => c.name === PIC)?.image,
+);
+
+/* --- Clean up -------------------------------------------------------- */
+await refile(originalCategory);
+await call('DELETE', `/menu/edit/${storeId}/categories/${encodeURIComponent(PIC)}`, {
+  token,
+});
+
 const finalCats = (await call('GET', `/menu/edit/${storeId}`, { token })).data?.categories || [];
 check(
-  'cleanup removed the categories this test created',
-  !finalCats.some((c) => c.name === CAT || c.name === MERGE),
+  'cleanup removed every category this test created',
+  !finalCats.some((c) => c.name === CAT || c.name === MERGE || c.name === PIC),
   finalCats.map((c) => c.name).join(', '),
 );
 const restored = (await call('GET', `/products/${pizza.id}`, { token })).data?.product;
@@ -240,4 +404,18 @@ check(
 );
 
 console.log('\nfinal categories:', JSON.stringify(finalCats));
+
+/* Re-fetch for the final picture check. `publicStore` was captured part-way
+   through this file, BEFORE the cleanup ran, so reading it again here would
+   report the store as it looked mid-test - which is how an earlier version of
+   this file "found" an orphan that the API had in fact already removed. */
+const finalStore = await fetch(`${BASE}/stores/${slug}`).then((r) => r.json());
+const finalImageKeys = Object.keys(finalStore?.store?.categoryImages || {});
+check(
+  'no category picture is left orphaned on the store',
+  !finalImageKeys.some((k) => k.startsWith('test section')),
+  JSON.stringify(finalImageKeys),
+);
+console.log('pictures on the public store:', JSON.stringify(finalImageKeys));
+
 

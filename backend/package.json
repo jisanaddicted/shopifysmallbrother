@@ -14,6 +14,7 @@
     "test:variants": "node scripts/testVariants.mjs && node scripts/testProductModel.mjs && node scripts/testVariantParity.mjs",
     "test:variants:db": "node scripts/testVariantIntegration.mjs",
     "test:categories": "node scripts/testCategories.mjs",
+    "test:categories:clean": "node scripts/cleanupTestCategories.mjs",
     "test:sections": "node scripts/testSections.mjs",
     "test:bulk": "node scripts/testBulkEdit.mjs"
   },

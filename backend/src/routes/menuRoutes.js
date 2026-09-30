@@ -5,6 +5,7 @@ import {
   saveStoreMenu,
   createCategory,
   deleteCategory,
+  setCategoryImage,
 } from '../controllers/menuController.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -35,15 +36,22 @@ router.put('/edit/:storeId', saveStoreMenu);
  * The theme builder's category panel.
  *
  * POST   /api/menu/edit/:storeId/categories        — create one ({ name })
+ * PUT    /api/menu/edit/:storeId/categories/:name/image — set/clear its picture
  * DELETE /api/menu/edit/:storeId/categories/:name  — delete one, and unfile
  *                                                      the products in it
  *
- * Both sit under `/edit/` and are registered after the auth middleware above,
+ * All sit under `/edit/` and are registered after the auth middleware above,
  * so they inherit the same owner / store-admin / platform-admin check as the
  * menu itself. `:name` is the category NAME rather than an id - a category is
  * a heading, and headings are words (see models/Store.js).
+ *
+ * The image route is declared BEFORE the delete route on purpose. They share
+ * the `/categories/:name` prefix and differ only by method, so order does not
+ * actually decide it - but listing the more specific one first keeps the
+ * intent obvious to whoever reads this next.
  */
 router.post('/edit/:storeId/categories', createCategory);
+router.put('/edit/:storeId/categories/:name/image', setCategoryImage);
 router.delete('/edit/:storeId/categories/:name', deleteCategory);
 
 export default router;

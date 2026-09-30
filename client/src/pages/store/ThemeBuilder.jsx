@@ -132,6 +132,15 @@ export default function ThemeBuilder() {
   const [categoryName, setCategoryName] = useState('');
   const [categoryBusy, setCategoryBusy] = useState(false);
 
+  /* Which category's picture is uploading, and its local preview.
+     `categoryImageBusy` is the NAME rather than a boolean, so two rows can
+     never show a spinner at once and the spinner is unambiguously on the row
+     being uploaded. The preview is an object URL shown immediately, replaced by
+     the server's copy on success and dropped on failure - the same
+     optimistic-then-reconcile shape the store logo uses. */
+  const [categoryImageBusy, setCategoryImageBusy] = useState('');
+  const [categoryImagePreview, setCategoryImagePreview] = useState({});
+
   // Which menu rows are showing their children, and which are showing their
   // edit form. Two separate sets on purpose: browsing the tree and editing an
   // item are different intentions, and collapsing a parent must never throw
@@ -584,6 +593,90 @@ export default function ThemeBuilder() {
     }
   };
 
+  /* --- Category pictures ------------------------------------------------
+     Each category can carry one picture, which is what the storefront shows
+     on its section card. Saved per category rather than through the bulk menu
+     save, for the same reason categories are: a picture is not part of the nav
+     tree, and uploading one must not depend on the merchant pressing "Save
+     menu" with unrelated pending edits. */
+
+  /** The image to actually show for a row: the local preview while uploading,
+   *  otherwise whatever the server last returned. */
+  const categoryImageFor = (category) =>
+    categoryImagePreview[category.name] || category.image || '';
+
+  const handleCategoryImage = async (event, name) => {
+    const file = event.target.files?.[0];
+    // Cleared immediately so picking the SAME file twice in a row still fires
+    // a change event - without this, re-picking a rejected image does nothing.
+    event.target.value = '';
+    if (!file || !store || categoryImageBusy) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file (PNG, JPG, WEBP…).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('That image must be under 5 MB.');
+      return;
+    }
+
+    const localUrl = URL.createObjectURL(file);
+    setCategoryImageBusy(name);
+    setCategoryImagePreview((prev) => ({ ...prev, [name]: localUrl }));
+    setError('');
+    setSuccess('');
+
+    try {
+      const next = await menuService.setCategoryImage(
+        store._id || store.id,
+        name,
+        file,
+      );
+      setCategories(next);
+      setSuccess(`Picture updated for "${name}".`);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      // Put the row back to what the server still has, so a failed upload
+      // never leaves a picture on screen that was never saved.
+      setCategoryImagePreview((prev) => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
+      setError(err.message || 'Could not upload that picture.');
+    } finally {
+      // Released either way, and the object URL dropped once the server's copy
+      // (or the revert) is what the row is showing.
+      URL.revokeObjectURL(localUrl);
+      setCategoryImageBusy('');
+    }
+  };
+
+  const handleCategoryImageRemove = async (name) => {
+    const storeId = store?._id || store?.id;
+    if (!storeId || categoryImageBusy) return;
+
+    setCategoryImageBusy(name);
+    setError('');
+    setSuccess('');
+    try {
+      const next = await menuService.setCategoryImage(storeId, name, '');
+      setCategories(next);
+      setCategoryImagePreview((prev) => {
+        const rest = { ...prev };
+        delete rest[name];
+        return rest;
+      });
+      setSuccess(`Picture removed from "${name}".`);
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.message || 'Could not remove that picture.');
+    } finally {
+      setCategoryImageBusy('');
+    }
+  };
+
   const handleStoreSelect = (storeId) => {
     const s = allStores.find((st) => String(st._id) === storeId);
         applyStore(s);
@@ -978,6 +1071,8 @@ export default function ThemeBuilder() {
               under that name as its own section — the title, with the products
               in a row you swipe sideways. Create the category here first,
               then set it on your products and the section fills itself in.
+              Add a picture to a category and it becomes the card at the head
+              of that section.
             </p>
           </div>
 
@@ -1009,29 +1104,72 @@ export default function ThemeBuilder() {
             </p>
           ) : (
             <ul className="cat-panel__list">
-              {categories.map((category) => (
-                <li key={category.name} className="cat-row">
-                  <span className="cat-row__name">{category.name}</span>
-                  {/* The count is the point of the panel: it shows which
-                      sections are real and which are still waiting for their
-                      first product. */}
-                  <span
-                    className={`badge${category.count ? ' badge--info' : ' badge--muted'}`}
-                  >
-                    {category.count} {category.count === 1 ? 'product' : 'products'}
-                  </span>
-                  <button
-                    type="button"
-                    className="menu-row__action menu-row__action--danger"
-                    onClick={() => handleCategoryRemove(category.name)}
-                    disabled={categoryBusy}
-                    title={`Delete ${category.name}`}
-                    aria-label={`Delete ${category.name}`}
-                  >
-                    <Icon name="trash" />
-                  </button>
-                </li>
-              ))}
+              {categories.map((category) => {
+                const image = categoryImageFor(category);
+                const imageBusy = categoryImageBusy === category.name;
+
+                return (
+                  <li key={category.name} className="cat-row">
+                    {/* The thumbnail doubles as the upload button. A merchant
+                        is aiming at the picture they can see, not at a
+                        separate "choose file" control next to it. */}
+                    <label
+                      className={`cat-row__thumb${imageBusy ? ' is-busy' : ''}`}
+                      title={
+                        image
+                          ? `Change the picture for ${category.name}`
+                          : `Add a picture for ${category.name}`
+                      }
+                    >
+                      {image ? (
+                        <img src={image} alt="" />
+                      ) : (
+                        <Icon name="plus" />
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        disabled={Boolean(categoryImageBusy)}
+                        onChange={(e) => handleCategoryImage(e, category.name)}
+                      />
+                    </label>
+
+                    <span className="cat-row__name">{category.name}</span>
+                    {/* The count is the point of the panel: it shows which
+                        sections are real and which are still waiting for their
+                        first product. */}
+                    <span
+                      className={`badge${category.count ? ' badge--info' : ' badge--muted'}`}
+                    >
+                      {category.count} {category.count === 1 ? 'product' : 'products'}
+                    </span>
+
+                    {image ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs btn-danger"
+                        onClick={() => handleCategoryImageRemove(category.name)}
+                        disabled={Boolean(categoryImageBusy)}
+                        title={`Remove the picture for ${category.name}`}
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="menu-row__action menu-row__action--danger"
+                      onClick={() => handleCategoryRemove(category.name)}
+                      disabled={categoryBusy}
+                      title={`Delete ${category.name}`}
+                      aria-label={`Delete ${category.name}`}
+                    >
+                      <Icon name="trash" />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

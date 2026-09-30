@@ -92,6 +92,48 @@ const storeSchema = new mongoose.Schema(
         return names;
       },
     },
+
+    // -------------------------------------------------------------------------
+    // Category images, keyed by the lowercased category name.
+    //
+    // Deliberately a separate map rather than a field on the category entry. The
+    // `categories` list above is plain strings on purpose - that is what keeps
+    // grouping a trivial fold over the products a store already loads, with no
+    // join and nothing to migrate. Turning those strings into sub-documents to
+    // hang an image off each one would give every existing read, write and
+    // comparison in the app a new shape to understand, for the sake of one
+    // optional field.
+    //
+    // So the IMAGE is the side data, keyed by name, and a category is still
+    // just a name. The key is lowercased because category matching is
+    // case-insensitive everywhere else (see `listCategories`): storing the key
+    // as typed would mean "Drinks" and "drinks" each got their own picture and
+    // one of them silently lost.
+    //
+    // A plain object, not a Mongoose Map. A Map serialises to `{}` through
+    // `toJSON` unless `flattenMaps` is enabled, and this data has to reach the
+    // storefront over JSON - a Map would quietly ship empty and every category
+    // would come back imageless with no error anywhere.
+    // -------------------------------------------------------------------------
+    categoryImages: {
+      type: Object,
+      default: () => ({}),
+      set: (value) => {
+        /* Normalise keys to lowercase and drop blanks, for the same reason the
+           category list does. Values pass through untouched: the controller is
+           what validates that a value is a real image. */
+        const out = {};
+
+        for (const [rawKey, rawValue] of Object.entries(value || {})) {
+          const key = String(rawKey || '').trim().toLowerCase();
+          const image = String(rawValue ?? '').trim();
+          if (!key || !image) continue;
+          out[key] = image;
+        }
+
+        return out;
+      },
+    },
   },
   {
     timestamps: true,

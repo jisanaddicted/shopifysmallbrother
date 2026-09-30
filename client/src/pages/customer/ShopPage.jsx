@@ -7,13 +7,14 @@ import StoreNav from '../../components/storefront/StoreNav';
 import StoreSearchBar from '../../components/storefront/StoreSearchBar';
 import StoreMenuDrawer from '../../components/storefront/StoreMenuDrawer';
 import CategoryRail from '../../components/storefront/CategoryRail';
+import CategorySlider from '../../components/storefront/CategorySlider';
 import MobileTabs from '../../components/storefront/MobileTabs';
 import CustomerAccountSheet from '../../components/storefront/CustomerAccountSheet';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import storeService from '../../services/storeService';
 import menuService from '../../services/menuService';
-import { ROUTES, rememberStoreVisit } from '../../utils/constants';
+import { categoryPath, ROUTES, rememberStoreVisit } from '../../utils/constants';
 
 /**
  * Heading for products filed under no category.
@@ -61,6 +62,53 @@ export default function ShopPage() {
     }
     return ['all', ...seen];
   }, [products]);
+
+  /*
+   * Category name -> picture, resolved once per store.
+   *
+   * The map on the store is keyed by the LOWERCASED name (see models/Store.js),
+   * because category matching is case-insensitive everywhere else: a product
+   * filed as "DRINKS" is the same section as one filed as "Drinks". So the
+   * lookup is lowercased here too, and the section gets its picture even when
+   * the spelling on the product differs from the spelling the merchant typed.
+   *
+   * Read defensively: this ships as a plain object, and an older store document
+   * that predates the field has nothing there at all.
+   */
+  const imagesByCategory = useMemo(() => {
+    const raw = store?.categoryImages;
+    const out = new Map();
+    if (!raw || typeof raw !== 'object') return out;
+
+    for (const [key, value] of Object.entries(raw)) {
+      const image = String(value || '').trim();
+      if (image) out.set(key.toLowerCase(), image);
+    }
+    return out;
+  }, [store]);
+
+  /* Every category the store trades in, with its picture and product count -
+     the data behind the slider. Built from ALL the store's products, not from
+     `visible`, so the strip stays a stable navigation aid: a shopper searching
+     for "cola" still sees the full set of categories to jump to rather than a
+     strip that has collapsed to the one that happened to match. */
+  const stripCategories = useMemo(() => {
+    const groups = new Map();
+
+    for (const product of products) {
+      const name = String(product.category || '').trim() || UNCATEGORISED;
+      if (!groups.has(name)) groups.set(name, []);
+      groups.get(name).push(product);
+    }
+
+    return [...groups.entries()]
+      .map(([name, items]) => ({
+        name,
+        count: items.length,
+        image: imagesByCategory.get(name.toLowerCase()) || '',
+      }))
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  }, [products, imagesByCategory]);
 
   /* Read ?category= from the URL so nav links filter the catalogue. */
   useEffect(() => {
@@ -237,6 +285,28 @@ export default function ShopPage() {
         the header; a shopper who does not never has to scroll past a
         paragraph about it.
       */}
+
+      {/*
+        The category card slider. Deliberately OUTSIDE `.store-sections` and
+        with no media query of its own, so it renders at every screen size.
+
+        It used to live inside each per-category rail, which reads as tidier -
+        one card per section, no separate strip. That was wrong twice over: the
+        `.store-sections` block is hidden above 640px, so on any desktop the
+        cards vanished entirely; and even on a phone it made a shopper swipe
+        sideways to find out what categories the shop had. A single strip at the
+        top answers "what is here?" in one glance, and stays put as a way back
+        when a section is filtered down to a single category.
+      */}
+      <CategorySlider
+        categories={stripCategories}
+        activeCategory={category}
+        /* Each card links to that category's own page rather than filtering the
+           storefront in place. A category is somewhere a shopper can BE, not a
+           toggle they flip - so it gets a URL, survives a refresh, can be
+           shared, and leaves Back pointing at the storefront. */
+        linkFor={(name) => categoryPath(slug, name)}
+      />
 
       {visible.length === 0 ? (
         <p className="empty">

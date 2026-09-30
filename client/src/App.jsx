@@ -41,6 +41,7 @@ const OrderTracker = lazy(() => import('./pages/customer/OrderTracker'));
 const PaymentFailed = lazy(() => import('./pages/customer/PaymentFailed'));
 const PaymentSuccess = lazy(() => import('./pages/customer/PaymentSuccess'));
 const ShopPage = lazy(() => import('./pages/customer/ShopPage'));
+const CategoryPage = lazy(() => import('./pages/customer/CategoryPage'));
 const Storefront = lazy(() => import('./pages/customer/Storefront'));
 const MerchantDashboard = lazy(() => import('./pages/store/MerchantDashboard'));
 const StoreRiderAnalytics = lazy(() =>
@@ -367,6 +368,12 @@ export default function App() {
 
           {/* A store's public page - anyone with the link, even logged out. */}
           <Route path={ROUTES.SHOP} element={<ShopPage />} />
+
+          {/* One category of a store, opened from the category card slider.
+              Declared AFTER the storefront route: /s/:slug is a fixed
+              two-segment path and cannot swallow this three-segment one, but
+              keeping the more general route first reads correctly. */}
+          <Route path={ROUTES.SHOP_CATEGORY} element={<CategoryPage />} />
 
           <Route path="*" element={<NotFound />} />
           </Routes>
