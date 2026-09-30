@@ -63,6 +63,42 @@ check('CSS gives the track a horizontal scroller', /\.rail__track[\s\S]{0,400}ov
 check('CSS stops cards from stretching', /\.rail__track > \.product-card[\s\S]{0,120}flex:\s*0 0 auto/.test(css));
 check('CSS pins each card to a fixed width', /\.rail__track > \.product-card[\s\S]{0,200}width:/.test(css));
 check('CSS snaps to a card as you scroll', /\.rail__track[\s\S]{0,400}scroll-snap-type/.test(css));
+
+/* The arrows sit with the section heading, not in a row of their own below the
+   cards. Below, they sat 0.35rem from the cards they control and 1.75rem from the
+   NEXT section's heading - so they read as belonging to the section below, in a
+   34px row of mostly empty space. These pin the placement and the rhythm. */
+const railSrc = fs.readFileSync(
+  new URL('../../client/src/components/storefront/CategoryRail.jsx', import.meta.url),
+  'utf8',
+);
+check(
+  'the arrows live inside the heading, not after the track',
+  /rail__head[\s\S]{0,700}rail__nav[\s\S]{0,1400}<\/header>/.test(railSrc),
+);
+check(
+  'and the heading closes before the track begins',
+  /<\/header>[\s\S]{0,400}rail__track/.test(railSrc),
+);
+check('there is exactly one nav row, not two', (railSrc.match(/rail__nav/g) || []).length === 1);
+check(
+  'the arrows do not steal the track\'s width (the track still spans the section)',
+  /\.rail__nav \{[\s\S]{0,200}flex-shrink: 0/.test(css) &&
+    !/\.rail__nav \{[\s\S]{0,200}margin-top/.test(css),
+);
+check(
+  'the header centres its rows rather than baselining against a round button',
+  /\.rail__head \{[\s\S]{0,120}align-items: center/.test(css),
+);
+check(
+  'the title can shrink so a long name cannot push the arrows off-screen',
+  /\.rail__labels \{[\s\S]{0,160}flex: 1 1 auto[\s\S]{0,60}min-width: 0/.test(css),
+);
+check(
+  'a heading sits closer to its own cards than to the next section (the rhythm)',
+  /\.rail__head \{[\s\S]{0,600}margin-bottom: 0\.75rem/.test(css) &&
+    /\.store-sections \{[\s\S]{0,120}gap: 1\.6rem/.test(css),
+);
 check(
   'the grid takes over above the phone breakpoint',
   /@media \(min-width: 641px\)[\s\S]{0,400}store-sections__grid[\s\S]{0,80}display:\s*grid/.test(css),

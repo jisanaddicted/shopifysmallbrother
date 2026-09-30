@@ -4653,10 +4653,17 @@ ol {
  * heading and for search engines, instead of making them a phone-only
  * afterthought.
  */
+/* Section-to-section spacing.
+
+   1.6rem, down from 1.75rem. The arrows used to occupy a 34px row of their own
+   under every section's cards, and 1.75rem was chosen to look right WITH that
+   row present. With the row gone (they moved into the header) the same gap reads
+   as a slightly loose break between one category's cards and the next
+   category's heading. */
 .store-sections {
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
+  gap: 1.6rem;
 }
 
 /* The grid is the desktop view. Hidden wherever the rails are shown, and vice
@@ -4665,12 +4672,35 @@ ol {
   display: none;
 }
 
+/* Heading + arrows on one row.
+
+   `align-items: center` rather than `baseline`: the baseline aligned the title's
+   text with the product-count text, which is right when the header holds only
+   text. With a 34px circular button in the row, a baseline alignment drags the
+   title down to sit on the button's baseline and leaves it visibly off-centre. */
 .rail__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.7rem;
+  gap: 0.6rem;
+  /* Heading to cards. Deliberately smaller than the gap between sections: the
+     heading belongs to the cards below it, so it sits closer to them than they
+     do to the next section. That relationship is what makes the vertical rhythm
+     read as "category, category" instead of one undifferentiated list. */
+  margin-bottom: 0.75rem;
+}
+
+/* The title and the count, kept baseline-aligned with each other now that the
+   arrows have taken over the row's vertical centring.
+
+   `flex: 1 1 auto` with `min-width: 0` so a long category name shrinks and wraps
+   instead of pushing the arrows off the right edge of the screen. */
+.rail__labels {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .rail__title {
@@ -4743,21 +4773,26 @@ ol {
   scroll-snap-align: start;
 }
 
-/* The arrows, centred UNDER the row.
+/* The arrows, at the RIGHT of the section heading.
 
-   Beside the track they ate a card's worth of width AND sat exactly where a
-   thumb is already swiping, so a tap fought the gesture. Below the row they
-   cost no width, and centred they are the easiest place on a phone to reach
-   without changing grip.
+   They used to sit in a row of their own under the cards. Beside the track they
+   ate a card's worth of width; below the track they cost no width but sat 0.35rem
+   from the cards and 1.75rem from the next section's heading, which made them
+   read as belonging to the section BELOW, in a 34px row of mostly empty space.
+
+   In the heading they cost the cards nothing (the header is its own row), sit
+   with the label of the thing they scroll, and remove the orphan row entirely.
+
+   `flex-shrink: 0` so they never compress: a squeezed pair of circles looks
+   broken, and it is the title that should give way instead.
 
    Both are always rendered rather than hidden at the ends: a button that
    appears and disappears shifts the row's content under a finger mid-swipe. */
 .rail__nav {
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.35rem;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 /* --- Category card slider ---------------------------------------------- */

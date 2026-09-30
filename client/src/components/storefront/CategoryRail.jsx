@@ -49,19 +49,73 @@ export default function CategoryRail({ name, products, showAllLabel }) {
 
   return (
     <section className="rail" aria-labelledby={`rail-${slugifyName(name)}`}>
+      {/* The heading, and the two arrows that scroll this section, share one row.
+
+          The arrows used to sit in a row of their own UNDER the cards. That looked
+          wrong for a reason that is easy to measure: only 0.35rem separated them
+          from the cards they control, but the 1.75rem gap between sections
+          separated them from the NEXT section's heading. The arrows therefore read
+          as belonging to the section below, and the row they occupied was 34px of
+          mostly empty space per category.
+
+          In the header they sit with the label of the thing they scroll, which is
+          where a shopper looks for "there is more here", and the whole orphaned
+          row disappears. Note this is NOT the old "beside the track" arrangement
+          that was removed for eating a card's width - the track keeps the full
+          width of the section either way, because the header is its own row. */}
       <header className="rail__head">
-        <h2 className="rail__title" id={`rail-${slugifyName(name)}`}>
-          {name}
-        </h2>
-        {showAllLabel ? <span className="rail__count">{showAllLabel}</span> : null}
+        <div className="rail__labels">
+          <h2 className="rail__title" id={`rail-${slugifyName(name)}`}>
+            {name}
+          </h2>
+          {showAllLabel ? <span className="rail__count">{showAllLabel}</span> : null}
+        </div>
+
+        {/* Both are always rendered rather than hidden at the ends: a button that
+            appears and disappears shifts the row's content under the shopper's
+            finger mid-swipe, and a disabled one is simply quieter. */}
+        <div className="rail__nav">
+          <button
+            type="button"
+            className="rail__arrow"
+            onClick={() => scrollByCard(-1)}
+            aria-label={`Scroll ${name} left`}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path
+                d="M15 5l-7 7 7 7"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            className="rail__arrow"
+            onClick={() => scrollByCard(1)}
+            aria-label={`Scroll ${name} right`}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path
+                d="M9 5l7 7-7 7"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
       </header>
 
-      {/* The track gets the FULL width of the section.
-          It used to share a row with the two arrows, which cost about 76px of a
-          360px phone's content width (two 30px buttons plus their gaps) - enough
-          to push the second product card off the edge. Moving the arrows to
-          their own row below gives the track every pixel, so a whole number of
-          cards fits instead of one and a sliver. */}
+      {/* The track gets the FULL width of the section, so a whole number of cards
+          fits: with the arrows sharing its line, two 30px buttons plus gaps took
+          ~76px of the ~304px available at 360px, leaving one card and a sliver. */}
       <div
         className="rail__track"
         ref={trackRef}
@@ -86,54 +140,6 @@ export default function CategoryRail({ name, products, showAllLabel }) {
         {products.map((product) => (
           <ProductCard key={product._id || product.id} product={product} />
         ))}
-      </div>
-
-      {/* The arrows sit BELOW the row, centred.
-
-          Beside the track they ate a card's worth of width and sat exactly
-          where a thumb is already swiping, so a tap fought the gesture. Under
-          the row they cost no width at all, and the middle of the bottom of a
-          section is the easiest place on a phone to reach without changing grip.
-
-          Both are always rendered rather than hidden at the ends: a button that
-          appears and disappears shifts the row's content under the shopper's
-          finger mid-swipe, and a disabled one is simply quieter. */}
-      <div className="rail__nav">
-        <button
-          type="button"
-          className="rail__arrow"
-          onClick={() => scrollByCard(-1)}
-          aria-label={`Scroll ${name} left`}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path
-              d="M15 5l-7 7 7 7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          className="rail__arrow"
-          onClick={() => scrollByCard(1)}
-          aria-label={`Scroll ${name} right`}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-            <path
-              d="M9 5l7 7-7 7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
       </div>
     </section>
   );
