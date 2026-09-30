@@ -1242,6 +1242,93 @@ ol {
   text-decoration: none;
 }
 
+/* The Theme 2 category rows in the drawer.
+
+   These reuse `.smenu__link` and the `smenu__item`/`smenu__sub` nesting wholesale
+   - a category in the drawer and a menu item in the drawer are the same kind of
+   thing to a thumb, and making them look different would mean teaching a
+   shopper a second visual language for "a row you can open". Only the parts that
+   are genuinely new are added here. */
+
+/* A category is a <button>, not an <a>: it changes the URL rather than leaving
+   the page, so it must not look or behave like a link out. These three lines put
+   it back to looking like the menu rows it sits beside - a button's default
+   border, background and text alignment are what make it read as a different
+   control, and none of them are wanted here. */
+.smenu__link--tree {
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* The name, allowed to shrink so a long category name wraps or ellipses instead
+   of shoving the count off the edge of a narrow phone. */
+.smenu__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* How much is behind this category. The same number the card on the page shows -
+   it tells a shopper whether a branch is worth opening before they open it. */
+.smenu__count {
+  flex: 0 0 auto;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* Where the shopper already is. Marked in the drawer as well as on the page,
+   because the drawer can be open over either - without this, re-opening it from
+   a subcategory looks like the same list as the top of the store. */
+.smenu__link--tree.is-current {
+  color: var(--brand-dark);
+  font-weight: 700;
+}
+
+.smenu__link--tree.is-current .smenu__count {
+  background: var(--brand);
+  color: #fff;
+}
+
+/* "← All categories" above the tree. Sits outside the list because it is a way
+   out of the tree, not a category in it. */
+.smenu__top {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  color: var(--brand-dark);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Separates the tree from the merchant's own links beneath it. */
+.smenu__heading {
+  margin: 1.25rem 0 0.25rem;
+  padding: 0 1rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .smenu__toggle {
   display: flex;
   align-items: center;

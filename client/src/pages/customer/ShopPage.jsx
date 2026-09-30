@@ -78,6 +78,15 @@ export default function ShopPage() {
   const [accountOpen, setAccountOpen] = useState(false);
   const searchRef = useRef(null);
 
+  /* The Theme 2 category tree, held HERE rather than fetched by each component
+     that needs it.
+
+     Two components want it - the drill-down itself and the side menu - and they
+     must never disagree, or the shopper taps a branch in the drawer and the page
+     below shows somewhere else. One fetch, one array, one source of truth. */
+  const [tree, setTree] = useState([]);
+  const [treeLoading, setTreeLoading] = useState(false);
+
   /* The filter's options, in the SAME names the sections use.
 
      Built from `sectionNameOf`, not from `product.category`, so every section on
@@ -196,6 +205,27 @@ export default function ShopPage() {
       setStore(data.store || null);
       setProducts(Array.isArray(data.products) ? data.products : []);
       setMenu(Array.isArray(menuData) ? menuData : []);
+
+      /* The tree comes back INSIDE the store response for a Theme 2 store, so
+         there is no third request to make.
+
+         It used to be fetched separately, after this one resolved - the client
+         cannot know whether it wants a tree until it knows the theme, and the
+         theme is in this response. That cost a shopper a whole extra round trip
+         to a database where one takes a second or more, and a second visible
+         loading state: the header would paint, then the categories would fill in
+         a moment later. Now the page arrives in one piece.
+
+         Theme 1 stores send no `tree` at all, and are not asked for one - making
+         a store that will never show categories wait on them would slow down
+         every shop not using this feature. */
+      if (data.store?.theme === THEME.TWO) {
+        setTree(Array.isArray(data.tree) ? data.tree : []);
+        setTreeLoading(false);
+      } else {
+        setTree([]);
+        setTreeLoading(false);
+      }
     } catch (err) {
       setError(err.message || 'Could not load that store.');
     } finally {
@@ -380,7 +410,9 @@ export default function ShopPage() {
         never briefly paints the Theme 1 layout on the way to the tree. */}
       {isTreeTheme ? (
         <CategoryTreeView
-          slug={slug}
+          nodes={tree}
+          loading={treeLoading}
+          error=""
           products={products}
           searchTerm={search}
         />
@@ -468,9 +500,18 @@ export default function ShopPage() {
       ) : null}
 
       {/* The store's own menu, as a drawer from the left. Opened by the
-          three-line button in the header; phones only. */}
+          three-line button in the header; phones only.
+
+          On Theme 2 the drawer leads with the CATEGORY TREE, because on that
+          theme the categories are the navigation - the merchant's menu is a
+          Theme 1 idea, and its items were built from the Theme 1 category list,
+          so leading with it would show a second, stale set of the same
+          categories. */}
       <StoreMenuDrawer
         menu={menu}
+        tree={isTreeTheme ? tree : []}
+        isTreeTheme={isTreeTheme}
+        treeLoading={treeLoading}
         open={navOpen}
         onClose={() => setNavOpen(false)}
       />

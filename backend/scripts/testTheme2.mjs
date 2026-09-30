@@ -234,10 +234,24 @@ check(
 // --- 10. Put everything back ---------------------------------------------
 await refile(null, originalCategory);
 
-const restoredTheme = await call('PATCH', `/stores/mine?storeId=${storeId}`, {
+// Put the store back on Theme 2 if anything above left it elsewhere.
+//
+// NORMALISED, not restored-to-what-I-found. This script deliberately switches
+// the store to theme1 mid-run, and an earlier version restored the value it had
+// on arrival - which meant a run killed part-way (or one that started on a store
+// already left on theme1 by an earlier killed run) left a MERCHANT'S real store
+// on the wrong theme, with their categories invisible and no way to tell why.
+// The tree is only ever edited here, so theme2 is the only correct end state.
+const settle = await call('PATCH', `/stores/mine?storeId=${storeId}`, {
   token,
-  body: { theme: originalTheme },
+  body: { theme: 'theme2' },
 });
+if (settle.status !== 200 || settle.data?.store?.theme !== 'theme2') {
+  console.log(`\n  WARNING  the store was left on ${settle.data?.store?.theme} - expected theme2.`);
+  console.log('  Set it back by hand in the Theme tab before testing anything else.');
+} else {
+  console.log('\n  the store is back on Theme 2');
+}
 check(
   'the store is back on the theme it started on',
   restoredTheme.data?.store?.theme === originalTheme,

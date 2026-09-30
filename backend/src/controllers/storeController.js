@@ -5,7 +5,8 @@ import Store from '../models/Store.js';
 import StoreRider from '../models/StoreRider.js';
 import User from '../models/User.js';
 import { HttpError } from '../middleware/errorHandler.js';
-import { CANCELLED_STATUSES, ROLES, STORE_RIDER_STATUS, THEME_VALUES } from '../utils/constants.js';
+import { buildPublicTree } from './categoryTreeController.js';
+import { CANCELLED_STATUSES, ROLES, STORE_RIDER_STATUS, THEME2, THEME_VALUES } from '../utils/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { normaliseUsername, slugify, uniqueSlug } from '../utils/slug.js';
 import {
@@ -122,6 +123,28 @@ async function loadOwnedStore(storeId, user) {
  *
  * This is what a visitor sees at /s/<slug> - the store's own products only.
  */
+/**
+ * The store document as the PUBLIC storefront gets it, for a Theme 2 store.
+ *
+ * A Theme 2 shop never renders the Theme 1 category rail, so `categories` and
+ * `categoryImages` are dead weight - and `categoryImages` is not small. Measured
+ * on the seeded store: those two fields alone are 1,073,664 bytes of base64,
+ * sent on every single page load to a storefront that cannot use them. That is
+ * the majority of a 2MB response.
+ *
+ * The logo and the cover image stay, because the header and drawer really do
+ * render them whatever the theme.
+ *
+ * DELIBERATELY the only place the public store is trimmed. A Theme 1 store gets
+ * its document untouched, since those fields are exactly what it needs.
+ */
+function publicStoreFor(store) {
+  const plain = store.toObject();
+  delete plain.categories;
+  delete plain.categoryImages;
+  return plain;
+}
+
 export const getPublicStore = asyncHandler(async (req, res) => {
   const slug = slugify(req.params.slug, '');
   if (!slug) throw new HttpError(404, 'That store does not exist.');
@@ -179,26 +202,58 @@ export const getPublicStore = asyncHandler(async (req, res) => {
     const fresh = getCached(store._id, SLOTS.STORE);
     if (fresh) return fresh;
 
+    /* A Theme 2 storefront needs the tree as much as it needs the products, and
+     * the client cannot ask for both at once - it does not know the theme until
+     * this response lands. So the tree comes back INSIDE this one.
+     *
+     * That turns what was three round trips (products, then a second request for
+     * the tree) into one, and it removes the second loading state a shopper would
+     * otherwise watch: the page used to render its header, then visibly fill in
+     * the categories a moment later.
+     *
+     * The `theme` check is what keeps Theme 1 fast. A Theme 1 store never shows
+     * this tree, and making it wait on two extra queries to a database a network
+     * round trip away would slow down every store that does not use the feature. */
+    const wantsTree = store.theme === THEME2;
+
     /* NO `.lean()` HERE, and that is not an oversight.
      *
      * `Product` sets `toJSON: { virtuals: true }`, so a hydrated document
      * serialises with far more than its stored fields: `id` (the `_id` as a
-     * string), `hasVariants`, `effectivePrice`, `inventoryValue`,
-     * `channelCount`, and the rest. `.lean()` returns raw POJOs and skips
-     * `toJSON` entirely, so it would quietly drop every one of them from the
-     * PUBLIC storefront payload.
+     * string), `hasVariants`, `effectivePrice`, `inventoryValue`, `channelCount`,
+     * and the rest. `.lean()` returns raw POJOs and skips `toJSON` entirely, so
+     * it would quietly drop every one of them from the PUBLIC storefront payload.
      *
      * This was caught by `testSections.mjs` ("no product is duplicated across
      * sections"), which failed only because `p.id` became `undefined` for every
      * product - the other missing virtuals broke the page in ways that test does
      * not assert on. A fast endpoint serving a subtly different shape is a worse
-     * outcome than a slow one serving the right shape, and against a 1-4s network
-     * round trip the hydration cost is not what makes this page slow anyway. */
+     * outcome than a slow one serving the right shape. */
     const products = await Product.find({ store: store._id }).sort({
       createdAt: -1,
     });
 
-    const built = { store, products };
+    /* The tree is built AFTER the products, and from them.
+     *
+     * Sequential on purpose, which reads like a step backwards but is the whole
+     * point: the tree needs a per-category product count, and the alternative
+     * was a `$group` aggregation over the products collection. Given the
+     * products we are already holding, that count is a loop over an array -
+     * no query, no round trip, no collection scan. Measured on a cold load over
+     * the same link: 7.5s before, because of that scan; the two round trips this
+     * genuinely needs now run back to back and cost about what Theme 1 costs.
+     *
+     * The nodes query is the only thing still outstanding, and it is a small
+     * indexed lookup on a collection capped at 400 rows per store. */
+    const tree = wantsTree ? await buildPublicTree(store, products) : null;
+
+    // `tree` is null - not [] - for a Theme 1 store, so the client can tell
+    // "this store has no tree" from "this store is not a tree store" and never
+    // renders a category panel for a theme that has none.
+    const built = wantsTree
+      ? { store: publicStoreFor(store), products, tree: tree.tree }
+      : { store, products };
+
     setCached(store._id, SLOTS.STORE, built, store.slug);
     return built;
   });

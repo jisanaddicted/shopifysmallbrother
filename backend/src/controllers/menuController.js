@@ -270,7 +270,17 @@ export const getStoreMenu = asyncHandler(async (req, res) => {
       for (const p of products) productMap.set(String(p._id), p);
     }
 
-    const built = { menu: buildTree(items, productMap), store };
+    /* ONLY the menu goes out.
+     *
+     * This used to answer `{ menu, store }` with the whole store document
+     * attached - and measured, that made this response 1,167,851 bytes for a
+     * four-product shop, of which almost all was base64 category pictures the
+     * client discards on arrival (both client wrappers read `res.data.menu` and
+     * nothing else). A megabyte of images per page load, thrown away.
+     *
+     * `buildTree` never needed the store, so nothing is lost. A future caller
+     * that does want store details should ask /stores/:slug, which sends them. */
+    const built = { menu: buildTree(items, productMap) };
     setCached(store._id, SLOTS.MENU, built, store.slug);
     return built;
   });

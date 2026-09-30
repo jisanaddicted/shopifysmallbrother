@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ProductCard from '../store/ProductCard';
-import menuService from '../../services/menuService';
 import { initials } from '../../utils/formatters';
 import {
   buildCategoryTree,
@@ -32,40 +31,23 @@ import {
  * levels deep who copies the link has to send somebody those same three levels,
  * and Back has to walk back out of them. State gives neither, and filtering in
  * place would leave Back taking the whole store away.
+ *
+ * THE TREE IS PASSED IN, not fetched here.
+ *
+ * It used to load its own, which was fine when this was the only thing that
+ * wanted it. The side menu needs the same tree now, and two components each
+ * fetching it means two requests for one answer and - worse - two moments at
+ * which they can hold different versions, so a shopper could open the drawer,
+ * see a branch that is not on the page, and tap it. `ShopPage` fetches once and
+ * hands the same array to both.
  */
-export default function CategoryTreeView({ slug, products, searchTerm }) {
+export default function CategoryTreeView({ nodes, loading, error, products, searchTerm }) {
   const [searchParams, setSearchParams] = useSearchParams();
-
-  const [nodes, setNodes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   // The node being viewed, or null for the top level. Read from the URL, so it
   // is the single source of truth: no second copy in state to fall out of step
   // with the address bar.
   const activeId = searchParams.get('c') || null;
-
-  useEffect(() => {
-    let active = true;
-
-    menuService
-      .getPublicCategoryTree(slug)
-      .then(({ tree }) => {
-        if (active) setNodes(tree);
-      })
-      .catch((err) => {
-        if (active) setError(err.message || 'Could not load the categories.');
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-
-    // `active` because a shopper on a slow connection can change store before
-    // the first response lands, and that response is for a store they have left.
-    return () => {
-      active = false;
-    };
-  }, [slug]);
 
   const tree = useMemo(() => buildCategoryTree(nodes), [nodes]);
 
