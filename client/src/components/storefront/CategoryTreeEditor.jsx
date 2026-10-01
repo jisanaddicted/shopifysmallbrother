@@ -516,6 +516,16 @@ function TreeRow({
               depth={depth + 1}
               open={open}
               busy={busy}
+              /* These two are what make a subcategory's picture uploadable.
+
+                 They were MISSING here, so every row below the top level got
+                 `onImage === undefined`. Clicking a subcategory thumbnail still
+                 opened the file dialog (the input is in the shared row markup),
+                 and then `onImage(node, file)` threw "onImage is not a
+                 function" - so the picture silently never reached the API, and
+                 only top-level categories could be given one. Passing them down
+                 is the entire fix; the handler itself already existed. */
+              imageBusy={imageBusy}
               addingUnder={addingUnder}
               draft={draft}
               atCap={atCap}
@@ -523,6 +533,7 @@ function TreeRow({
               onStartAdding={onStartAdding}
               onDraft={onDraft}
               onSubmit={onSubmit}
+              onImage={onImage}
               onRemove={onRemove}
             />
           ))}
