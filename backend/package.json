@@ -24,6 +24,7 @@
     "test:categories:clean": "node scripts/cleanupTestCategories.mjs",
     "test:tree": "node scripts/testCategoryTree.mjs",
     "test:theme2": "node scripts/testTheme2.mjs",
+    "test:logo": "node scripts/testLogoSize.mjs",
     "test:filing": "node scripts/testProductFiling.mjs",
     "test:sections": "node scripts/testSections.mjs",
     "test:bulk": "node scripts/testBulkEdit.mjs"

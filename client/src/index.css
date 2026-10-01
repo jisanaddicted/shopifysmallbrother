@@ -29,6 +29,18 @@
   --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.07);
   --font: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial,
     sans-serif;
+
+  /* --- Storefront logo ----------------------------------------------------
+     The header logo's box: the size the merchant set in their Theme tab
+     (`Store.logoSize` -> `--store-logo-size`), as a LENGTH rather than a
+     number, because the storefront caps it against the viewport with `min()`.
+
+     That cap is the whole reason it is a length and not a multiplier: a 200px
+     logo is a deliberate choice on a desktop and a broken header on a phone, so
+     the phone rules below shrink it and then still let the screen have the last
+     word. Declared here with the default, so a store that has never set a size
+     renders exactly as it did before the control existed. */
+  --store-logo-size: 96px;
 }
 
 /* --- Reset ---------------------------------------------------------------- */
@@ -141,6 +153,22 @@ ol {
 
 .small {
   font-size: 0.82rem;
+}
+
+/* Kept in the accessibility tree, kept off the screen. Needed where the store
+   is identified by its logo alone - the storefront header prints no name beside
+   the image, so the name has to survive somewhere for a screen reader. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .block {
@@ -700,61 +728,135 @@ ol {
   white-space: nowrap;
 }
 
-/* Store header: logo left, cart + account icons right (public storefront). */
+/* Store header: logo, cart + account icons (public storefront).
+
+   THREE cells - menu button | logo | icon buttons - rather than the two ends
+   of a flex row, because the logo has to be able to sit in the MIDDLE on a
+   phone (centred, with the burger and the icons balancing either side of it)
+   while staying hard against the left edge on a desktop. One DOM, two layouts:
+   what changes between them is the column template and each cell's
+   `justify-self`, so there is no second copy of this header to keep in step.
+
+   The logo IS the store's identity here: no name is printed beside it, and no
+   border, padding or backing panel around it - a framed box turns a brand mark
+   into what looks like an avatar thumbnail. Its box comes from the design
+   tokens, so a merchant's Theme-tab size choice scales it everywhere it is
+   drawn. */
 .store-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  /* No column gap here on purpose: the middle track takes the slack, and a gap
+     would nudge the logo off the left edge by the width of the menu-button cell
+     - which is zero on a desktop, where that button is hidden. Phones set their
+     own gap, because there the cells are separated by design. */
+  column-gap: 0;
   padding: 0.7rem 0.25rem;
 }
 
 .store-header__brand {
   display: flex;
   align-items: center;
+  justify-self: start;
+  /* The gap the storefront header no longer needs (its brand cell holds only
+     the menu button) but Checkout's does - it puts the logo and its heading in
+     one row, and they must not touch. */
   gap: 0.65rem;
   min-width: 0;
 }
 
-.store-header__logo {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  padding: 3px;
+/* The logo's own cell, so centring it does not mean centring the menu button
+   with it. */
+.store-header__identity {
+  justify-self: start;
+  min-width: 0;
+}
+
+/* One box, shared by the uploaded logo and the initials that stand in for it,
+   so the header cannot jump when a merchant finally uploads one. */
+.store-header__logo,
+.store-header__mark {
+  --logo-box: var(--store-logo-size);
+  /* How WIDE a logo is allowed to get before it starts eating the header. A
+     wordmark is several times wider than it is tall, so it needs a limit of its
+     own - the phone value is set in the media query below. */
+  --logo-max-width: min(320px, 38vw);
   flex: 0 0 auto;
 }
 
+/* The IMAGE is sized by its HEIGHT, never fitted into a square box.
+ *
+ * This is the fix for a logo that looks far too small at the size the merchant
+ * asked for. `object-fit: contain` in a square shrinks a wide wordmark until it
+ * fits the WIDTH: a logo 4x wider than it is tall ends up a quarter of the
+ * requested size, and no amount of dragging the slider fixes it, because the box
+ * is already as big as it is allowed to be. `max-height` with auto dimensions
+ * lets the logo be as tall as it was asked to be and as wide as its own shape
+ * needs - which is what "make it bigger" means to the person looking at it.
+ *
+ * `max-height` and `max-width` together still preserve the aspect ratio, so the
+ * width cap above shrinks a very wide logo rather than squashing it. */
+.store-header__logo {
+  display: block;
+  width: auto;
+  height: auto;
+  max-height: var(--logo-box);
+  max-width: var(--logo-max-width);
+  object-fit: contain;
+}
+
+/* The initials fallback has no shape of its own to honour, so it stays square
+   and uses the box for both sides. */
 .store-header__mark {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 22px;
   background: #123524;
   color: #fff;
   font-weight: 700;
-  font-size: 0.95rem;
+  /* A share of the box rather than a fixed size, or the initials would sit tiny
+     in a 200px logo and overflow a 48px one. */
+  font-size: calc(var(--logo-box) * 0.26);
   letter-spacing: 0.02em;
 }
 
-.store-header__name {
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
-  font-weight: 700;
-  font-size: 1.25rem;
-  letter-spacing: 0.01em;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Phones: the logo is centred. Equal outer tracks are what centre it exactly -
+   the actions cell is wider than the menu button (two icons to one), and a
+   `1fr auto` split would leave the logo visibly off-centre by that
+   difference. 768px is the breakpoint the header's burger already uses, so the
+   centring and the control it sits between appear together.
+
+   The size is reduced to roughly two thirds AND capped at a third of the
+   screen, which are two different jobs: the ratio is what makes one number look
+   right on a phone AND a desktop, and the cap is the last word for a merchant
+   who drags the slider all the way up - at 36vw a logo can never take the room
+   the cart and account buttons need to stay reachable. */
+@media (max-width: 768px) {
+  .store-header {
+    grid-template-columns: 1fr auto 1fr;
+    column-gap: 0.5rem;
+  }
+  .store-header__brand,
+  .store-header__identity {
+    justify-self: center;
+  }
+  .store-header__logo,
+  .store-header__mark {
+    --logo-box: min(calc(var(--store-logo-size) * 0.66), 36vw);
+    /* A phone has far less room for a wide wordmark than a desktop does, and
+       the two icon buttons plus the burger must keep theirs. */
+    --logo-max-width: 46vw;
+  }
 }
 
 .store-header__actions {
   display: flex;
   align-items: center;
+  /* Pinned right, and not left to stretch. Inside the phone layout's outer
+     `1fr` track a stretched flex row would lay its icons out from the left
+     edge of that track - which is the middle of the header - instead of from
+     the right edge of the screen. */
+  justify-self: end;
   gap: 0.35rem;
 }
 
@@ -802,10 +904,6 @@ ol {
 }
 
 @media (max-width: 640px) {
-  .store-header__name {
-    font-size: 1.05rem;
-    max-width: 46vw;
-  }
   .store-header__icon-btn {
     width: 38px;
     height: 38px;
@@ -3940,27 +4038,42 @@ ol {
   flex: 0 0 auto;
 }
 
+/* The preview, drawn at the storefront's own desktop size and scaled by the
+   store's chosen step, with the storefront's own bare styling - no frame, no
+   padding, no backing panel - so what a merchant approves here is literally
+   what a shopper sees. */
+.theme-logo__img,
+.theme-logo__placeholder {
+  /* The desktop end of the storefront's own box - no viewport cap here, because
+     a preview that shrank with the browser window would be measuring the wrong
+     thing. The phone's two-thirds is stated in the control's own copy instead. */
+  --logo-box: var(--store-logo-size);
+  transition: width 0.12s ease, height 0.12s ease, font-size 0.12s ease,
+    max-height 0.12s ease;
+}
+
+/* Height-driven, exactly like the storefront, and for the same reason: a preview
+   that shrank a wide wordmark to fit a square would show the merchant a logo
+   smaller than the one they are about to get. */
 .theme-logo__img {
-  width: 64px;
-  height: 64px;
+  width: auto;
+  height: auto;
+  max-height: var(--logo-box);
+  max-width: min(320px, 38vw);
   object-fit: contain;
-  border-radius: 14px;
-  background: var(--surface-alt);
-  border: 1px solid var(--line);
-  padding: 4px;
   display: block;
 }
 
 .theme-logo__placeholder {
-  width: 64px;
-  height: 64px;
+  width: var(--logo-box);
+  height: var(--logo-box);
   display: grid;
   place-items: center;
-  border-radius: 14px;
+  border-radius: 22px;
   background: #123524;
   color: #fff;
   font-weight: 700;
-  font-size: 1.2rem;
+  font-size: calc(var(--logo-box) * 0.26);
 }
 
 .theme-logo__body {
@@ -3972,6 +4085,81 @@ ol {
 
 .theme-logo__body .panel__title {
   margin: 0;
+}
+
+/* --- Logo size control (theme builder) ------------------------------------ */
+/*
+ * A slider AND a number box, showing the same value.
+ *
+ * Both, because they answer different halves of the same question. The slider
+ * is for exploring - dragging it and watching the preview grow is the fastest
+ * way to find the size you want. The number box is for landing on one exactly,
+ * which is what a merchant comparing against a design tool actually needs, and
+ * what a slider cannot do: a drag can only ever reach the steps it has.
+ */
+.logo-size {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+}
+
+.logo-size__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.logo-size__label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.logo-size__row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+/* The slider takes the slack; the number box stays exactly as wide as a three
+   digit number so the two never reflow the row while it is being dragged. */
+.logo-size__slider {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.logo-size__slider:focus-visible,
+.logo-size__number:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.logo-size__number {
+  width: 5.5rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 600;
+  text-align: center;
+}
+
+.logo-size__unit {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-left: -0.35rem;
+}
+
+/* The step being written, named in words while it is in flight. The dashed
+   border on the control is not enough on its own - see ThemePicker for why the
+   feedback has to be visible. */
+.logo-size.is-saving .logo-size__row {
+  opacity: 0.7;
 }
 
 /* --- Category panel (theme builder) ------------------------------------ */
@@ -4639,6 +4827,167 @@ ol {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+/* Sidebar + content.
+
+   A two-column grid rather than a flex row, so the content pane is sized by the
+   available width and its card grid reflows to it - the sidebar is a fixed-size
+   column and never gets squeezed by a long product name.
+
+   The columns collapse to one below 760px, where the sidebar becomes the
+   horizontal scroller further down this block. 760 rather than the 640 used by
+   the Theme 1 sections because this layout's content pane holds a card grid
+   that is already narrow (minmax(150px, 1fr)), so it needs the width sooner. */
+.treeview__layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* Sticky so the list is reachable from anywhere in the content pane. Without it
+   a shopper who scrolls a long product list has to return to the top of the
+   page to change category, which is the exact thing the sidebar exists to
+   prevent.
+
+   `calc()` accounts for the sticky breadcrumb above it; the pane is short, so
+   bounding its height to the viewport and letting it scroll internally means the
+   sidebar's own scroll is never needed at the same time as the page's. */
+.treeview__side {
+  position: sticky;
+  top: 3.2rem;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.treeview__main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.catside__title {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.catside__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.catside__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.catside__item:hover {
+  background: var(--surface-alt);
+  color: var(--ink);
+}
+
+/* The active category. A left rule rather than a fill, so a long list reads as
+   one column and the eye tracks a single line down it. */
+.catside__item.is-active {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-dark);
+  font-weight: 600;
+}
+
+/* Focus is visible on the active item too: `:focus-visible` is not cancelled by
+   `.is-active`, so a keyboard user can still see where they are. */
+.catside__item:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.catside__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* How much is behind the category. A soft counter that stays a fixed width so
+   the names stay left-aligned into a single column. */
+.catside__count {
+  flex-shrink: 0;
+  min-width: 1.5rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.catside__item.is-active .catside__count {
+  background: var(--brand);
+  color: #fff;
+}
+
+/* Below the breakpoint: one column, and the category list runs sideways across
+   the top. Native horizontal scrolling, for the same reason the product rails
+   use it (momentum, trackpad, visible scrollbar) rather than a JS drag.
+
+   `scroll-snap` lands each category squarely on the edge instead of leaving it
+   half-cut, which is what makes it feel like a list rather than a truncated
+   one. */
+@media (max-width: 760px) {
+  .treeview__layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+
+  .treeview__side {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .catside__list {
+    flex-direction: row;
+    gap: 0.4rem;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    /* Room for the scrollbar so the row is not sitting flush against the edge. */
+    padding-bottom: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .catside__list > li {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+  }
+
+  .catside__item {
+    border-color: var(--line);
+    background: var(--surface);
+  }
 }
 
 /* The breadcrumb. Sticky so the way back is always on screen - a shopper who

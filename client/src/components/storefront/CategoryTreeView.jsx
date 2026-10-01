@@ -7,6 +7,7 @@ import {
   nodeOpens,
   pathToNode,
   productsOn,
+  topLevelNodes,
 } from '../../utils/categoryTree';
 
 /**
@@ -40,6 +41,32 @@ import {
  * which they can hold different versions, so a shopper could open the drawer,
  * see a branch that is not on the page, and tap it. `ShopPage` fetches once and
  * hands the same array to both.
+ *
+ * THE SIDEBAR, AND WHY IT IS ONE LEVEL
+ *
+ * This used to be the drill-down and nothing else: one column, where the cards
+ * at the top level WERE the list of things to drill into, so choosing one
+ * replaced the list you chose from. A store with three levels meant a shopper
+ * who wanted to compare two branches had to go in, come all the way back out,
+ * and try the other one - and there was no stable list on screen to step
+ * sideways from.
+ *
+ * It is now a sidebar plus a content pane. The sidebar lists the TOP-LEVEL
+ * categories and nothing else, permanently; choosing one shows what is inside it
+ * beside the list, which is what makes comparing two branches one tap instead of
+ * a round trip out and back. Below the sidebar's breakpoint it becomes a
+ * horizontal scroller, so the same list is one flick away on a phone.
+ *
+ * LATENCY
+ *
+ * Neither the sidebar nor the pane causes a request. The whole tree arrives
+ * inside the store response (see `ShopPage`), switching category is a `?c=`
+ * query-param change that React Router settles without a network round trip, and
+ * the sidebar adds no images - the only pictures on screen are the same
+ * `loading="lazy"` card images as before. The per-node product counts the
+ * sidebar shows are counted once per products change (`productsPerNode`), not
+ * per row per keystroke, so typing in the search box does not walk the catalogue
+ * for every row.
  */
 export default function CategoryTreeView({ nodes, loading, error, products, searchTerm }) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -50,6 +77,46 @@ export default function CategoryTreeView({ nodes, loading, error, products, sear
   const activeId = searchParams.get('c') || null;
 
   const tree = useMemo(() => buildCategoryTree(nodes), [nodes]);
+
+  /* The sidebar's list: the top level, once.
+
+     `buildCategoryTree` returns exactly the roots, so this is the array itself
+     rather than a filtered copy - no second list to keep in step, and no walk on
+     every render. Memoised so typing in the search box (which re-renders this
+     component on every keystroke) does not re-derive it. */
+  const roots = useMemo(() => topLevelNodes(tree), [tree]);
+
+  /* How many products are filed directly on each node, counted ONCE per products
+     change instead of filtering the whole catalogue per sidebar row.
+
+     The naive version - `products.filter(...)` for every row - is O(rows x
+     products) on EVERY render, and this component re-renders on every keystroke
+     in the search box. With 20 categories and 400 products that is 8,000
+     comparisons per character typed, on the main thread, purely to draw a
+     number. One pass builds the count for every node at the same cost as a
+     single filter. */
+  const productsPerNode = useMemo(() => {
+    const counts = new Map();
+    for (const product of products || []) {
+      const id = String(product?.categoryId || '');
+      if (!id) continue;
+      counts.set(id, (counts.get(id) || 0) + 1);
+    }
+    return counts;
+  }, [products]);
+
+  /* What is behind a top-level category: the subcategories directly under it,
+     plus the products filed on it.
+
+     `childCount` is the server's own number, so this is correct on first paint
+     with no extra request - which is the point: the sidebar is useful before
+     anything has finished loading. */
+  const topCount = (node) => {
+    if (!node) return 0;
+    const direct = productsPerNode.get(String(node.id)) || 0;
+    const below = node.children?.length || node.childCount || 0;
+    return direct + below;
+  };
 
   // The breadcrumb, derived from the tree rather than from where the shopper came
   // from - see `pathToNode`.
@@ -124,6 +191,57 @@ export default function CategoryTreeView({ nodes, loading, error, products, sear
 
   return (
     <div className="treeview">
+      {/* Sidebar + content in ONE layout, so a shopper switching categories never
+          loses their place: the list they chose from is still on screen and the
+          content swaps beside it. Below the breakpoint the grid collapses to a
+          single column and the sidebar becomes a horizontal scroller above the
+          content - the one shape that works on a phone. */}
+      <div className="treeview__layout">
+        <aside className="treeview__side">
+          {/* TOP-LEVEL CATEGORIES ONLY.
+
+              The sidebar deliberately lists one level and no more. It used to be
+              the drill-down itself - the card grid below doubled as the list of
+              what to drill into - which meant the list a shopper picked from was
+              REPLACED by the thing they picked, at every level. There was nowhere
+              to step sideways and no stable list to come back to.
+
+              Now it is a fixed list: tap a category and the content pane shows
+              what is inside it. The tree still arrives in one payload (see the
+              note at the top of this file), so this costs no extra request. */}
+          <nav className="catside" aria-label="Categories">
+            <p className="catside__title">Categories</p>
+            <ul className="catside__list">
+              {roots.map((node) => {
+                const behind = topCount(node);
+                const isActive = activeId === node.id;
+
+                return (
+                  <li key={node.id}>
+                    <button
+                      type="button"
+                      className={`catside__item${isActive ? ' is-active' : ''}`}
+                      /* "page", not true: the sidebar persists across navigation,
+                         so the item is not the current PAGE - the content pane
+                         is. The active item is styled and marked, so the state is
+                         conveyed visually and by `aria-current` rather than by
+                         announcing it as a link to itself. */
+                      aria-current={isActive ? 'page' : undefined}
+                      onClick={() => open(node.id)}
+                    >
+                      <span className="catside__name">{node.name}</span>
+                      {behind > 0 ? (
+                        <span className="catside__count">{behind}</span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        </aside>
+
+        <div className="treeview__main">
       <nav className="crumbs" aria-label="Category">
         {/* Always a way back to the top, even AT the top, so the control does not
             appear and disappear as the shopper moves around. */}
@@ -232,6 +350,8 @@ export default function CategoryTreeView({ nodes, loading, error, products, sear
             : `There is nothing in ${current?.name || 'this store'} yet.`}
         </p>
       ) : null}
+        </div>
+      </div>
     </div>
   );
 }

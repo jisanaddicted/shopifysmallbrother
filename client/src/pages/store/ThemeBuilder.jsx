@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import CategoryTreeEditor from '../../components/storefront/CategoryTreeEditor';
+import LogoSizePicker from '../../components/storefront/LogoSizePicker';
 import ThemePicker from '../../components/storefront/ThemePicker';
 import storeService from '../../services/storeService';
 import menuService from '../../services/menuService';
-import { THEME } from '../../utils/constants';
+import { THEME, logoSizeStyle } from '../../utils/constants';
 
 const TARGET_TYPES = [
   { value: 'category', label: 'Category' },
@@ -121,6 +122,19 @@ export default function ThemeBuilder() {
   const [successMsg, setSuccess] = useState('');
   const [logoPreview, setLogoPreview] = useState('');
   const [logoBusy, setLogoBusy] = useState(false);
+  /* The logo size the PREVIEW is drawn at, which is not always the size the
+     store has saved: LogoSizePicker reports the step it is applying the moment
+     it is clicked, so the preview grows on the click rather than four seconds
+     later when the write lands. Empty means "use the store's saved size", which
+     is the normal case. See LogoSizePicker. */
+  const [logoSizePreview, setLogoSizePreview] = useState(null);
+/* The size the preview is drawn at, when it is not the store's saved size:
+     LogoSizePicker reports the value it is applying on every step of the drag,
+     so the preview grows as the merchant drags rather than a second later when
+     the write lands. `null` means "no unsaved size" - the normal case. */
+  const liveLogoSize = logoSizePreview ?? store?.logoSize;
+
+  /* --- Category creation -----------------------------------------------
 
   /* --- Category creation -----------------------------------------------
      A category is the storefront's section heading: every product filed under
@@ -164,6 +178,10 @@ export default function ThemeBuilder() {
   const applyStore = useCallback((s) => {
     setStore(s);
     setLogoPreview(s?.logo || s?.image || '');
+    /* Drop any size still being previewed: this is the store's own saved size
+       taking over again, whether that is a first load or a switch to another
+       storefront. */
+    setLogoSizePreview(null);
   }, []);
 
   const loadMenu = useCallback(async (storeId) => {
@@ -1041,7 +1059,13 @@ export default function ThemeBuilder() {
 
       {store ? (
         <section className="panel theme-logo">
-          <div className="theme-logo__preview">
+          {/* The size lives on the wrapper so both the image and the initials
+              placeholder read it - the preview is the only place a merchant can
+              see the size they are choosing. */}
+          <div
+            className="theme-logo__preview"
+            style={logoSizeStyle(liveLogoSize)}
+          >
             {logoPreview ? (
               <img src={logoPreview} alt={`${store.name} logo`} className="theme-logo__img" />
             ) : (
@@ -1053,8 +1077,13 @@ export default function ThemeBuilder() {
           <div className="theme-logo__body">
             <h2 className="panel__title">Store logo</h2>
             <p className="muted small">
-              Shown in the storefront header next to the store name. PNG or JPG
-              under 5 MB works best.
+              This is the storefront header: the logo on its own, with no store
+              name beside it and no border or box around it, centred on a phone
+              and at the left on a desktop. The size below is how TALL it is -
+              phones show it smaller, and a wide logo is allowed to be wider
+              than it is tall. Empty space around the picture is trimmed off
+              automatically. A square PNG or JPG with a transparent background
+              looks best. Under 5 MB.
             </p>
             <div className="button-row">
               <label className={`btn btn-outline btn-sm${logoBusy ? ' is-disabled' : ''}`}>
@@ -1078,6 +1107,17 @@ export default function ThemeBuilder() {
                 </button>
               ) : null}
             </div>
+
+            {/* The size control. It sits inside the logo panel rather than
+                beside it because it is a property OF this logo, and because the
+                preview above is what makes the choice legible. */}
+            <LogoSizePicker
+              store={store}
+              onChanged={(updated) =>
+                setStore((prev) => ({ ...prev, ...updated }))
+              }
+              onPreview={setLogoSizePreview}
+            />
           </div>
         </section>
       ) : null}

@@ -20,6 +20,7 @@ import {
   customerPath,
   isOnlinePayment,
   lastStoreVisit,
+  logoSizeStyle,
   rememberStoreVisit,
   saveGuestToken,
   shopPath,
@@ -253,9 +254,14 @@ export default function Checkout() {
   return (
     <div className="page page--customer">
       <header className="page__header">
-        <div className="store-header__brand">
-          {/* The visiting store's own mark: its logo image, else its
-              initials - never the generic platform brand. */}
+        {/* The visiting store's own mark: its logo image, else its
+            initials - never the generic platform brand. At the size the merchant
+            chose in their Theme tab, since it is the same mark and the same
+            store. */}
+        <div
+          className="store-header__brand"
+          style={logoSizeStyle(store?.logoSize)}
+        >
           {storeName || storeLogo ? (
             storeLogo ? (
               <img

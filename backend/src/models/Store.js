@@ -1,4 +1,10 @@
 import mongoose from 'mongoose';
+import {
+  LEGACY_LOGO_SIZES,
+  LOGO_SIZE_DEFAULT,
+  LOGO_SIZE_MAX,
+  LOGO_SIZE_MIN,
+} from '../utils/constants.js';
 
 const addressSchema = new mongoose.Schema(
   {
@@ -39,6 +45,47 @@ const storeSchema = new mongoose.Schema(
     address: { type: addressSchema, default: () => ({}) },
     image: { type: String, trim: true, default: '' },
     logo: { type: String, trim: true, default: '' },
+
+    // -------------------------------------------------------------------------
+    // How large the storefront header draws `logo`, in pixels. See
+    // LOGO_SIZE_MIN/MAX/DEFAULT in utils/constants.js.
+    //
+    // A NUMBER rather than a step from a fixed set, because a merchant asking
+    // "how big do I want it" wants to type or drag a size, and a menu of four
+    // named answers can only offer four. The bounds are what replace the closed
+    // list: they are enforced here AND refused by the API with a message, so an
+    // out-of-range size is a 400 the merchant can read rather than a header that
+    // has pushed its own buttons off the screen.
+    //
+    // Defaulting to 96 is what makes this safe to ship: every store that exists
+    // today has no value here and renders exactly as it did before, and nothing
+    // changes until a merchant deliberately sets a size.
+    //
+    // The setter normalises rather than trusting the caller. It is the last line
+    // of defence, and it has to be the forgiving one: the field was briefly a
+    // four-value string, so a store saved during that window still carries
+    // "lg", and without this its next save would fail validation outright - a
+    // logo size the merchant set, taking their storefront's edits down with it.
+    // -------------------------------------------------------------------------
+    logoSize: {
+      type: Number,
+      min: LOGO_SIZE_MIN,
+      max: LOGO_SIZE_MAX,
+      default: LOGO_SIZE_DEFAULT,
+      set: (value) => {
+        if (value === undefined || value === null || value === '') {
+          return LOGO_SIZE_DEFAULT;
+        }
+        if (typeof value === 'string') {
+          const legacy = LEGACY_LOGO_SIZES[value.trim().toLowerCase()];
+          if (legacy !== undefined) return legacy;
+        }
+        const size = Number(value);
+        if (!Number.isFinite(size)) return LOGO_SIZE_DEFAULT;
+        return Math.min(LOGO_SIZE_MAX, Math.max(LOGO_SIZE_MIN, Math.round(size)));
+      },
+    },
+
     isActive: { type: Boolean, default: true },
 
     // -------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import StoreRider from '../models/StoreRider.js';
 import User from '../models/User.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import { buildPublicTree } from './categoryTreeController.js';
-import { CANCELLED_STATUSES, ROLES, STORE_RIDER_STATUS, THEME2, THEME_VALUES } from '../utils/constants.js';
+import { CANCELLED_STATUSES, LOGO_SIZE_MAX, LOGO_SIZE_MIN, isLogoSize, ROLES, STORE_RIDER_STATUS, THEME2, THEME_VALUES } from '../utils/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { hostImage, publicIdFor, removeImage, storeFolder } from '../services/cloudinary.js';
 import { normaliseUsername, slugify, uniqueSlug } from '../utils/slug.js';
@@ -454,6 +454,26 @@ export const updateMyStore = asyncHandler(async (req, res) => {
       );
     }
     store.theme = theme;
+  }
+
+  /* How large the storefront header draws the logo, in pixels. See Store.logoSize.
+
+     Validated rather than cast, for the same reason `theme` above is: an
+     out-of-range size would otherwise save and then render a header that has
+     pushed its own buttons off the screen, with nothing to undo it from. The
+     model's min/max is the backstop; this is the one that explains itself.
+
+     `Number('') `is 0 and `Number('big')` is NaN, so a blank or a word is
+     refused by the same check rather than sneaking through as a real number. */
+  if (req.body?.logoSize !== undefined) {
+    const size = Number(req.body.logoSize);
+    if (!isLogoSize(size)) {
+      throw new HttpError(
+        400,
+        `A logo size must be a number between ${LOGO_SIZE_MIN} and ${LOGO_SIZE_MAX}.`,
+      );
+    }
+    store.logoSize = Math.round(size);
   }
 
   if (address !== undefined) {

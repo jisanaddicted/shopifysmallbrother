@@ -1,10 +1,18 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { logoSizeStyle } from '../../utils/constants';
 
 /**
  * Store header for the public storefront (`/s/<slug>`).
- * Left: the three-line menu button (phones only) + store logo (image when the
- * store has one, otherwise initial + name).
+ * Left: the three-line menu button (phones only) + the store logo, shown on its
+ * own. The logo carries the whole identity - no name is printed beside it - and
+ * the image itself is borderless, sized in CSS from the merchant's Theme-tab
+ * choice (`Store.logoSize`) because it is now the only thing naming the shop. A
+ * store that has not uploaded a logo falls back to its initials, which is what
+ * `store-header__mark` draws.
+ * On a phone the logo is CENTRED between the menu button and the icons; on a
+ * desktop it sits at the left edge. Same markup both ways - see the grid in
+ * `.store-header`.
  * Right: cart icon button (opens the cart drawer) + account icon link.
  *
  * The account link carries the store's identity in its state, so a guest who
@@ -64,6 +72,9 @@ export default function StoreHeader({
 
   return (
     <header className="store-header">
+      {/* Cell 1: the phone-only menu button. Empty on a desktop, where the nav
+          bar below the header is the navigation - and the CSS leans on that
+          emptiness to keep the logo hard against the left edge. */}
       <div className="store-header__brand">
         {/* Phones only (CSS). Opens the store menu as a drawer from the left,
             matching the cart drawer on the right side of the header. */}
@@ -77,20 +88,37 @@ export default function StoreHeader({
             <MenuIcon />
           </button>
         ) : null}
+      </div>
 
+      {/* Cell 2: the logo, on its own. It is a cell of its own rather than
+          sitting inside the brand row so that a phone can centre it between
+          the menu button and the icons. `--store-logo-scale` is the size the
+          merchant picked in the Theme tab (see logoSizeStyle). */}
+      <div
+        className="store-header__identity"
+        style={logoSizeStyle(store?.logoSize)}
+      >
         {logo ? (
           <img
             src={logo}
             alt={`${name} logo`}
+            /* No name is printed beside the logo, so the name is still one
+               hover (or one screen-reader stop) away. */
+            title={name}
             className="store-header__logo"
             onError={() => setLogoBroken(true)}
           />
         ) : (
-          <span className="store-header__mark" aria-hidden="true">
-            {initialsOf(name)}
-          </span>
+          /* Nothing uploaded yet: the initials block stands in for the logo, and
+             the store's name rides along off-screen so it is not lost from the
+             page entirely. */
+          <>
+            <span className="store-header__mark" aria-hidden="true">
+              {initialsOf(name)}
+            </span>
+            <span className="sr-only">{name}</span>
+          </>
         )}
-        <span className="store-header__name">{name}</span>
       </div>
 
       <div className="store-header__actions">

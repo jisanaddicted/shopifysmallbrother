@@ -76,6 +76,47 @@ export const THEME2 = 'theme2';
 export const THEMES = [THEME1, THEME2];
 export const THEME_VALUES = THEMES;
 
+// ---------------------------------------------------------------------------
+// Storefront logo size.
+//
+// How large the storefront header draws a store's logo, in PIXELS, set by the
+// merchant with the slider/number control in the Theme tab.
+//
+// A plain number and not a step from a fixed set, because the question a
+// merchant is actually answering is "how big do I want it" - and a menu of four
+// named sizes can only offer four answers to that. The bounds are here instead
+// of a closed list: below the minimum the logo stops being legible, above the
+// maximum it stops being a header (and on a phone it would push the cart and
+// account buttons off the screen), and a limit the API refuses with a message
+// beats a logo a merchant cannot undo.
+//
+// The number is the DESKTOP size. Phones render it smaller - see the media
+// query on `.store-header__logo` - so one setting looks right on both without
+// the merchant having to think about two of them.
+//
+// The model's bounds and this file's must stay in sync; the client mirrors both
+// (see client/src/utils/constants.js).
+// ---------------------------------------------------------------------------
+export const LOGO_SIZE_MIN = 48;
+export const LOGO_SIZE_MAX = 200;
+export const LOGO_SIZE_DEFAULT = 96;
+
+/** How much one press of the slider's arrow keys moves the size. */
+export const LOGO_SIZE_STEP = 4;
+
+/**
+ * The four named sizes this replaced, and the pixels they stood for.
+ *
+ * Only here to keep a store that saved one of them during the short life of the
+ * step picker from losing its choice: `Store.logoSize`'s setter maps these
+ * through, so the value becomes a real number instead of failing to save.
+ */
+export const LEGACY_LOGO_SIZES = { sm: 80, md: 96, lg: 120, xl: 144 };
+
+/** Is this a size the API will accept? */
+export const isLogoSize = (value) =>
+  Number.isFinite(value) && value >= LOGO_SIZE_MIN && value <= LOGO_SIZE_MAX;
+
 /**
  * How deep a Theme 2 category tree may be built.
  *

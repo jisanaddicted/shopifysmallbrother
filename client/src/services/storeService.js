@@ -1,4 +1,5 @@
 import api from './api';
+import { imageToDataUrl } from '../utils/imageFile';
 
 /**
  * In-flight request sharing for the PUBLIC storefront reads.
@@ -102,32 +103,19 @@ export const uploadStoreLogo = async (file, storeId) => {
   } catch (err) {
     if (err?.status !== 404) throw err;
   }
-  const dataUrl = await fileToResizedDataUrl(file);
+  /* The SHARED helper, not a private copy.
+   *
+   * This path had its own resize function, identical to `imageFile`'s bar the
+   * empty-border trim - which is exactly the bug: a logo pasted from a web page
+   * arrives wrapped in white space, and a resize that keeps that padding ships a
+   * logo that renders at a fraction of the size the merchant picked in the Theme
+   * tab. Trimming is now part of one definition, so both paths get it.
+   *
+   * 256px, not the shared 640: a logo is drawn at most 200px tall, and this is
+   * the base64 body the API has to accept. */
+  const dataUrl = await imageToDataUrl(file, 256);
   return updateMyStore({ logo: dataUrl }, storeId);
 };
-
-function fileToResizedDataUrl(file, maxSize = 256) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read that image.'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('That file is not a valid image.'));
-      img.onload = () => {
-        const scale = Math.min(1, maxSize / Math.max(img.width, img.height, 1));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/png'));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Rider roster

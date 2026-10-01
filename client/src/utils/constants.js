@@ -198,6 +198,47 @@ export const THEME_OPTIONS = [
 export const themeLabel = (value) =>
   THEME_OPTIONS.find((option) => option.value === value)?.label || THEME.ONE;
 
+// --- Storefront logo size ---------------------------------------------------
+// Mirrors LOGO_SIZE_* in backend/src/utils/constants.js - the API validates the
+// value the browser sends, so the two have to agree on the bounds, or the Theme
+// tab would offer sizes the API refuses.
+export const LOGO_SIZE_MIN = 48;
+export const LOGO_SIZE_MAX = 200;
+export const LOGO_SIZE_DEFAULT = 96;
+export const LOGO_SIZE_STEP = 4;
+
+/**
+ * The size to actually draw, from whatever a store happens to hold.
+ *
+ * Clamping here rather than trusting the document is what keeps a header
+ * renderable: `logoSize` arrives from the database and from a cached storefront
+ * payload, and a value outside the bounds - from an older document, a bad
+ * import, a hand-edited row - would otherwise be painted as-is.
+ *
+ * The fallback is the load-bearing one. Every store that predates this feature
+ * has no `logoSize` at all, and `Number(undefined)` is NaN, which would sail
+ * through both halves of a naive clamp and come out as `NaNpx` - an image with
+ * no dimensions at all. See `Store.logoSize`'s default.
+ */
+export const logoSizePx = (value) => {
+  const size = Number(value);
+  if (!Number.isFinite(size)) return LOGO_SIZE_DEFAULT;
+  return Math.min(LOGO_SIZE_MAX, Math.max(LOGO_SIZE_MIN, Math.round(size)));
+};
+
+/**
+ * The inline style that carries a store's chosen size into the CSS.
+ *
+ * A style object rather than a class, because the value is per-store data: one
+ * stylesheet serves every shop, so the size has to arrive with the store
+ * document. It is a LENGTH (`96px`), not a number, because the storefront's
+ * `min()` cap compares it against a viewport width - and that cap is what
+ * stops a 200px logo from shoving the cart button off a phone screen.
+ */
+export const logoSizeStyle = (value) => ({
+  '--store-logo-size': `${logoSizePx(value)}px`,
+});
+
 /**
  * How deep a Theme 2 category tree may be built.
  *
