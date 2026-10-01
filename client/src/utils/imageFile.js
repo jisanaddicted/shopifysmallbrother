@@ -57,22 +57,44 @@ export function validateImageFile(file) {
  * Read a picked File into a downscaled base64 data URL.
  *
  * Passed through untouched, without a canvas round-trip:
- *  - '' — CLEARING a picture. `handleCategoryImageRemove` sends this. It used to
- *    fall through to FileReader, which rejects a string, so removing a category
- *    picture could only ever fail.
+ *  - '' — CLEARING a picture. The "No pic" / "Remove" buttons send this, and so
+ *    does `handleCategoryImageRemove` in ThemeBuilder. The server reads '' as
+ *    "no picture" (it is the default across Store.image / Product.image /
+ *    CategoryNode.image), so clearing must survive this function unchanged.
  *  - a data URL — a caller that already has one.
  *  - an http(s) URL — what the server stores once Cloudinary has hosted the
  *    upload (see backend/src/services/cloudinary.js). Re-uploading the stored
  *    value unchanged must not try to read a URL as a file.
+ *
+ * The first rule used to be a COMMENT and not code. The guard listed the three
+ * prefixes above, and '' matched none of them, so clearing fell through to
+ * FileReader and threw
+ *
+ *   Failed to execute 'readAsDataURL' on 'FileReader': parameter 1 is not of type 'Blob'
+ *
+ * from inside `setTreeNodeImage` — so the "No pic" button on a Theme 2 category
+ * (and its Theme 1 equivalent) could only ever fail, with a browser-level error
+ * that meant nothing to the merchant. Testing `typeof === 'string'` instead of
+ * an allow-list of prefixes is what actually honours the documented contract:
+ * any string is a value the caller already decided on, and re-reading it as a
+ * file is never right.
  */
 export function imageToDataUrl(image, maxEdge = IMAGE_MAX_EDGE) {
-  const alreadyAString =
-    typeof image === 'string' &&
-    (image.startsWith('data:image/') ||
-      image.startsWith('https://') ||
-      image.startsWith('http://'));
+  // '' clears a picture; null/undefined clear it too. Anything else that is a
+  // string is a data URL or a hosted URL and is already in its final form.
+  if (image === '' || image === null || image === undefined) {
+    return Promise.resolve('');
+  }
+  if (typeof image === 'string') return Promise.resolve(image);
 
-  if (alreadyAString) return Promise.resolve(image);
+  /* Not a string, so it should be a picked File. Anything else is a caller
+     mistake (an object, a number), and saying so is far better than letting
+     readAsDataURL throw a Blob type error that explains nothing. */
+  if (typeof Blob === 'undefined' || !(image instanceof Blob)) {
+    return Promise.reject(
+      new Error('That image could not be read. Please choose the file again.'),
+    );
+  }
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
