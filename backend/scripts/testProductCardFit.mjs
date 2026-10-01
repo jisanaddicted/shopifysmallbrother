@@ -3,34 +3,33 @@
 //
 //   node scripts/testProductCardFit.mjs
 //
-// THE BUG THIS PROTECTS AGAINST (Theme 2)
+// It also covers the other two places the SAME picture is shown - the product
+// page hero and the cart-drawer thumbnail - because all three had the same pair
+// of defects, and a rule that holds in one of them and not the others is worse
+// than no rule at all: the shopper sees a whole bottle in the grid and a sliced
+// one in their own cart.
 //
-// The card's narrow layout used to live in `@media (max-width: 640px)`, keyed to
-// the WINDOW. Theme 2's cards are narrow because of the 210px sidebar beside
-// them, not because the shopper is on a phone, so at a 1256px window a 163px
-// card never matched that media query and kept the desktop layout. Measured in a
-// real browser against the real stylesheet, before the fix:
+// THE TWO BUGS, both of which crop the product
 //
-//   the "Add to cart" button rendered at x=396..490 inside a card ending at
-//   x=397, and the footer needed 242px in a 134px box.
+//   1. `object-fit: cover` fills the box and discards the overflow, so a tall
+//      bottle photo showed its middle slice - cap at the top, base gone.
+//   2. The image is a GRID ITEM (each of the three boxes is `display: grid`), and
+//      a grid item's automatic minimum size is its INTRINSIC size. A tall photo
+//      therefore refused to be shorter than itself, `height: 100%` silently did
+//      nothing, and the box's `overflow: hidden` cropped it - so fixing (1)
+//      alone changed nothing, with `contain` sitting in the stylesheet looking
+//      like it had worked.
 //
-// `.product-card` has `overflow: hidden`, so that content did not push the card
-// wider - it was silently CLIPPED. The shopper saw a card whose button was cut in
-// half and could not add the product at all, with nothing reporting a problem.
-// The photo box was 4:3 (161x120.8) at a width that wants square.
+// Measured in Edge, before the fix, in the real Theme 2 layout:
 //
-// THE FIX, in one line each
+//   portrait 600x900 -> img=171.5x250.1 inside a 171.5x171.5 photo box
 //
-//   .product-card         min-width: 0     - a grid item defaults to
-//                                           min-width:auto (min-content), so the
-//                                           unshrinkable footer floored the card.
-//   .product-card         container-type   - so the card can be MEASURED and asked
-//                                           "are you narrow?", instead of the
-//                                           window being asked "is it small?".
-//   @container card       the narrow layout- keyed to the card, so the phone grid
-//                                           and Theme 2 are handled by one rule.
-//   .product-card__media  overflow: hidden  - the photo box is a fixed shape; the
-//                                           image is dealt with inside it.
+// A third bug, specific to the card and unrelated to images: its narrow layout
+// lived in `@media (max-width: 640px)`, keyed to the WINDOW, so Theme 2's cards
+// - which are narrow because of the 210px sidebar beside them - never matched it
+// and kept the desktop layout at 163px wide. The "Add to cart" button rendered
+// at x=396..490 inside a card ending at x=397: clipped away entirely, because
+// `overflow: hidden` hides overflow instead of pushing the card wider.
 //
 // No browser and no server: this reads the stylesheet and asserts the rules that
 // produced those numbers are still in place. Same convention as testLogoSize.
@@ -240,5 +239,40 @@ for (const sel of ['.treeview__products {', '.treeview__grid {']) {
   );
 }
 
+// --- 6. Every other place a product picture is shown agrees ----------------
+console.log('\n--- the cart drawer shows the whole picture too ---');
+/* The cart row is the LAST look at a product before the order is placed: the
+   shopper is confirming "is this the thing I picked?". A cropped thumbnail
+   makes that check harder, and worse, it contradicts what they just saw in the
+   grid - the bottle they clicked is not the bottle in their cart.
+
+   It had exactly the two defects the card had, and both are load-bearing:
+   `cover`, and the grid-item automatic minimum (`.cart-line__media` is
+   `display: grid`, so the img is a grid item whose automatic minimum size is
+   its intrinsic height - `height: 100%` does nothing for a tall photo). */
+const cartImg = block('.cart-line__media img {');
+check('the cart thumbnail shows the whole image', /object-fit:\s*contain/.test(cartImg));
+check('the cart thumbnail is never cover', !/object-fit:\s*cover/.test(cartImg));
+check(
+  'and its automatic minimum is zeroed, so a tall photo can shrink into it',
+  /min-height:\s*0/.test(cartImg),
+  'same grid-item trap as the card',
+);
+check('the same for the inline axis', /min-width:\s*0/.test(cartImg));
+check(
+  'it is given a little padding, so the letterbox reads as a frame',
+  /padding:\s*[\d.]+(px|rem)/.test(cartImg),
+);
+const cartBox = block('.cart-line__media {');
+check(
+  'the cart thumbnail box has a background and clips, like the card box',
+  /background:\s*var\(--surface-alt\)/.test(cartBox) && /overflow:\s*hidden/.test(cartBox),
+);
+
+/* A single rule, applied once, would be better than three copies - but the
+   client cannot import from a stylesheet it does not own, and these three boxes
+   genuinely differ in size and shape. What must not drift is the RULE, and
+   that is what the assertions above pin: every one of them is `contain`, and
+   every one of them has its automatic minimum zeroed. */
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

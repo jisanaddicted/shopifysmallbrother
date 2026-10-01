@@ -1738,10 +1738,33 @@ ol {
   overflow: hidden;
 }
 
+/* The cart thumbnail: the SAME rule as the product card, for the same reason.
+
+   This is where the last check on a purchase happens. A shopper scanning their
+   cart is confirming "is this the thing I picked?", and a cropped photo makes
+   that check harder - the bottle they clicked is not the bottle they can see.
+   So the picture is shown WHOLE, exactly as in the grid it was picked from, and
+   a shopper moving from card to cart to checkout sees one unchanging picture
+   of the same product.
+
+   `overflow: hidden` on the box above is the backstop, and the box's
+   `--surface-alt` background is what the letterbox lands on. */
 .cart-line__media img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  /* The zeroing is the part that is easy to miss. `.cart-line__media` is
+     `display: grid`, so this <img> is a grid item and its automatic minimum
+     size is its INTRINSIC size - a tall photo refuses to be shorter than itself,
+     `height: 100%` quietly does nothing, and the box's `overflow: hidden`
+     crops it. That is the exact trap the product card had; see
+     `.product-card__open > *`. */
+  min-width: 0;
+  min-height: 0;
+  padding: 3px;
+  object-fit: contain;
 }
 
 .cart-line__name {
