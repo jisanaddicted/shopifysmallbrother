@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import TeamPanel from '../../components/store/TeamPanel';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import storeService from '../../services/storeService';
@@ -8,7 +9,6 @@ import {
   CLOSED_STATUSES,
   ORDER_STATUS,
   STORE_RIDER_STATUS,
-  STORE_RIDER_STATUS_LABELS,
   ROUTES,
   shopPath,
 } from '../../utils/constants';
@@ -62,13 +62,11 @@ export default function MerchantDashboard() {
   // Store-admin invitations waiting for this account's answer.
   const [invites, setInvites] = useState([]);
 
-  // Rider roster controls
-  const [term, setTerm] = useState('');
-  const [results, setResults] = useState([]);
+  // Roster controls. The role and the username being invited now live in
+  // TeamPanel, which owns the form; the page keeps only what the network calls
+  // and the roster itself need.
   const [rosterBusy, setRosterBusy] = useState(false);
   const [rosterError, setRosterError] = useState('');
-  // What role a found person is invited for: rider or store admin.
-  const [inviteRole, setInviteRole] = useState('rider');
 
   const flash = (message) => {
     setNotice(message);
@@ -296,36 +294,25 @@ export default function MerchantDashboard() {
     }
   };
 
-  const searchPeople = async (event) => {
-    event.preventDefault();
-    setRosterError('');
-
-    try {
-      // Global people search: any user, by username, with a profile card.
-      const found = await storeService.lookupUser(term.trim());
-      setResults(found || null);
-
-      if (!found) {
-        setRosterError(`No account matched “${term.trim()}”. Check the spelling.`);
-      }
-    } catch (err) {
-      setRosterError(err.message || 'The search failed.');
-    }
-  };
-
-  const invite = async (username) => {
+  /* The people SEARCH is gone with the two-step it belonged to: the invite is one
+     action now, and the API already refuses a username it does not know, so the
+     lookup only ever delayed the thing the merchant was trying to do. */
+  const invite = async (username, role) => {
     setRosterBusy(true);
     setRosterError('');
 
     try {
-      await storeService.inviteRider(store._id, username, inviteRole);
+      await storeService.inviteRider(store._id, username, role);
       await loadRoster(store._id);
-      setResults(null);
       flash(
-        `Invitation sent to @${username} as ${inviteRole === 'admin' ? 'a store admin' : 'a rider'}. They accept it in their console.`,
+        `Invitation sent to @${username} as ${role === 'admin' ? 'a store admin' : 'a rider'}. They accept it in their console.`,
       );
+      /* True so the panel knows it may clear the field. It must not clear on a
+         failure - see TeamPanel's submit. */
+      return true;
     } catch (err) {
       setRosterError(err.message || 'Could not send the invitation.');
+      return false;
     } finally {
       setRosterBusy(false);
     }
@@ -549,139 +536,16 @@ export default function MerchantDashboard() {
         </section>
       ) : null}
 
-      {/* ---- Rider roster - owner only ----------------------------------- */}
+      {/* ---- Team - owner only -------------------------------------------- */}
       {isOwner ? (
-      <section className="panel">
-        <div className="panel__header">
-          <h2 className="panel__title">Team</h2>
-          <span className="muted small">
-            Search anyone on the platform by username, then invite them as a
-            rider or a store admin.
-          </span>
-        </div>
-
-        <div className="filters">
-          <label className="field field--inline">
-            <span>Invite as</span>
-            <select
-              value={inviteRole}
-              onChange={(event) => setInviteRole(event.target.value)}
-            >
-              <option value="rider">Rider</option>
-              <option value="admin">Store admin</option>
-            </select>
-          </label>
-        </div>
-
-        <form className="filters" onSubmit={searchPeople}>
-          <input
-            type="search"
-            className="filters__search"
-            placeholder="username, e.g. sam.rider"
-            value={term}
-            onChange={(event) => setTerm(event.target.value)}
-          />
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={rosterBusy || term.trim().length === 0}
-          >
-            Search
-          </button>
-        </form>
-
-        {rosterError ? <p className="alert alert--warn">{rosterError}</p> : null}
-
-        {results ? (
-          <ul className="rider-list">
-            <li>
-              <div className="rider-list__item">
-                <span className="rider-list__id">@{results.username}</span>
-                <span className="muted small">{results.name}</span>
-                <span className="badge badge--info">
-                  {results.role === 'rider' ? 'Rider' : results.role}
-                </span>
-                <span className="muted small">
-                  {results.stats?.deliveriesCompleted != null
-                    ? `${results.stats.deliveriesCompleted} delivered · ${results.stats.deliveriesActive} active · ${results.stats.stores} store${results.stats.stores === 1 ? '' : 's'}`
-                    : results.stats?.storesOwned != null
-                      ? `${results.stats.storesOwned} owned · ${results.stats.storesManaged} managed`
-                      : ''}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  disabled={rosterBusy}
-                  onClick={() => invite(results.username)}
-                >
-                  Invite as {inviteRole === 'admin' ? 'store admin' : 'rider'}
-                </button>
-              </div>
-            </li>
-          </ul>
-        ) : null}
-
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Rider</th>
-                <th>Status</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {riders.map((link) => {
-                // `link.status` is the invitation state (pending/active/...),
-                // never the delivery state. When the row arrives without it
-                // (stale cache / partial payload) fall back to `pending`
-                // instead of rendering a bare "undefined" badge.
-                const linkStatus = link.status || STORE_RIDER_STATUS.PENDING;
-                const handle =
-                  link.rider?.username ||
-                  link.rider?.name ||
-                  link.rider?.email ||
-                  'rider';
-                return (
-                <tr key={link._id || link.id}>
-                  <td className="table__product">
-                    <strong>@{handle}</strong>
-                    <span className="muted small">
-                      {link.rider?.name || link.rider?.email || ''}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`badge badge--${
-                        linkStatus === STORE_RIDER_STATUS.ACTIVE
-                          ? 'success'
-                          : linkStatus === STORE_RIDER_STATUS.PENDING
-                            ? 'warn'
-                            : 'info'
-                      }`}
-                    >
-                      {STORE_RIDER_STATUS_LABELS[linkStatus] || linkStatus}
-                    </span>
-                  </td>
-                  <td className="table__actions">
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      disabled={rosterBusy}
-                      onClick={() =>
-                        removeRider(link.rider?._id || link.rider?.id)
-                      }
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
+        <TeamPanel
+          store={store}
+          riders={riders}
+          busy={rosterBusy}
+          error={rosterError}
+          onInvite={invite}
+          onRemove={removeRider}
+        />
       ) : null}
 
       {/* ---- Storefront details - owner only ------------------------------ */}

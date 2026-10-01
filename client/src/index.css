@@ -536,6 +536,17 @@ ol {
 }
 
 /* --- Badges & chips ------------------------------------------------------- */
+/* --- Badges ----------------------------------------------------------------
+   Every one of these pairs is MEASURED against WCAG AA for body text (4.5:1),
+   not eyeballed. A pill is small bold text, so it has to clear the same bar as a
+   paragraph - and the previous values sat at 4.51 and 4.57, which passes by a
+   rounding error and fails the moment a badge is antialiased thinner. The
+   foregrounds below were darkened a step for headroom; the backgrounds are
+   unchanged, so the pills still read as the same colours.
+
+   The `line-height` and `white-space` are here rather than per-use because a
+   badge whose height depends on its content is what makes a row of statuses
+   look ragged. */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -546,16 +557,18 @@ ol {
   color: #fff;
   font-size: 0.75rem;
   font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
 }
 
 .badge--info {
   background: var(--brand-soft);
-  color: var(--brand-dark);
+  color: #1e40af;
 }
 
 .badge--warn {
   background: var(--warn-soft);
-  color: var(--warn);
+  color: #92400e;
 }
 
 .badge--active {
@@ -565,12 +578,12 @@ ol {
 
 .badge--success {
   background: var(--ok-soft);
-  color: var(--ok);
+  color: #166534;
 }
 
 .badge--danger {
   background: var(--danger-soft);
-  color: var(--danger);
+  color: #991b1b;
 }
 
 /* A deliberately quiet badge - "not delivered yet" is the normal state of a
@@ -579,7 +592,7 @@ ol {
    the table. */
 .badge--muted {
   background: var(--surface-alt);
-  color: var(--muted);
+  color: #475569;
 }
 
 /* Inside a table cell the badge IS the cell, not a trailing marker after some
@@ -1992,15 +2005,35 @@ ol {
   font: inherit;
 }
 
-.table__product {
+/* A table cell's contents, laid out in a row.
+ *
+ * THE WRAPPER IS THE POINT, and it is why this class exists at all. Putting
+ * `display: flex` on a <td> takes the cell out of the table's box model, and
+ * `border-collapse: collapse` then cannot merge and paint it with its
+ * neighbours - so the row's bottom border arrives as disconnected fragments
+ * between columns instead of one line across the table. The flex therefore
+ * lives on a <div> INSIDE the cell, and the <td> stays a table-cell.
+ *
+ * `min-width: 0` so a long name ellipsises inside its column instead of
+ * stretching the table and pushing the columns to the right off-screen. */
+.table__cell {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  min-width: 0;
 }
 
-.table__actions {
-  display: flex;
+/* Row actions: right-aligned, so the buttons sit under their own column header
+   rather than drifting to wherever the cell's text happens to start. */
+.table__cell--actions {
+  justify-content: flex-end;
   gap: 0.35rem;
+}
+
+/* The header half of that pairing. It is a plain text-align on the <th>, which
+   is safe: it does not take the cell out of the table, unlike a flex rule. */
+.table th.table__th--actions {
+  text-align: right;
 }
 
 .thumb {
@@ -4160,6 +4193,152 @@ ol {
    feedback has to be visible. */
 .logo-size.is-saving .logo-size__row {
   opacity: 0.7;
+}
+
+/* --- Invite form (Team panel) --------------------------------------------- */
+/*
+ * ONE row: username, role, send.
+ *
+ * A single flex line so the three controls read as one action rather than three.
+ * `align-items: stretch` gives the field, the select and the button the same
+ * height without three separate heights to keep in step, and `margin-left: auto`
+ * on the button pushes the primary action to the far right - the end of the row
+ * the eye travels along. On a narrow screen it wraps to its own line rather than
+ * being squeezed.
+ */
+.invite-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+
+/* The username field, with its "@" INSIDE the border.
+ *
+ * A separate "@" floating between controls has to be positioned by hand, drifts
+ * the moment the row wraps, and is announced by a screen reader as stray
+ * punctuation. Inside the field it is just the left edge of the input, it cannot
+ * drift, and it is `aria-hidden` so the input's own label is what gets read.
+ *
+ * `:focus-within` puts the ring on the whole field: a ring on the bare input
+ * would start a third of a control to the right of where the focus actually is,
+ * which reads as a misaligned focus indicator rather than a focused field. */
+.invite-form__field {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex: 1 1 16rem;
+  min-width: 0;
+  padding: 0 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.invite-form__field:focus-within {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-soft);
+}
+
+.invite-form__prefix {
+  color: var(--muted);
+  font-weight: 700;
+  user-select: none;
+}
+
+.invite-form__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.55rem 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+
+.invite-form__input:focus {
+  outline: none;
+}
+
+.invite-form__role select {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font: inherit;
+  cursor: pointer;
+}
+
+.invite-form__role select:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.invite-form__submit {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.invite-form__hint {
+  margin: 0.55rem 0 0;
+}
+
+/* --- Team table ------------------------------------------------------------- */
+/* `table-layout: fixed` so the widths below are real rather than suggestions -
+   the columns then hold still between one row and the next, which is what makes
+   a status column read as a column. */
+.team-table {
+  table-layout: fixed;
+  /* The floor that makes the fixed layout above safe. `table-layout: fixed`
+     sizes columns from the widths given and NOT from their contents, so on a
+     narrow screen the status column can end up narrower than a `nowrap` badge -
+     and the pill then spills sideways over the Remove column instead of
+     wrapping. Holding a minimum width keeps every column big enough for its
+     own content; below that floor `.table-wrap`'s `overflow-x: auto` scrolls
+     the roster sideways inside the card, the same treatment `.vm__matrix`
+     uses. 30rem is the width at which "Invitation sent" fits its column. */
+  min-width: 30rem;
+}
+
+.team-table th:first-child,
+.team-table td:first-child {
+  width: 45%;
+}
+
+/* The last column holds one button, so it is sized to the button rather than to
+   whatever the longest rider name in the table happens to be. */
+.team-table th:last-child,
+.team-table td:last-child {
+  width: 7rem;
+}
+
+/* An empty roster is a sentence inside the table, not an empty box. It spans the
+   row and carries no flex: a flexed cell here would break the very border it is
+   sitting on. */
+.team-table__empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 1.5rem 0.75rem;
+}
+
+/* On a phone the form stops being a row it can keep, and the button drops to
+   its own full-width line - a half-width "Send Invitation" is the wrong target
+   for the one action on the screen. */
+@media (max-width: 560px) {
+  .invite-form__field,
+  .invite-form__role,
+  .invite-form__submit {
+    flex: 1 1 100%;
+  }
+
+  .invite-form__role select {
+    width: 100%;
+  }
+
+  .invite-form__submit {
+    margin-left: 0;
+  }
 }
 
 /* --- Category panel (theme builder) ------------------------------------ */

@@ -487,7 +487,11 @@ export default function ProductManager({ basePath = '/merchant/products' }) {
               <th>Type</th>
               <th>Vendor</th>
               <th>Price</th>
-              <th />
+              {/* Labelled, and right-aligned so the heading sits over the buttons
+                  rather than over the far side of an empty column. */}
+              <th scope="col" className="table__th--actions">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
 
@@ -510,11 +514,15 @@ export default function ProductManager({ basePath = '/merchant/products' }) {
                   {/* The whole product cell is the open button, and so is the
                       name, because a merchant scanning a table of photos is
                       looking for "the one with the bottle on it". A real
-                      <button> keeps it reachable by keyboard. */}
+                      <button> keeps it reachable by keyboard.
+
+                      `.table__cell` does the row layout HERE, on the button,
+                      not on the <td>: a flexed cell breaks the row's bottom
+                      border. See the note on `.table__cell`. */}
                   <td>
                     <button
                       type="button"
-                      className="table__product table__product--button"
+                      className="table__cell table__product--button"
                       onClick={() => openProduct(product)}
                     >
                       {product.image ? (
@@ -557,22 +565,26 @@ export default function ProductManager({ basePath = '/merchant/products' }) {
                       that nobody pays. */}
                   <td>{formatProductPrice(product)}</td>
 
-                  <td className="table__actions">
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => openProduct(product)}
-                    >
-                      Edit
-                    </button>
+                  {/* The actions wrapper is inside the cell on purpose - see the
+                      note on `.table__cell`. */}
+                  <td>
+                    <div className="table__cell table__cell--actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => openProduct(product)}
+                      >
+                        Edit
+                      </button>
 
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-sm"
-                      onClick={() => handleDelete(product)}
-                    >
-                      Delete
-                    </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => handleDelete(product)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
