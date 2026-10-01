@@ -5,6 +5,8 @@ import { createApp } from './app.js';
 import { initSockets } from './sockets/index.js';
 import { DEMO_PASSWORD, seedDemoData } from './seed.js';
 import { warmStorefronts } from './controllers/storeController.js';
+import { imageHostingReady } from './services/cloudinary.js';
+import { config as appConfig } from './config/env.js';
 
 async function start() {
   console.log(`[api] starting in ${config.nodeEnv} mode`);
@@ -60,6 +62,23 @@ async function start() {
     .catch((err) => {
       console.warn('[api] storefront warm-up skipped:', err.message);
     });
+
+  /* Say out loud, at boot, whether images are hosted or inline.
+   *
+   * Silently storing pictures inline because the Cloudinary credentials are
+   * wrong would look exactly like "it works" while quietly reintroducing the
+   * 900KB storefront payload this was meant to remove. One line in the log is
+   * the difference between a configuration mistake found now and a mystery
+   * found next month. Un-awaited: Cloudinary must never delay `listen`. */
+  imageHostingReady()
+    .then((ready) => {
+      console.log(
+        ready
+          ? `[images] hosted on Cloudinary (cloud "${appConfig.cloudinary.cloudName}", folder "${appConfig.cloudinary.folder}")`
+          : '[images] hosting OFF - images are stored inline as base64 (check CLOUDINARY_* in backend/.env)',
+      );
+    })
+    .catch(() => {});
 
   let shuttingDown = false;
   const shutdown = async (signal) => {

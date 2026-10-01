@@ -8,6 +8,7 @@ import { HttpError } from '../middleware/errorHandler.js';
 import { buildPublicTree } from './categoryTreeController.js';
 import { CANCELLED_STATUSES, ROLES, STORE_RIDER_STATUS, THEME2, THEME_VALUES } from '../utils/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { hostImage, publicIdFor, removeImage, storeFolder } from '../services/cloudinary.js';
 import { normaliseUsername, slugify, uniqueSlug } from '../utils/slug.js';
 import {
   loadManageableStore,
@@ -411,8 +412,29 @@ export const updateMyStore = asyncHandler(async (req, res) => {
 
   if (description !== undefined) store.description = String(description).trim();
   if (phone !== undefined) store.phone = String(phone).trim();
-  if (image !== undefined) store.image = String(image).trim();
-  if (logo !== undefined) store.logo = String(logo || '').trim();
+
+  /* Images are HOSTED, not embedded (see services/cloudinary.js): a data URL
+     the client downscaled and sent goes to Cloudinary, and only the resulting
+     URL is stored. That is what turns a ~90KB logo field into a ~120-byte one,
+     and what lets the browser cache the picture as an image. Replacing or
+     clearing one deletes the old asset, so the account does not grow a copy of
+     every logo the merchant ever uploaded. */
+  if (image !== undefined) {
+    const hosted = await hostImage(String(image || '').trim(), {
+      folder: storeFolder(store._id, 'cover'),
+      publicId: publicIdFor(store._id, 'cover'),
+    });
+    if (hosted !== store.image) await removeImage(store.image);
+    store.image = hosted;
+  }
+  if (logo !== undefined) {
+    const hosted = await hostImage(String(logo || '').trim(), {
+      folder: storeFolder(store._id, 'logo'),
+      publicId: publicIdFor(store._id, 'logo'),
+    });
+    if (hosted !== store.logo) await removeImage(store.logo);
+    store.logo = hosted;
+  }
   if (isActive !== undefined) store.isActive = Boolean(isActive);
 
   /* Which storefront layout this store shows. See Store.theme.

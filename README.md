@@ -486,8 +486,70 @@ Verifying any of it:
 ```bash
 npm --prefix backend run test:cache        # 19 checks, no database needed
 npm --prefix backend run test:compression  # 36 checks, no database needed
+npm --prefix backend run test:images       # image hosting; skips without credentials
 STOREFRONT_CACHE_TTL_MS=1500 npm run dev:backend   # make the stale path reachable in 1.5s
 ```
+
+## Images live in Cloudinary
+
+An image in this app is a **URL in the database, never bytes**. The browser
+downscales the picked file on a canvas and sends a data URL; the API forwards it
+to Cloudinary and stores the URL it gets back
+(`backend/src/services/cloudinary.js`). That one rule is what removes the
+942KB storefront payload: the same picture that cost ~90KB of JSON as base64 is
+~120 bytes as a URL, and the browser can then cache it, decode it off the main
+thread and range-request it like any other image.
+
+Covered by every image write, all of which funnel through `hostImage`:
+
+| Where | Field |
+| --- | --- |
+| `PATCH /api/stores/mine` | `logo`, `image` (cover) |
+| `PUT /api/menu/edit/:storeId/categories/:name/image` | Theme 1 category cards |
+| `PATCH /api/menu/edit/:storeId/tree/:nodeId` | Theme 2 tree cards |
+| `POST /api/products`, `PUT /api/products/:id` | product + variant photos |
+
+Details worth knowing:
+
+- **The stored URL carries `q_auto,f_auto`.** Cloudinary then serves WebP/AVIF
+  to a browser that can decode one and the original format to everyone else, so
+  a shopper on mobile data gets a fraction of the PNG's bytes with no client
+  change.
+- **`public_id` is deterministic** (`<storeId>-logo`, `<storeId>-category-<name>`),
+  so re-uploading a logo **replaces** it instead of leaving yesterday's file in
+  the account. Clearing or replacing one deletes the old asset, best effort - a
+  Cloudinary outage must not stop a merchant removing a picture.
+- **Uploads are signed server-side**, so the secret never reaches the browser
+  and there is no public "upload to our account" endpoint. An unsigned upload
+  preset would save a hop (phone → Cloudinary directly) but publishes an
+  endpoint anyone can push files into; that is a deliberate production
+  follow-up, not a default.
+- **Credentials are probed, not trusted.** `imageHostingReady()` pings Cloudinary
+  once at boot; until that succeeds, images are stored inline exactly as before,
+  and `server.js` prints which mode is live. A typo in `.env` therefore degrades
+  to the old behaviour instead of failing every upload:
+
+  ```
+  [images] hosted on Cloudinary (cloud "d9ok", folder "delivery-app")
+  [images] hosting OFF - images are stored inline as base64 (check CLOUDINARY_* in backend/.env)
+  ```
+
+Set them in `backend/.env` (git-ignored); `.env.example` documents the names.
+
+### Moving images that are already inline
+
+Code only affects new uploads - rows written before it still hold their
+megabytes, and no new code shrinks an old document. The backfill walks every
+image field and replaces each inline value with its hosted URL:
+
+```bash
+npm --prefix backend run backfill:images            # dry run: reports, writes nothing
+npm --prefix backend run backfill:images -- --apply # actually upload
+```
+
+A document is saved only after its uploads succeeded, so a failure halfway
+leaves a partially migrated database rather than a lost image, and the
+storefront cache is invalidated at the end so the change is visible immediately.
 
 ## File map for AI editors
 

@@ -84,8 +84,11 @@ export const updateMyStore = (payload, storeId) =>
 /**
  * PATCH /stores/mine/logo (?storeId=) — upload a store logo file.
  * Sends multipart/form-data { logo } and resolves to the updated store.
- * Falls back to resizing client-side and saving as a data URL when the
- * backend has no file-upload endpoint (keeps old backends working).
+ * Falls back to resizing client-side and sending a data URL when the backend
+ * has no file-upload endpoint (keeps old backends working). Either way the
+ * SERVER decides where the picture lives: it forwards the image to Cloudinary
+ * and stores the URL it gets back (backend/src/services/cloudinary.js), so a
+ * ~90KB base64 logo never reaches MongoDB.
  */
 export const uploadStoreLogo = async (file, storeId) => {
   const form = new FormData();

@@ -4,6 +4,7 @@ import Product from '../models/Product.js';
 import Store from '../models/Store.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { hostImage, removeImage, storeFolder } from '../services/cloudinary.js';
 import { PRODUCT_STATUS, PRODUCT_STATUS_VALUES } from '../utils/constants.js';
 import { slugify } from '../utils/slug.js';
 import { managedStoreIds, storesForUser } from '../utils/storeAccess.js';
@@ -542,6 +543,36 @@ async function fileProductOnNode(product, categoryId, storeId) {
 }
 
 /**
+ * Push a product's picture (and its variants') through image hosting.
+ *
+ * A product photo is normally TYPED IN as a URL (ProductEditor has a url input),
+ * so this is a pass-through for the ordinary case and only does work for a data
+ * URL - pasted from somewhere, or a client that uploads. No public id: a product
+ * photo is not a fixed slot, so each upload is its own asset and the previous
+ * one is deleted when it is replaced or cleared.
+ *
+ * Called by both create and update so the two cannot drift - the same rule that
+ * `fileProductOnNode` and `readVariantBlock` follow.
+ */
+async function hostProductImages(product) {
+  const folder = storeFolder(product.store, 'products');
+
+  const hosted = await hostImage(product.image, { folder });
+  if (hosted !== product.image) {
+    await removeImage(product.image);
+    product.image = hosted;
+  }
+
+  for (const variant of product.variants || []) {
+    const variantUrl = await hostImage(variant.image, { folder });
+    if (variantUrl !== variant.image) {
+      await removeImage(variant.image);
+      variant.image = variantUrl;
+    }
+  }
+}
+
+/**
  * POST /api/products (store owner, or the store admins that owner appointed;
  * a platform admin through the stores they run) -> { product }
  *
@@ -575,6 +606,10 @@ export const createProduct = asyncHandler(async (req, res) => {
   // create with none of them gets the schema defaults - `active`, stock
   // tracked, no vendor - which is exactly the product it used to create.
   Object.assign(payload, readOrganisationBlock(req.body));
+
+  // Before the insert, so the document that reaches Mongo is already a set of
+  // URLs - there is no window in which a 1MB data URL is on its way to disk.
+  await hostProductImages(payload);
 
   const product = await Product.create(payload);
 
@@ -655,6 +690,12 @@ export const updateProduct = asyncHandler(async (req, res) => {
       variants: variantBlock.variants,
     });
   }
+
+  /* Same rule as create: the values on the document (including any variant rows
+     just applied) go through hosting before the save, so `image` and
+     `variants[].image` are URLs in Mongo. `product.store` is already final, so
+     the folder matches the store the product ends up in. */
+  await hostProductImages(product);
 
   await product.save();
 

@@ -229,21 +229,30 @@ export const setCategoryImage = (storeId, name, image, maxSize = 480) =>
     );
 
 /**
- * Turn a picked File into a downscaled data URL, or pass a data URL through.
+ * Turn a picked File into a downscaled data URL, or pass an existing value
+ * through untouched.
  *
- * Downscaling is what makes this safe to store: a phone photo is 3-5MB, and
- * a category card renders at about 150px. Shipping the original would put
- * megabytes of base64 into a document the storefront reads on every visit.
- * 480px is roughly 3x the rendered size, so it stays sharp on a high-density
- * screen without being wasteful.
+ * Downscaling is what makes this cheap to send: a phone photo is 3-5MB, and a
+ * category card renders at about 150px. Shipping the original would put
+ * megabytes through the API on every mobile connection.
  *
- * Accepts a data URL unchanged so a caller that already has one (a re-upload of
- * the stored value, say) does not round-trip it through a canvas.
+ * Passed through, without a canvas round-trip:
+ *  - '' — CLEARING a picture. `handleCategoryImageRemove` sends this. It used
+ *    to fall through to FileReader, which rejects a string, so removing a
+ *    category picture could only ever fail.
+ *  - a data URL — a caller that already has one.
+ *  - an http(s) URL — what the server stores once Cloudinary has hosted the
+ *    upload (see backend/src/services/cloudinary.js). Re-uploading the stored
+ *    value unchanged must not try to read a URL as a file.
  */
 function imageToDataUrl(image, maxSize) {
-  if (typeof image === 'string' && image.startsWith('data:image/')) {
-    return Promise.resolve(image);
-  }
+  const alreadyAString =
+    typeof image === 'string' &&
+    (image.startsWith('data:image/') ||
+      image.startsWith('https://') ||
+      image.startsWith('http://'));
+
+  if (alreadyAString) return Promise.resolve(image);
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

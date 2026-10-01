@@ -5,6 +5,7 @@ import Store from '../models/Store.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { slugify } from '../utils/slug.js';
+import { hostImage, publicIdFor, removeImage, storeFolder } from '../services/cloudinary.js';
 import { loadManageableStore } from '../utils/storeAccess.js';
 import {
   dedupe,
@@ -752,8 +753,12 @@ export const setCategoryImage = asyncHandler(async (req, res) => {
   if (!image) {
     /* Clearing drops the key entirely rather than storing '', so a removed
        picture leaves nothing behind for a later re-created category to
-       inherit. */
+       inherit. The Cloudinary asset goes with it (best effort - see
+       services/cloudinary.js): this map is keyed by NAME, so a cleared picture
+       would otherwise sit in the account forever with nothing pointing at it. */
+    const previous = images[key];
     delete images[key];
+    await removeImage(previous);
   } else {
     if (!isAllowedImageDataUrl(image)) {
       throw new HttpError(
@@ -761,7 +766,20 @@ export const setCategoryImage = asyncHandler(async (req, res) => {
         'That image could not be used. Pick a PNG, JPG, WEBP or GIF under 1 MB.',
       );
     }
-    images[key] = image;
+
+    /* Hosted, not embedded. The value validated above is a data URL; what gets
+       stored is a Cloudinary URL (services/cloudinary.js). The `key` is part of
+       the public id, so re-picking a picture for "Drinks" replaces that one
+       asset rather than adding another. */
+    const hosted = await hostImage(image, {
+      folder: storeFolder(store._id, 'categories'),
+      publicId: publicIdFor(store._id, 'category', key),
+    });
+
+    /* A slot is overwritten in place by the public id above, so there is no old
+       file to delete here - the value it had was either a data URL (no asset)
+       or that same public id (already replaced). */
+    images[key] = hosted;
   }
 
   store.categoryImages = images;

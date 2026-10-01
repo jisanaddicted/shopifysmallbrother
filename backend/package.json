@@ -13,6 +13,8 @@
     "test:smoke": "node scripts/smokeTest.mjs",
     "test:cache": "node scripts/testStorefrontCache.mjs",
     "test:compression": "node scripts/testCompression.mjs",
+    "test:images": "node scripts/testCloudinary.mjs",
+    "backfill:images": "node scripts/backfillImages.mjs",
     "test:variants": "node scripts/testVariants.mjs && node scripts/testProductModel.mjs && node scripts/testVariantParity.mjs",
     "test:variants:db": "node scripts/testVariantIntegration.mjs",
     "test:categories": "node scripts/testCategories.mjs",
@@ -25,6 +27,7 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.0",
     "express": "^4.22.2",

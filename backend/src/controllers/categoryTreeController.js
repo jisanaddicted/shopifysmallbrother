@@ -5,6 +5,7 @@ import Store from '../models/Store.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { MAX_CATEGORY_DEPTH } from '../utils/constants.js';
+import { hostImage, publicIdFor, removeImage, storeFolder } from '../services/cloudinary.js';
 import { loadManageableStore } from '../utils/storeAccess.js';
 import {
   dedupe,
@@ -327,7 +328,17 @@ export const updateTreeNode = asyncHandler(async (req, res) => {
         'That image could not be used. Pick a PNG, JPG, WEBP or GIF under 1 MB.',
       );
     }
-    node.image = image;
+
+    /* Hosted, not embedded: what arrives is a data URL and what is stored is a
+       Cloudinary URL (services/cloudinary.js). The node id is in the public id,
+       so the node's picture is ONE asset that a new upload replaces - the same
+       guarantee the Theme 1 category map gets from the category name. */
+    const hosted = await hostImage(image, {
+      folder: storeFolder(store._id, 'tree'),
+      publicId: publicIdFor(store._id, 'node', node._id),
+    });
+    if (hosted !== node.image) await removeImage(node.image);
+    node.image = hosted;
   }
 
   if (req.body?.parent !== undefined) {

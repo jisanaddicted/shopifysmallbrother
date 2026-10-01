@@ -54,6 +54,26 @@ export const config = {
   // serve-stale-then-refresh path is reachable in a second instead of thirty.
   storefrontCacheTtlMs: toInt(process.env.STOREFRONT_CACHE_TTL_MS, 30_000),
 
+  // --- Cloudinary (image hosting) ------------------------------------------
+  // Where merchant pictures live. With all three values set, an image the
+  // browser uploads is pushed to Cloudinary and the DATABASE KEEPS ONLY THE
+  // URL. That is the whole point: a store logo stored as a base64 data URL is
+  // ~90KB of JSON and a category picture up to 1MB, both shipped to every
+  // shopper on every page load - together they are the bulk of that 942KB
+  // storefront response (see middleware/compress.js). A URL is ~120 bytes, and
+  // the browser then caches, decodes and displays the picture as the image it is.
+  //
+  // With any of the three MISSING the API behaves exactly as it did before and
+  // keeps the data URL inline, so a fresh clone without credentials still runs.
+  cloudinary: {
+    cloudName: String(process.env.CLOUDINARY_CLOUD_NAME || '').trim(),
+    apiKey: String(process.env.CLOUDINARY_API_KEY || '').trim(),
+    apiSecret: String(process.env.CLOUDINARY_API_SECRET || '').trim(),
+    // Everything this app uploads lands under this folder, so one delete in the
+    // Cloudinary console takes the whole app's media with it.
+    folder: String(process.env.CLOUDINARY_FOLDER || '').trim() || 'delivery-app',
+  },
+
   // --- SSLCommerz (sandbox) ------------------------------------------------
   // Online payment for the `card` method. Cash on delivery needs none of this -
   // it is the absence of a gateway, not a gateway configured differently.
@@ -88,6 +108,18 @@ export const config = {
  */
 export const isSslcommerzConfigured = () =>
   Boolean(config.sslcommerz.storeId && config.sslcommerz.storePassword);
+
+/**
+ * Are the Cloudinary credentials present? Checked on the image write path, so a
+ * deployment without them keeps the old inline-data-URL behaviour instead of
+ * failing every upload with a confusing error.
+ */
+export const isCloudinaryConfigured = () =>
+  Boolean(
+    config.cloudinary.cloudName &&
+      config.cloudinary.apiKey &&
+      config.cloudinary.apiSecret,
+  );
 
 export const isProduction = config.nodeEnv === 'production';
 
