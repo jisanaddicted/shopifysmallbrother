@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import orderService from '../../services/orderService';
 import { ROUTES } from '../../utils/constants';
+import {
+  ANY_DATE,
+  CUSTOM_RANGE,
+  DATE_OPTIONS,
+  dateWindow,
+  inWindow,
+  isDefaultDateFilter,
+} from '../../utils/dateWindow';
 import {
   formatCurrency,
   formatDateTime,
@@ -45,6 +53,23 @@ export default function StoreRiderAnalytics() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  /* The date filter, over "Every delivery" only.
+
+     Deliberately NOT a server-side filter: the analytics response already
+     carries every order this store has, so filtering here is one pass over an
+     array that is in memory - no round trip, and the list never flickers while
+     the filter changes. Same reasoning as the rider console's filters.
+
+     It narrows the LIST and nothing else. The headline cards and the per-rider
+     table above keep describing all time, because those figures are computed by
+     the server (summariseTimings / summariseByRider) and re-deriving them here
+     would produce a second set of averages that quietly disagreed with the
+     first - exactly the drift this page's own header warns against. So the
+     filter is labelled as being about the list, and the caption says so. */
+  const [dateFilter, setDateFilter] = useState(ANY_DATE);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -61,14 +86,42 @@ export default function StoreRiderAnalytics() {
     load();
   }, [load]);
 
+  /* The filtered list, and whether the merchant narrowed it at all.
+
+     ABOVE the `if (loading)` early return on purpose: a hook below it would be
+     called on the first render (loading, data null) and skipped on the second
+     (loaded), and React throws "Rendered fewer hooks than expected" the moment
+     loading flips. Every hook in a component has to sit before any early exit.
+
+     `placedAt` is the field the server sorts the rows by (see summariseTimings
+     in backend/src/utils/deliveryTiming.js), so filtering on it is filtering on
+     the same notion of "when this order happened" the list is already ordered
+     by. An order with no parseable timestamp is HIDDEN rather than shown: a row
+     that cannot be placed in the window cannot honestly be claimed to be inside
+     it. `rows` is empty while loading, so this is simply an empty list then. */
+  const allRows = data?.orders || [];
+  const range = dateWindow(dateFilter, fromDate, toDate);
+  const visibleRows = useMemo(
+    () => (range ? allRows.filter((row) => inWindow(row.placedAt, range)) : allRows),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allRows, dateFilter, fromDate, toDate],
+  );
+
   if (loading) {
     return <LoadingSpinner fullPage label="Working out your numbers…" />;
   }
 
   const summary = data?.summary || {};
-  const rows = data?.orders || [];
+  const rows = allRows;
   const riders = data?.riders || [];
   const finished = data?.delivered || 0;
+  const filterActive = !isDefaultDateFilter(dateFilter, fromDate, toDate);
+
+  const clearDates = () => {
+    setDateFilter(ANY_DATE);
+    setFromDate('');
+    setToDate('');
+  };
 
   /*
    * Each leg points at the AVERAGE in `summary`, not at the per-order field of
@@ -340,6 +393,69 @@ export default function StoreRiderAnalytics() {
               </div>
             </div>
 
+            {/* The time filter, in the same vocabulary as the rider console's
+                (see utils/dateWindow.js), so "Last 7 days" means the same days to
+                a rider and to the store owner reading the same deliveries. */}
+            <div className="filters">
+              <label className="field field--inline">
+                <span>Placed</span>
+                <select
+                  value={dateFilter}
+                  onChange={(event) => setDateFilter(event.target.value)}
+                >
+                  {DATE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {dateFilter === CUSTOM_RANGE ? (
+                <>
+                  <label className="field field--inline">
+                    <span>From</span>
+                    <input
+                      type="date"
+                      value={fromDate}
+                      max={toDate || undefined}
+                      onChange={(event) => setFromDate(event.target.value)}
+                    />
+                  </label>
+
+                  <label className="field field--inline">
+                    <span>To</span>
+                    <input
+                      type="date"
+                      value={toDate}
+                      min={fromDate || undefined}
+                      onChange={(event) => setToDate(event.target.value)}
+                    />
+                  </label>
+                </>
+              ) : null}
+
+              {filterActive ? (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={clearDates}
+                >
+                  Clear dates
+                </button>
+              ) : null}
+            </div>
+
+            {/* What the filter is doing, and - just as important - what it is NOT
+                doing. The cards and the rider table above are server-computed
+                over ALL time, so a merchant who narrows to 7 days must not read
+                the 12-minute average above as belonging to those 7 days. */}
+            <p className="muted small">
+              {filterActive
+                ? `Showing ${visibleRows.length} of ${rows.length} deliveries in this range. The figures above still cover every delivery.`
+                : `Showing all ${rows.length} deliveries.`}
+            </p>
+
             <div className="table-wrap">
               <table className="table">
                 <thead>
@@ -357,11 +473,27 @@ export default function StoreRiderAnalytics() {
                 </thead>
 
                 <tbody>
-                  {rows.map((row) => (
+                  {visibleRows.map((row) => (
                     <tr key={row.id}>
                       <td>
+                        {/* The MERCHANT order detail, not /track/:orderId.
+
+                            /track/:orderId mounts the page as the CUSTOMER sees it,
+                            so a store owner clicking a row here was dropped out of
+                            the dashboard shell and shown the buyer's closing
+                            sequence - "Confirm your delivery", the rating form, "Sign
+                            in to rate this delivery". None of that is the store's to
+                            do: `received` is the buyer's status alone, and the API
+                            refuses anybody else (assertOrderOwner). It also threw
+                            away the side rail for a page the store only opened to
+                            read timings.
+
+                            MERCHANT_ORDER_DETAIL keeps the shell and renders
+                            variant="merchant", which carries the order, the live map
+                            and the back-office timings with none of the buyer's
+                            controls. StoreOrders.jsx already links here. */}
                         <Link
-                          to={ROUTES.ORDER_TRACKER.replace(
+                          to={ROUTES.MERCHANT_ORDER_DETAIL.replace(
                             ':orderId',
                             row.id,
                           )}
@@ -411,8 +543,15 @@ export default function StoreRiderAnalytics() {
                 </tbody>
               </table>
 
-              {rows.length === 0 ? (
-                <p className="empty">Nothing here yet.</p>
+              {visibleRows.length === 0 ? (
+                <p className="empty">
+                  {/* Two different "nothing" cases, so the merchant is not sent
+                      hunting for a missing order that is simply outside the range
+                      they picked. */}
+                  {rows.length === 0
+                    ? 'Nothing here yet.'
+                    : 'No deliveries in this range.'}
+                </p>
               ) : null}
             </div>
           </section>

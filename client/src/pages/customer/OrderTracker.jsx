@@ -39,6 +39,16 @@ import { findVariant } from '../../utils/variants';
  * variant="rider" - the same, opened from the rider's own pages at
  *   /rider/orders/:orderId, for the same reason: it stays inside the rider
  *   shell instead of dropping the rider onto the public navbar.
+ * variant="merchant" - the store owner's own order detail, at
+ *   /merchant/orders/:orderId. Added later than the other two and MISSING from
+ *   this list until it caused the bug the `isStaffView` comment describes; the
+ *   variant now exists here so the next reader does not have to find it in
+ *   App.jsx.
+ *
+ * Every variant except "customer" is a staff view, and `isStaffView` is what
+ * decides it - so the customer-only controls (confirming receipt, reviewing,
+ * cancelling, starting a new order) exist in exactly one variant, and every new
+ * one is a staff view until it says otherwise.
  *
  * `backTo`/`backLabel` let the caller send "back" where the user actually came
  * from - the rider tracker's order view returns to the tracker, not to the
@@ -50,7 +60,27 @@ export default function OrderTracker({
   backLabel: backLabelProp,
 }) {
   const isAdmin = variant === 'admin';
-  const isStaffView = isAdmin || variant === 'rider';
+
+  /* "Is this anybody but the buyer?" - asked the safe way round.
+
+     It used to be an allow-list: `isAdmin || variant === 'rider'`. That is
+     exactly the shape that let the store owner's panel grow a "Confirm delivery
+     received" button, because App.jsx mounts this page with
+     `variant="merchant"` for /merchant/orders/:orderId and 'merchant' was never
+     added to the list. The page then rendered its customer-only closing section
+     (`!isStaffView && ...`) inside the merchant shell - a store owner was offered
+     the buyer's button. The API refused it (`assertOrderOwner`), so it failed as
+     a 403 rather than as data loss, but a control that can only ever fail is
+     worse than no control: it implies the store can close the loop on a
+     customer's behalf, which is precisely what the split exists to prevent.
+
+     Asking "is this the customer view?" instead means the next variant anyone
+     mounts - a supplier panel, a support tool - is a staff view by default, and
+     the customer-only controls stay hidden unless a variant opts IN. Every
+     staff-only thing below keys off this same flag, so the merchant view also
+     stops rendering as `page--customer` and loses its "Back to orders" link,
+     both of which were wrong for the same reason. */
+  const isStaffView = variant !== 'customer';
   const { orderId } = useParams();
   const { joinOrder, leaveOrder, getRiderLocation, statusUpdates, connected } =
     useSocket();

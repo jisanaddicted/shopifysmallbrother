@@ -11,6 +11,7 @@ import {
   ORDER_STATUS_TONE,
 } from '../../utils/constants';
 import { formatCurrency, formatDateTime, formatStatus } from '../../utils/formatters';
+import { ANY_DATE, DATE_OPTIONS, dateWindow } from '../../utils/dateWindow';
 
 // Never send a GPS ping more often than this (milliseconds).
 const PING_INTERVAL_MS = 4000;
@@ -21,7 +22,6 @@ const PING_INTERVAL_MS = 4000;
 // than as another round trip. The values below are what "no filter" looks like.
 const ALL_STATUSES = 'all';
 const ACTIVE_ONLY = 'active';
-const ANY_DATE = 'all';
 
 const STATUS_OPTIONS = [
   { value: ALL_STATUSES, label: 'All statuses' },
@@ -30,13 +30,10 @@ const STATUS_OPTIONS = [
   { value: ORDER_STATUS.CANCELLED, label: formatStatus(ORDER_STATUS.CANCELLED) },
 ];
 
-const DATE_OPTIONS = [
-  { value: ANY_DATE, label: 'Any date' },
-  { value: 'today', label: 'Today' },
-  { value: '7d', label: 'Last 7 days' },
-  { value: '30d', label: 'Last 30 days' },
-  { value: 'custom', label: 'Custom range' },
-];
+// DATE_OPTIONS, parseDay, startOfDay/endOfDay and dateWindow used to live here.
+// They now come from utils/dateWindow.js, shared with the store's rider
+// analytics, so "today" and "last 7 days" cannot mean one thing to a rider and
+// another to the store owner looking at the same deliveries.
 
 // What the console OPENS on: today, and confirmed.
 //
@@ -56,63 +53,6 @@ const DEFAULT_DATE_FILTER = 'today';
  *  includes `received`: once the customer has confirmed the parcel, the job is
  *  over even though the rider never set that status themselves. */
 const isClosed = (status) => CLOSED_STATUSES.includes(status);
-
-/**
- * Parses a <input type="date"> value ("2026-09-26") into a *local* midnight.
- * `new Date('2026-09-26')` would be parsed as UTC and can land on the previous
- * day for anybody west of Greenwich, so the parts are read out by hand.
- */
-const parseDay = (value) => {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim());
-  if (!match) return null;
-
-  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-};
-
-const startOfDay = (date) => {
-  const copy = new Date(date);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-};
-
-const endOfDay = (date) => {
-  const copy = startOfDay(date);
-  copy.setHours(23, 59, 59, 999);
-  return copy;
-};
-
-// How many days back each quick option reaches. "7d" means today *and* the six
-// days before it, so it is 7 days of orders in total rather than 8.
-const DATE_WINDOWS = { today: 1, '7d': 7, '30d': 30 };
-
-/**
- * The [from, to] window the date filter selects, or null for "any date".
- *
- * A custom range with only one end filled in is treated as "any date" rather
- * than as "hide everything" - the rider is halfway through typing, and a list
- * that suddenly empties looks like a bug. Reversed dates are swapped so the
- * range is still usable.
- */
-function dateWindow(dateFilter, fromDate, toDate) {
-  if (dateFilter === 'custom') {
-    const from = parseDay(fromDate);
-    const to = parseDay(toDate);
-    if (!from || !to) return null;
-
-    return from.getTime() <= to.getTime()
-      ? { from: startOfDay(from), to: endOfDay(to) }
-      : { from: startOfDay(to), to: endOfDay(from) };
-  }
-
-  const days = DATE_WINDOWS[dateFilter];
-  if (!days) return null;
-
-  const to = endOfDay(new Date());
-  const from = startOfDay(new Date());
-  from.setDate(from.getDate() - (days - 1));
-
-  return { from, to };
-}
 
 /** "In progress" is a group of statuses, not one, so it is matched by hand. */
 const matchesStatus = (status, statusFilter) => {
