@@ -29,6 +29,7 @@
     "verify:slug": "node scripts/verifySlugRename.mjs",
     "test:filing": "node scripts/testProductFiling.mjs",
     "test:sections": "node scripts/testSections.mjs",
+    "test:card": "node scripts/testProductCardFit.mjs",
     "test:bulk": "node scripts/testBulkEdit.mjs"
   },
   "dependencies": {

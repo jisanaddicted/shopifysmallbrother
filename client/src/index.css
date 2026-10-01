@@ -1043,6 +1043,28 @@ ol {
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+
+  /* Two things, both load-bearing, both about the card being able to get NARROW.
+
+     `min-width: 0` is the fix for the card overflowing its grid track. A grid
+     item defaults to `min-width: auto`, which is its MIN-CONTENT width, and this
+     card's min-content width is set by its footer: the quantity stepper and the
+     Add button are both `flex-shrink: 0` and the stepper's number has a pinned
+     width, so together they refuse to go below ~200px. A track asked for 150px
+     therefore got ~200px of card in it, and the card - photo included - spilled
+     sideways over its neighbour. `auto` is what made the image look like it did
+     not fit: it was not the image, it was the box around it refusing to shrink.
+
+     `container-type` makes the card a QUERY CONTAINER so the rules below can
+     respond to how wide THIS card is, rather than to how wide the window is.
+     That distinction is the whole Theme 2 bug: this theme's cards are narrow
+     because of the 210px sidebar beside them, not because the shopper is on a
+     phone, so a viewport media query never fired for them and they kept the
+     desktop layout - 4:3 photo plus a footer that cannot wrap - at 150px wide.
+     Asking "is this card narrow?" is the question that was never being asked. */
+  min-width: 0;
+  container-type: inline-size;
+  container-name: card;
 }
 
 .product-card__media {
@@ -1051,6 +1073,16 @@ ol {
   background: var(--surface-alt);
   display: grid;
   place-items: center;
+
+  /* The photo box is a FIXED shape, and nothing inside it may change that
+     shape. `overflow: hidden` is the backstop: whatever a merchant uploaded -
+     a 4000x300 panorama, a 300x4000 receipt scan, a square logo - the box
+     stays exactly 4:3 and the picture is dealt with inside it rather than by
+     growing the card. `min-width: 0` for the same reason as on the card: this
+     is a flex child, and without it the footer's min-content width would
+     stretch the photo box sideways too. */
+  overflow: hidden;
+  min-width: 0;
 }
 
 /* The tap target that opens the product page.
@@ -1058,18 +1090,38 @@ ol {
    Absolutely positioned over the whole media box rather than wrapping it in
    flow, so the "Out of stock" chip and the "N options" chip stay above it
    instead of being pushed around by it. `> *` stretches to fill the box: the
-   image needs it to crop with object-fit, and the placeholder needs it so its
-   glyph lands in the middle rather than the top-left corner. */
+   image needs it so `object-fit` has a defined area to fit into, and the
+   placeholder needs it so its glyph lands in the middle rather than the
+   top-left corner. */
 .product-card__open {
   position: absolute;
   inset: 0;
   display: grid;
 }
 
+/* `min-width`/`min-height: 0` are the whole point of this rule, and without
+   them `height: 100%` silently does nothing for a TALL image.
+
+   This is a grid item, and a grid item's automatic minimum size is
+   `min-height: auto` - which for a replaced element like <img> resolves to its
+   INTRINSIC height. A 500x1200 bottle photo therefore refuses to be shorter
+   than 1200px scaled for its width, so its box came out 250px tall inside a
+   171px photo box. `object-fit: contain` then dutifully fitted the picture into
+   that too-tall box, and `.product-card__media`'s `overflow: hidden` clipped
+   the overflow - so the bottle was cropped top and bottom exactly as before,
+   with `contain` in the stylesheet looking like it had worked.
+
+   Measured, before this line: img=171.5x250.1 inside box=171.5x171.5.
+
+   Zeroing the automatic minimum lets the item be the size of the grid area, so
+   the picture is fitted into the box that is actually visible and the whole of
+   it is seen. */
 .product-card__open > * {
   grid-area: 1 / 1;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
 .product-card__placeholder {
@@ -1078,10 +1130,41 @@ ol {
   place-items: center;
 }
 
+/* The product photo: THE WHOLE IMAGE, ALWAYS.
+
+   `contain` is the opposite of the `cover` this used to be, and the change is
+   deliberate. `cover` fills the box and crops the overflow, so a merchant who
+   uploaded a tall bottle shot got the middle slice of it - cap at the top, base
+   gone - with no way to tell that anything was missing. A shopper scanning a
+   grid cannot recognise a product they cannot see all of, and cannot tell a
+   cropped photo from a badly-photographed one. `contain` scales the picture
+   down until ALL of it fits, so a square photo, a panorama and a tall portrait
+   are each shown whole.
+
+   The cost is honest and worth stating: when the image's shape does not match
+   the box, the leftover area is filled by the media box's `background`, which
+   is `--surface-alt` (see .product-card__media). That is a deliberate, calm
+   backdrop rather than a broken-looking gap.
+
+   The `padding` is what makes that backdrop read as a frame instead of as
+   emptiness: the photo floats inside its box with an even margin all round, so
+   every card looks composed that way rather than the image having been squeezed
+   into it. `box-sizing: border-box` is global, so the padding comes out of the
+   box and the card never grows.
+
+   `display: block` removes the inline baseline gap, which otherwise leaves the
+   box a few pixels taller than the photo. The `max-*` pair is belt and braces:
+   `object-fit` sizes the image correctly in every current browser, but if it
+   ever failed - or a merchant's file arrived with no intrinsic size at all -
+   these still stop the picture painting outside the card. */
 .product-card__media img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  padding: 0.45rem;
+  object-fit: contain;
 }
 
 .product-card__media .chip {
@@ -1096,6 +1179,13 @@ ol {
   gap: 0.4rem;
   padding: 0.85rem;
   flex: 1;
+
+  /* As on the card and the photo box: a flex child defaults to `min-width: auto`,
+     so without this the footer's unshrinkable controls would widen the BODY and
+     with it the card. `overflow-wrap` then handles the text itself - one long
+     product name must break rather than set a floor under the whole card. */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* The product name, which is the card's link to its own page.
@@ -1123,6 +1213,11 @@ ol {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+
+  /* The row that sets the card's minimum width, so it is the row that has to be
+     allowed to be narrow. Without this the price and the buy controls together
+     floor the whole card at their combined width. */
+  min-width: 0;
 }
 
 /* The stepper and the Add button, as one control on one row.
@@ -1204,7 +1299,25 @@ ol {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.65rem;
   }
+}
 
+/* THE CARD'S OWN NARROW-WIDTH LAYOUT - a container query, not a media query.
+
+   Everything the card needs when it is squeezed used to live in the media query
+   above, keyed to the WINDOW. That is right for a phone and wrong for Theme 2,
+   whose cards are narrow because of the 210px sidebar beside them: at a 1440px
+   window a Theme 2 card is ~150px wide, the media query never fired, and the
+   card kept the desktop layout - a 4:3 photo and a footer whose price, stepper
+   and button cannot wrap - at a width none of those were designed for. That is
+   the reported bug: the photo does not fit, because the card around it was
+   never told it had become narrow.
+
+   So the card is measured instead of the window (see `container-type` on
+   `.product-card`). 210px is the threshold: below it the stepper, the price and
+   a full-width button genuinely cannot share a line, which is true of the phone
+   grid AND of Theme 2's narrow desktop cards, for the same reason. One rule now
+   covers both, so the two layouts cannot drift apart. */
+@container card (max-width: 210px) {
   .product-card__media {
     /* Square, like the reference. A 4:3 image in a 155px column is only ~116px
        tall - too small to recognise what it is selling. */
@@ -1261,12 +1374,12 @@ ol {
 
   .product-card__buy .btn {
     /* `min-width: 0` lets a flex item shrink below its content width, so a long
-       price or a long label on a narrow screen cannot push the row wider than
+       price or a long label on a narrow card cannot push the row wider than
        the card. */
     min-width: 0;
     /* `0 0 100%`: no grow, no shrink, and always the full card width - so the
        label never truncates to "Add 3 to…". The ellipsis below stays as a
-       backstop for a pathologically narrow screen, not as the normal state. */
+       backstop for a pathologically narrow card, not as the normal state. */
     flex: 0 0 100%;
     /* Comfortably tappable on a phone, and level with the stepper above. */
     padding-block: 0.5rem;
@@ -1275,9 +1388,8 @@ ol {
     text-overflow: ellipsis;
   }
 
-  /* Slightly tighter than the 30px above: in a two-up phone grid every
-     millimetre of the card's width is spoken for, and 28px is still a
-     comfortable target. */
+  /* Slightly tighter than the 30px above: in a two-up grid every millimetre of
+     the card's width is spoken for, and 28px is still a comfortable target. */
   .qty--card button {
     width: 28px;
     height: 28px;
@@ -5254,9 +5366,16 @@ ol {
   font-size: 0.8rem;
 }
 
+/* `min(150px, 100%)`, not a bare 150px.
+
+   A bare minimum is a promise the track cannot keep on a narrow screen: below
+   150px of usable width the track stays 150px anyway and the grid overflows the
+   pane sideways. `min()` lets it fall back to "as wide as the pane" instead, so
+   the cards shrink rather than spill - which is safe now that `.product-card`
+   carries `min-width: 0` and can genuinely get narrower. */
 .treeview__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
   gap: 0.85rem;
 }
 
@@ -5356,7 +5475,10 @@ ol {
 
 .treeview__products {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  /* Same `min()` guard as .treeview__grid above, for the same reason: this grid
+     sits beside the 210px sidebar, so it has less room than the Theme 1 grid and
+     is the one that runs out of it first. */
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
   gap: 0.85rem;
 }
 
@@ -6500,10 +6622,26 @@ ol {
   display: grid;
 }
 
+/* The product page shows the SAME picture as the card, so it must treat it the
+   same way: `contain`, not `cover`. A shopper who cannot see the whole product
+   on the card and then opens the page to find it still cropped has been told
+   the photo is a lie twice. The padding matches the card's, so the photo keeps
+   the same framed margin here that it had in the grid.
+
+   `min-height: 0` for the same reason as `.product-card__open > *`: the hero is
+   a grid, so the img is a grid item, and its automatic minimum size is its
+   INTRINSIC height. Without this a tall photo makes the img box taller than the
+   square hero, `contain` dutifully fits into that taller box, and the hero's
+   `overflow: hidden` crops it - so the picture is cut off anyway. */
 .product-page__hero img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  padding: 0.75rem;
+  object-fit: contain;
 }
 
 .product-page__placeholder {
