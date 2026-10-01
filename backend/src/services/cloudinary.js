@@ -134,21 +134,38 @@ async function probe() {
     await cloudinary.api.ping();
     return true;
   } catch (err) {
-    /* Cloudinary's wording distinguishes two different mistakes, and the fix is
-       different for each, so it is worth surfacing rather than flattening:
-       "unknown api_key" (no key after the colon) means the CLOUD NAME is wrong -
-       `POST /v1_1/<wrong-cloud>/image/upload` answers "Unknown API key" with an
-       empty key, while a correct cloud answers "Missing required parameter -
-       api_key". "Invalid api_key <value>" means the cloud is right and the key
-       is not registered against it. */
+    /* Cloudinary's wording does NOT reliably tell you WHICH value is wrong, and
+       the obvious reading of it is wrong. Measured against the live API with the
+       configured pair, a fake cloud name, and a garbage key:
+
+         real cloud + real key  -> "unknown api_key"   (what we get)
+         fake cloud + real key  -> "unknown api_key"   (identical)
+         real cloud + garbage  -> "unknown api_key"   (identical)
+         real cloud + no key   -> "api_key not provided"
+
+       So "unknown api_key" only means "the request was not authenticated". An
+       earlier version of this comment claimed it proved the CLOUD NAME was
+       wrong, and the hint below repeated that claim - it sent the operator off
+       to re-copy a cloud name that was fine. Only a missing key has its own
+       distinct message.
+
+       The honest hint is therefore the generic one in every case, plus the one
+       thing that is cheap to check and catches the usual cause: Cloudinary API
+       secrets are 32 characters, and a short one here is a paste that got cut
+       off (trailing text lost in a browser, a trimmed editor, a wrapped PDF). */
     const detail =
       err?.error?.message || err?.message || err?.http_code || String(err);
+    const secretTooShort =
+      (config.cloudinary.apiSecret || '').length > 0 &&
+      (config.cloudinary.apiSecret || '').length < 32;
     console.error(
       `[images] Cloudinary rejected the credentials for cloud "${config.cloudinary.cloudName}": ${detail}. ` +
         'Images are stored inline, exactly as they were before. ' +
-        (/invalid api_key/i.test(detail)
-          ? 'The cloud name is fine - copy the API key (and secret) again from Cloudinary -> API Keys.'
-          : 'Check CLOUDINARY_CLOUD_NAME / API_KEY / API_SECRET.'),
+        'Copy all three values again from Cloudinary -> the cloud -> "API Keys": ' +
+        'the error does not say which one is wrong. ' +
+        (secretTooShort
+          ? `Note: the API secret is ${config.cloudinary.apiSecret.length} characters; Cloudinary secrets are 32, so that paste is probably truncated.`
+          : ''),
     );
     return false;
   }

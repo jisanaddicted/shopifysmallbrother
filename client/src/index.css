@@ -4862,6 +4862,9 @@ ol {
   object-fit: cover;
 }
 
+/* The upload tile. A `<label>` wrapping the file input, so it must LOOK
+   clickable - a merchant's first read of this form is whether the dashed `+`
+   does anything, and it has to answer yes before they click it. */
 .media__add {
   display: grid;
   place-items: center;
@@ -4869,6 +4872,22 @@ ol {
   background: var(--surface-alt);
   color: var(--muted);
   font-size: 1.5rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.media__add:hover,
+.media__add:focus-within {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* While the browser is reading and downscaling the chosen file. The shared
+   `.is-disabled` treatment also removes the pointer, so a second click cannot
+   start a competing read. */
+.media__add.is-disabled {
+  cursor: progress;
+  opacity: 0.65;
 }
 
 /* --- Bulk edit panel ------------------------------------------------------

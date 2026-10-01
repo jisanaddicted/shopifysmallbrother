@@ -1,4 +1,5 @@
 import api from './api';
+import { imageToDataUrl } from '../utils/imageFile';
 
 /**
  * GET /api/menu/:slug  (public) — the customer storefront navbar tree.
@@ -227,65 +228,6 @@ export const setCategoryImage = (storeId, name, image, maxSize = 480) =>
         )
         .then((res) => res.data.categories || []),
     );
-
-/**
- * Turn a picked File into a downscaled data URL, or pass an existing value
- * through untouched.
- *
- * Downscaling is what makes this cheap to send: a phone photo is 3-5MB, and a
- * category card renders at about 150px. Shipping the original would put
- * megabytes through the API on every mobile connection.
- *
- * Passed through, without a canvas round-trip:
- *  - '' — CLEARING a picture. `handleCategoryImageRemove` sends this. It used
- *    to fall through to FileReader, which rejects a string, so removing a
- *    category picture could only ever fail.
- *  - a data URL — a caller that already has one.
- *  - an http(s) URL — what the server stores once Cloudinary has hosted the
- *    upload (see backend/src/services/cloudinary.js). Re-uploading the stored
- *    value unchanged must not try to read a URL as a file.
- */
-function imageToDataUrl(image, maxSize) {
-  const alreadyAString =
-    typeof image === 'string' &&
-    (image.startsWith('data:image/') ||
-      image.startsWith('https://') ||
-      image.startsWith('http://'));
-
-  if (alreadyAString) return Promise.resolve(image);
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read that image.'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('That file is not a valid image.'));
-      img.onload = () => {
-        // `Math.min(1, ...)` so a small image is not scaled UP - upscaling
-        // cannot add detail, it only inflates the file.
-        const scale = Math.min(
-          1,
-          maxSize / Math.max(img.width, img.height, 1),
-        );
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Your browser could not process that image.'));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/png'));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(image);
-  });
-}
 
 export default {
   getPublicStoreMenu,

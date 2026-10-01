@@ -15,6 +15,7 @@ import {
   productEditPath,
 } from '../../utils/constants';
 import { truncate } from '../../utils/formatters';
+import { imageToDataUrl, validateImageFile } from '../../utils/imageFile';
 
 const EMPTY_FORM = {
   name: '',
@@ -104,6 +105,23 @@ export default function ProductEditor({ basePath }) {
   const [options, setOptions] = useState([]);
   const [variants, setVariants] = useState([]);
   const [saving, setSaving] = useState(false);
+  /* Is a photo being read/decoded right now?
+
+     A picked file is turned into a data URL on a canvas before it can be sent,
+     which on a large phone photo is long enough that a merchant would click the
+     button again - and the second read would race the first, leaving whichever
+     finished last as the photo, which is not necessarily the one they wanted.
+     The flag disables both controls while a read is in flight. */
+  const [imageBusy, setImageBusy] = useState(false);
+
+  /* Is `form.image` a data URL rather than a stored one?
+
+     A photo the merchant just picked lives in the form as base64 until the
+     product is saved and the API has handed back a real URL. Two consequences:
+     the URL box must not render it (it is unreadable there), and the form must
+     not clear it on a failed save, because there is nothing on the server to
+     fall back to. */
+  const isLocalImage = form.image.startsWith('data:');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -348,6 +366,45 @@ export default function ProductEditor({ basePath }) {
 
   const handleChange = (event) =>
     setForm((prev) => ({ ...prev, [event.target.name]: event.target.value }));
+  /* Pick a photo from this machine.
+
+     The file is NOT uploaded here. It is downscaled in the browser and put into
+     `form.image` as a data URL, so it is previewed immediately and saved by the
+     SAME submit as every other field - one button, no separate "upload then
+     save" step that could be half-finished. The API already handles a data URL
+     on this field: `hostProductImages` forwards it to Cloudinary and stores the
+     URL it gets back (backend/src/controllers/productController.js).
+
+     Until then `form.image` is a local value, which is what `isLocalImage`
+     reports, and the form keeps it if the save fails. */
+  const handleImagePick = async (event) => {
+    const file = event.target.files?.[0];
+    // Cleared immediately so picking the SAME file twice in a row still fires a
+    // change event - without this, re-picking a rejected image does nothing.
+    event.target.value = '';
+    if (!file || imageBusy) return;
+
+    const problem = validateImageFile(file);
+    if (problem) {
+      setError(problem);
+      setNotice('');
+      return;
+    }
+
+    setImageBusy(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const dataUrl = await imageToDataUrl(file);
+      setForm((prev) => ({ ...prev, image: dataUrl }));
+      setNotice('Photo added. Press Save to store it on the product.');
+    } catch (err) {
+      setError(err.message || 'Could not read that image.');
+    } finally {
+      setImageBusy(false);
+    }
+  };
 
   const setCollection = (index, value) =>
     setForm((prev) => ({
@@ -559,20 +616,68 @@ export default function ProductEditor({ basePath }) {
                 </span>
               ) : null}
 
-              <span className="media__add" aria-hidden="true">+</span>
+              {/* The upload control itself.
+
+                  This used to be a bare `<span aria-hidden>+</span>`: decorative,
+                  not a button, with no file input behind it, so clicking it did
+                  nothing at all: the only way to give a product a picture was to paste
+                  a URL into the box that used to sit under this tile, and that box
+                  is gone now too. Uploading is the only way to set a photo.
+                  It is a real `<label>` wrapping a hidden file input, the same shape
+                  ThemeBuilder's logo
+                  and category pickers already use.
+
+                  A `<label>` rather than a `<button>` because the browser then
+                  forwards the click to the input and opens the OS file dialog,
+                  which also keeps it keyboard-reachable - a div with an onClick
+                  is neither. */}
+              <label
+                className={`media__add${imageBusy ? ' is-disabled' : ''}`}
+                title={form.image ? 'Replace this photo' : 'Upload a photo'}
+              >
+                {imageBusy ? '...' : form.image ? '↻' : '+'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={imageBusy}
+                  onChange={handleImagePick}
+                />
+              </label>
             </div>
 
-            <label className="field">
-              <span>Image URL</span>
-              <input
-                type="url"
-                name="image"
-                value={form.image}
-                onChange={handleChange}
-                placeholder="https://example.com/photo.jpg"
-              />
-            </label>
+            <div className="button-row">
+              <label className="btn btn-outline btn-sm">
+                {imageBusy
+                  ? 'Uploading...'
+                  : form.image
+                    ? 'Change photo'
+                    : 'Upload photo'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  hidden
+                  disabled={imageBusy}
+                  onChange={handleImagePick}
+                />
+              </label>
+              {form.image ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm btn-danger"
+                  onClick={() => setForm((prev) => ({ ...prev, image: '' }))}
+                  disabled={imageBusy}
+                >
+                  Remove
+                </button>
+              ) : null}
+            </div>
 
+            {isLocalImage ? (
+              <p className="muted small">
+                Photo ready. Press Save to upload it.
+              </p>
+            ) : null}
             <p className="muted small">
               The photo shoppers see on the product card. Each option can carry
               its own photo further down, which is what lets a shopper see the
