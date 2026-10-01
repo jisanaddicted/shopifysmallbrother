@@ -34,6 +34,29 @@ const storeSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    /* Has the merchant claimed this slug as THEIRS?
+
+       False (the default) means "this slug is just the store name spelled out,
+       keep deriving it from the name" - so renaming the store moves its public
+       URL with it. True means the merchant typed an address they wanted, and a
+       later rename must leave it alone.
+
+       A stored flag rather than comparing the slug to slugify(name), because
+       that comparison is wrong for every store whose name was ever changed by
+       something other than this rule: a store renamed once (Joe's Pizza ->
+       Ronex mart) still carries the slug `joes-pizza`, which does not match
+       slugify("Ronex mart"), so the comparison reads it as hand-chosen and the
+       slug then never moves again - the exact bug this flag exists to fix.
+
+       Defaulting to false is safe in the direction that matters: a store that
+       has never been through the dashboard keeps following its name, which is
+       what a merchant who never chose an address would expect. Stores whose
+       slug was deliberately set by hand (see the `slug` in seed.js) carry
+       slugIsCustom: true explicitly. */
+    slugIsCustom: {
+      type: Boolean,
+      default: false,
+    },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

@@ -19,6 +19,12 @@ if not exist "%CF%" (
   )
 )
 
+REM Kill any tunnel left over from an earlier run. A quick tunnel that has been
+REM reclaimed answers "Unauthorized: Tunnel not found" forever, so a stale
+REM cloudflared keeps running and keeps looking like it works while routing
+REM nothing.
+taskkill /F /IM cloudflared.exe >nul 2>&1
+
 echo [expose] Make sure the backend is running first:
 echo [expose]   npm --prefix "%WORKDIR%backend" start
 echo.
@@ -26,5 +32,10 @@ echo [expose] If you changed client code, rebuild the served site too:
 echo [expose]   npm --prefix "%WORKDIR%client" run build
 echo [expose]   (no env vars needed - client\.env.production sets /api + / for you)
 echo.
-echo [expose] Starting tunnel for http://localhost:5000 ...
-"%CF%" tunnel --url http://localhost:5000
+
+REM 127.0.0.1, NOT localhost: cloudflared resolves "localhost" to IPv6 ::1 first
+REM on Windows, and this backend listens on IPv4 only - so the tunnel comes up,
+REM prints a URL, and then fails every request with
+REM "Unable to reach the origin service ... dial tcp [::1]:5000".
+echo [expose] Starting tunnel for http://127.0.0.1:5000 ...
+"%CF%" tunnel --no-autoupdate --url http://127.0.0.1:5000

@@ -734,6 +734,46 @@ ol {
   font-weight: 600;
 }
 
+/* The merchant's store-link box (MerchantDashboard "Store link").
+
+   The /s/ prefix is a separate span rather than part of the placeholder so it
+   stays put while the slug is typed - a shopper's link is copied out of this
+   field, and a prefix that vanished mid-edit would be a prefix copied wrongly. */
+.slug-field {
+  display: flex;
+  align-items: stretch;
+}
+
+.slug-field__prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 0.55rem;
+  border: 1px solid var(--line);
+  border-right: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: var(--surface-alt);
+  color: var(--ink-soft);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.slug-field input {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* "use store name" - un-claims a hand-set slug. A real button (not a bare
+   span) so it is keyboard-reachable; type="button" keeps it from submitting
+   the storefront form. */
+.link-button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--brand-dark);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* A public handle, e.g. @sam.rider */
 .handle {
   font-weight: 600;

@@ -90,6 +90,12 @@ export const DEMO_STORES = [
   {
     name: "Joe's Pizza",
     slug: 'joes-pizza',
+    // Hand-written, and deliberately NOT what slugify("Joe's Pizza") produces
+    // (`joe-s-pizza` - the apostrophe becomes its own segment). Claiming it
+    // keeps it that way: the demo URL is in the README, in the smoke test and
+    // in every demo account chip, so it must not follow a rename (see
+    // Store.slugIsCustom).
+    slugIsCustom: true,
     ownerEmail: 'store@example.com',
     description: 'Wood-fired pizza and cold drinks, delivered hot.',
     phone: '+1 555 010 0400',
@@ -98,6 +104,9 @@ export const DEMO_STORES = [
   {
     name: 'Green Grocer',
     slug: 'green-grocer',
+    // Matches slugify('Green Grocer'), so it would follow a rename anyway -
+    // claimed only so the demo storefronts behave identically.
+    slugIsCustom: true,
     // Owned by its own demo merchant - never by the platform admin, which
     // only ever runs stores through invitations (see AdminInvitations).
     ownerEmail: 'grocer@example.com',
@@ -253,6 +262,12 @@ export async function seedDemoData() {
       store.description = spec.description;
       store.phone = spec.phone;
       store.address = spec.address;
+      // Re-asserted on every seed run so the demo slugs stay claimed even for
+      // a database seeded before this flag existed - otherwise a re-seed would
+      // quietly hand the demo storefronts back to "follows the name".
+      if (spec.slugIsCustom !== undefined) {
+        store.slugIsCustom = spec.slugIsCustom;
+      }
       if (owner) store.owner = owner._id;
       await store.save();
       summary.stores.updated.push(spec.slug);
@@ -260,6 +275,7 @@ export async function seedDemoData() {
       store = await Store.create({
         name: spec.name,
         slug: spec.slug,
+        slugIsCustom: spec.slugIsCustom ?? false,
         description: spec.description,
         phone: spec.phone,
         address: spec.address,

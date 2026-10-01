@@ -11,6 +11,7 @@ import {
   STORE_RIDER_STATUS,
   ROUTES,
   shopPath,
+  slugifyName,
 } from '../../utils/constants';
 
 const BLANK_FORM = {
@@ -52,6 +53,11 @@ export default function MerchantDashboard() {
   });
   const [orders, setOrders] = useState([]);
   const [form, setForm] = useState(BLANK_FORM);
+  // Has the merchant typed their own slug? Until they do, the slug box follows
+  // the store name, and a rename moves the public URL with it - which is what
+  // the backend then decides for real (see updateMyStore). Once they type one,
+  // the box is theirs and the name stops touching it.
+  const [slugLocked, setSlugLocked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -181,6 +187,13 @@ export default function MerchantDashboard() {
           slug: nextStore?.slug || '',
         });
 
+        /* Seed the lock from what the server knows, not from a guess. A store
+           whose slug the merchant claimed (slugIsCustom) opens LOCKED, so the
+           name is not allowed to rewrite an address they chose; everything else
+           opens unlocked and follows the name. Guessing here instead would
+           silently re-point a chosen URL the moment the page loaded. */
+        setSlugLocked(Boolean(nextStore?.slugIsCustom));
+
         if (mine.isOwner === false && !activeEntry) loadInvites();
       } catch (err) {
         setError(err.message || 'Could not load your store.');
@@ -273,6 +286,7 @@ export default function MerchantDashboard() {
     try {
       // Target the ACTIVE store so saving while viewing a second storefront
       // edits that store, not the primary one.
+      const previousSlug = store?.slug || '';
       const updated = await storeService.updateMyStore(
         {
           name: form.name,
@@ -280,13 +294,31 @@ export default function MerchantDashboard() {
           phone: form.phone,
           image: form.image,
           address: { line1: form.line1, city: form.city },
+          // The slug box IS the merchant's statement of what the link should
+          // be, so it goes up on every save - the server cannot tell a derived
+          // slug from a chosen one on its own (a store renamed before this
+          // existed has a slug matching neither its old nor its new name).
+          // slugLocked says which one this is, and is what lets the merchant
+          // hand the link back to the name.
+          ...(form.slug ? { slug: form.slug, slugLocked } : {}),
         },
         storeIdRef.current || undefined,
       );
 
       setStore(updated);
+      // Take the server's answer as truth: it is the side that resolved any
+      // collision ("joes-pizza-2"), so the box shows what was really saved
+      // rather than what we guessed.
       setForm((prev) => ({ ...prev, slug: updated.slug || prev.slug }));
-      flash('Storefront saved.');
+
+      /* A rename that moves the URL breaks every link already shared, so it is
+         said out loud rather than left for the merchant to discover from a dead
+         link. */
+      flash(
+        updated.slug && updated.slug !== previousSlug
+          ? `Storefront saved. Your link is now ${shopPath(updated.slug)} — the old one no longer works.`
+          : 'Storefront saved.',
+      );
     } catch (err) {
       setError(err.message || 'Could not save the store.');
     } finally {
@@ -359,6 +391,39 @@ export default function MerchantDashboard() {
 
   const setField = (key) => (event) =>
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
+
+  /* Typing the name re-derives the slug box, so the merchant watches the URL
+     they are about to hand out change as they type rather than after a save.
+
+     Only while the slug is unlocked. A merchant who has set their own slug has
+     said "this address is mine", and having it rewritten underneath them by an
+     unrelated edit to the description field is exactly the kind of surprise
+     this whole feature exists to avoid. */
+  const setName = (event) => {
+    const name = event.target.value;
+    setForm((prev) => ({
+      ...prev,
+      name,
+      ...(slugLocked ? null : { slug: slugifyName(name) }),
+    }));
+  };
+
+  /* Any typing in the slug box claims it. Held in a separate flag rather than
+     inferred from the value, because the value legitimately equals the
+     auto-derived one on first load - inferring would lock the slug on every
+     store and freeze exactly what we are trying to keep automatic. */
+  const setSlug = (event) => {
+    setSlugLocked(true);
+    setForm((prev) => ({ ...prev, slug: event.target.value }));
+  };
+
+  /* Hand the slug back to the name: clear the lock and re-derive. Without this
+     there is no way back once locked - the merchant would have to retype the
+     name and hope the guess matched what the server had stored. */
+  const releaseSlug = () => {
+    setSlugLocked(false);
+    setForm((prev) => ({ ...prev, slug: slugifyName(prev.name) }));
+  };
 
   if (loading) {
     return <LoadingSpinner fullPage label="Loading your store…" />;
@@ -564,7 +629,7 @@ export default function MerchantDashboard() {
           <div className="field-row">
             <label className="field">
               <span>Store name</span>
-              <input value={form.name} onChange={setField('name')} required />
+              <input value={form.name} onChange={setName} required />
             </label>
 
             <label className="field">
@@ -572,6 +637,38 @@ export default function MerchantDashboard() {
               <input value={form.phone} onChange={setField('phone')} />
             </label>
           </div>
+
+          {/* The public URL. Editable, because a merchant may want an address
+              that is not simply their name spelled out - but it re-derives
+              itself from the name until they type, so the common case (rename
+              the shop, link follows) needs no thought at all. */}
+          <label className="field">
+            <span>
+              Store link{' '}
+              {slugLocked ? (
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={releaseSlug}
+                >
+                  use store name
+                </button>
+              ) : null}
+            </span>
+            <div className="slug-field">
+              <span className="slug-field__prefix">/s/</span>
+              <input
+                value={form.slug}
+                onChange={setSlug}
+                placeholder="joes-pizza"
+              />
+            </div>
+            <span className="muted small">
+              {slugLocked
+                ? 'Set by you. Renaming the store will not change this link.'
+                : 'Follows the store name. Type here to choose your own.'}
+            </span>
+          </label>
 
           <label className="field">
             <span>Description</span>

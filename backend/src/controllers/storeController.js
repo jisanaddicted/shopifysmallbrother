@@ -400,7 +400,25 @@ export const updateMyStore = asyncHandler(async (req, res) => {
     );
   }
 
-  const store = entry.store;
+  /* A WRITABLE DOCUMENT, not `entry.store`.
+
+     This is the whole reason this endpoint 500'd on every save ("store.save is
+     not a function"). `storesForUser` runs its results through withVirtuals()
+     to attach `publicPath`, and that returns `{ ...store.toObject(), publicPath }`
+     - a PLAIN OBJECT. It carries the right fields and serialises correctly, so
+     every read path is happy, but it has no .save(), no .markModified() and no
+     validators. Anything that WRITES the storefront has to start from a real
+     Mongoose document.
+
+     Re-fetched rather than reusing the projected one for two reasons: the
+     projection (SESSION_STORE_FIELDS) omits fields this handler writes - theme,
+     logoSize, categories - so a write to any of them would silently vanish; and
+     writing to the projected document is impossible anyway. Authorization was
+     already decided against `entry` above, so this is only re-reading a store
+     the caller has been cleared for. */
+  const store = await Store.findById(entry.store._id);
+  if (!store) throw new HttpError(404, 'You do not have a store yet.');
+
   const { name, description, phone, address, image, logo, isActive, slug } =
     req.body || {};
 
@@ -483,13 +501,53 @@ export const updateMyStore = asyncHandler(async (req, res) => {
     };
   }
 
-  // Changing the slug changes the public URL, so it has to stay unique.
-  if (slug !== undefined && slugify(slug, '') !== store.slug) {
-    store.slug = await uniqueSlug(slug, {
+  /* The public URL segment, /s/<slug>.
+
+     A rename has to move the URL with it, or a merchant who fixes a typo in
+     "Joes Pizza" is left with a storefront whose address still carries it -
+     and worse, a rename that silently keeps the old URL means the link they
+     already shared with customers quietly stops matching the shop's name.
+
+     But auto-updating unconditionally would be worse: a merchant who chose
+     "joes-pizza-downtown" by hand and later renames the store would lose that
+     address, and any link already printed on a menu would 404. So the slug
+     follows the name only while it has not been claimed - see
+     Store.slugIsCustom, which is the ONLY thing that decides that.
+
+     `slugLocked` is the client saying which of the two it is, and it travels
+     with the slug so the server never has to guess: false = "derived, keep
+     deriving" (this is also how a merchant hands a claimed link back to the
+     name), true = "mine, leave it alone". A request that sends a slug but no
+     flag is treated as deliberate - posting a slug is an explicit act.
+
+     An earlier version decided all of this by comparing the slug against the
+     previous name, and it was wrong in the direction that matters: a store
+     renamed once ("Joe's Pizza" -> "Ronex mart") carries a slug matching
+     neither name, so the comparison read it as hand-chosen and its link could
+     never move again - the merchant renames, saves, and nothing happens. A
+     comparison cannot tell a deliberate choice from a stale one; the flag can,
+     because only the dashboard ever sets it. */
+  const explicitSlug = String(slug ?? '').trim();
+  const unclaimed = !store.slugIsCustom || req.body?.slugLocked === false;
+
+  if (explicitSlug) {
+    if (slugify(explicitSlug, '') !== store.slug) {
+      store.slug = await uniqueSlug(explicitSlug, {
+        exists: (candidate, excludeId) =>
+          Store.exists({ slug: candidate, _id: { $ne: excludeId } }),
+        excludeId: store._id,
+      });
+    }
+    // `!== false` rather than `=== true`: absent means deliberate, because the
+    // only caller that can say "derived" is the dashboard, and it always does.
+    store.slugIsCustom = req.body?.slugLocked !== false;
+  } else if (name !== undefined && unclaimed) {
+    store.slug = await uniqueSlug(store.name, {
       exists: (candidate, excludeId) =>
         Store.exists({ slug: candidate, _id: { $ne: excludeId } }),
       excludeId: store._id,
     });
+    store.slugIsCustom = false;
   }
 
   await store.save();

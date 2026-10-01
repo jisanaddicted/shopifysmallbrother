@@ -25,6 +25,8 @@
     "test:tree": "node scripts/testCategoryTree.mjs",
     "test:theme2": "node scripts/testTheme2.mjs",
     "test:logo": "node scripts/testLogoSize.mjs",
+    "test:slug": "node scripts/testStoreSlug.mjs",
+    "verify:slug": "node scripts/verifySlugRename.mjs",
     "test:filing": "node scripts/testProductFiling.mjs",
     "test:sections": "node scripts/testSections.mjs",
     "test:bulk": "node scripts/testBulkEdit.mjs"

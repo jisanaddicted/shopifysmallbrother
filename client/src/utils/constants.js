@@ -620,6 +620,26 @@ export const adminOrderPath = (orderId) => `/admin/orders/${orderId}`;
 export const shopPath = (slug) => `/s/${slug}`;
 
 /**
+ * Preview the slug a store NAME would produce, for the dashboard's live
+ * "your link will be..." hint. Mirrors slugify() in backend/src/utils/slug.js
+ * step for step - lowercase, accents stripped, runs of non-alphanumerics
+ * collapsed to one dash, 40 characters.
+ *
+ * A PREVIEW and nothing more: the server re-derives the real slug on save
+ * through uniqueSlug, so it is also what decides a collision ("joes-pizza-2").
+ * Keeping the two implementations in step is the whole job of this comment -
+ * if the backend's slugify changes, change this with it.
+ */
+export const slugifyName = (value) =>
+  String(value ?? '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+
+/**
  * One category of a store: categoryPath('joes-pizza', 'Drinks')
  *   -> /s/joes-pizza/c/Drinks
  *
