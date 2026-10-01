@@ -94,7 +94,6 @@ export default function DashboardLayout({ variant = 'merchant' }) {
 
   const adminLinks = [
     { to: ROUTES.ADMIN_DASHBOARD, label: 'Orders', end: true },
-    { to: ROUTES.ADMIN_PRODUCTS, label: 'Products', end: false },
     // Live delivery map across the stores this admin runs. Moved here from the
     // store dashboard: watching every rider at once is an operations view, and
     // an admin with several stores picks which one from this page.
@@ -106,7 +105,16 @@ export default function DashboardLayout({ variant = 'merchant' }) {
       end: false,
       badge: pendingInvites,
     },
-    { to: ROUTES.ADMIN_THEME, label: 'Theme', end: false },
+    // No Products tab either. A product belongs to ONE store, and the catalogue
+    // an admin runs across several stores is not theirs to edit - the store's
+    // own dashboard carries that tab (see merchantLinks above). The
+    // /admin/products ROUTE stays mounted for the same reason as Theme below.
+    //
+    // No Theme tab here. The builder edits ONE store's storefront, and that
+    // store's own dashboard carries the tab for it (see merchantLinks above);
+    // an admin running several stores has no single store to point it at. The
+    // ROUTE is deliberately left mounted so an old bookmark or a shared link to
+    // /admin/theme still lands on the page instead of a not-found.
   ];
 
   const links = isRiderShell

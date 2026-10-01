@@ -210,9 +210,14 @@ export default function Navbar() {
             </>
           )}
           {isAdmin && (
+            /* Orders only. There is deliberately no Products link here, matching
+               the admin rail in DashboardLayout (see adminLinks): an admin runs
+               stores they were invited to, and does not edit their catalogues.
+               This branch is reachable - /admin* hides the top navbar, but
+               /profile does not - so leaving the link in would have kept the
+               tab alive for exactly the one page where it still shows. */
             <>
               <NavLink to={ROUTES.ADMIN_DASHBOARD}>Orders</NavLink>
-              <NavLink to={ROUTES.ADMIN_PRODUCTS}>Products</NavLink>
             </>
           )}
         </nav>
