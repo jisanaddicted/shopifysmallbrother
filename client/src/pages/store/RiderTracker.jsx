@@ -33,11 +33,16 @@ const ROSTER_TONE = {
   [STORE_RIDER_STATUS.REVOKED]: 'danger',
 };
 
-/** An order worth watching: a rider is on it and it is still in play. A
- *  customer-confirmed `received` counts as finished - the rider's job ended at
- *  the doorstep, so the pin stops being followed. */
+/** The orders this board is ABOUT: the ones a rider has actually set off with.
+ *
+ *  Deliberately `out_for_delivery` and nothing looser. The obvious looser test -
+ *  "has a rider and is not finished" - also matches `preparing`,
+ *  `ready_for_pickup` and `picked_up`, which are all still inside the shop: the
+ *  rider is holding the bag, not riding anywhere, and putting those on a live
+ *  map says they are en route when they are standing at a counter. A customer-
+ *  confirmed `received` is finished too, so the pin stops being followed. */
 const isOnTheRoad = (order) =>
-  Boolean(order?.rider) && !CLOSED_STATUSES.includes(order?.status);
+  Boolean(order?.rider) && order?.status === ORDER_STATUS.OUT_FOR_DELIVERY;
 
 const isOpen = (order) => !CLOSED_STATUSES.includes(order?.status);
 
@@ -321,7 +326,7 @@ export default function RiderTracker() {
                 <Link to={shopPath(store.slug)}>{store.name}</Link> ·{' '}
               </>
             ) : null}
-            every delivery that is moving right now, live.
+            only the deliveries that are out for delivery right now, live.
           </p>
         </div>
 
@@ -390,8 +395,8 @@ export default function RiderTracker() {
 
           {liveOrders.length === 0 ? (
             <p className="muted">
-              Nothing is moving right now. A delivery appears here the moment a
-              rider accepts it - new orders land on{' '}
+              Nothing is out for delivery right now. A delivery appears here the
+              moment a rider marks it out for delivery - new orders land on{' '}
               <Link to={ROUTES.ADMIN_DASHBOARD}>Orders</Link>.
             </p>
           ) : (
