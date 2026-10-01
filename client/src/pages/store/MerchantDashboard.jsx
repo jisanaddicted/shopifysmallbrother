@@ -454,32 +454,37 @@ export default function MerchantDashboard() {
       {notice ? <p className="alert alert--ok">{notice}</p> : null}
       {error ? <p className="alert alert--danger">{error}</p> : null}
 
+      {/* Four tiles, four GRID children. An unclosed wrapper div once sat
+          around all of them, which made `.stats` a grid with a single child
+          and left the cards stacking in a column - one per row, each stretched
+          the full width - because `.stat` is itself a vertical flex box. */}
       <div className="stats">
-        <div className="stat">
-          <Link className="stat stat--link" to={ROUTES.MERCHANT_ORDERS}>
-            <strong>{orders.length}</strong>
-            <span className="stat__label">Total orders</span>
-          </Link>
-          <div className="stat stat--warn">
-            <strong>{liveOrders.length}</strong>
-            <span className="stat__label">In progress</span>
-          </div>
-          <div className="stat stat--ok">
-            <strong>
-              {riders.filter((r) => r.status === STORE_RIDER_STATUS.ACTIVE).length}
-            </strong>
-            <span className="stat__label">Riders delivering</span>
-          </div>
-          <Link className="stat stat--link" to={ROUTES.MERCHANT_CUSTOMERS}>
-            <strong>{customersMeta.total}</strong>
-            <span className="stat__label">
-              Customers
-              {customersMeta.newThisWeek > 0
-                ? ` (+${customersMeta.newThisWeek} this week)`
-                : ''}
-            </span>
-          </Link>
-      </div>
+        <Link className="stat stat--link" to={ROUTES.MERCHANT_ORDERS}>
+          <strong>{orders.length}</strong>
+          <span className="stat__label">Total orders</span>
+        </Link>
+
+        <div className="stat stat--warn">
+          <strong>{liveOrders.length}</strong>
+          <span className="stat__label">In progress</span>
+        </div>
+
+        <div className="stat stat--ok">
+          <strong>
+            {riders.filter((r) => r.status === STORE_RIDER_STATUS.ACTIVE).length}
+          </strong>
+          <span className="stat__label">Riders delivering</span>
+        </div>
+
+        <Link className="stat stat--link" to={ROUTES.MERCHANT_CUSTOMERS}>
+          <strong>{customersMeta.total}</strong>
+          <span className="stat__label">
+            Customers
+            {customersMeta.newThisWeek > 0
+              ? ` (+${customersMeta.newThisWeek} this week)`
+              : ''}
+          </span>
+        </Link>
       </div>
 
       {/* ---- Pending store-admin invitations ----------------------------- */}
