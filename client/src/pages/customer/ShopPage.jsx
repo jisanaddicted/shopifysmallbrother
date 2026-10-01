@@ -371,6 +371,10 @@ export default function ShopPage() {
         inputRef={searchRef}
         resultCount={searchMatched.length}
         placeholder={`Search ${store?.name || 'this store'}…`}
+        /* So tapping a product suggestion opens that product, rather than only
+           narrowing whatever is on screen - which on Theme 2 is one node's
+           shelf, and so often nothing at all. */
+        slug={slug}
       />
 
       {/*
@@ -415,6 +419,7 @@ export default function ShopPage() {
           error=""
           products={products}
           searchTerm={search}
+          onClearSearch={() => setSearch('')}
         />
       ) : null}
 

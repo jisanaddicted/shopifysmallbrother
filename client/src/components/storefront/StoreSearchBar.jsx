@@ -1,4 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { productPath } from '../../utils/constants';
 
 /**
  * The storefront's prominent search.
@@ -49,11 +51,17 @@ export default function StoreSearchBar({
   inputRef,
   resultCount,
   placeholder = 'Search this store…',
+  /* The store's slug, so a product suggestion can be a LINK rather than a
+     filter. Without it the component still works - it just falls back to the old
+     "drop the name in the box" behaviour - which is what a page that has no
+     slug should get. */
+  slug,
 }) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const wrapRef = useRef(null);
   const listId = useId();
+  const navigate = useNavigate();
 
   const term = value.trim().toLowerCase();
 
@@ -66,7 +74,7 @@ export default function StoreSearchBar({
     const scored = [];
     const seen = new Set();
 
-    const consider = (label, kind) => {
+    const consider = (label, kind, id = null) => {
       const text = String(label || '').trim();
       if (!text) return;
       const key = text.toLowerCase();
@@ -74,10 +82,13 @@ export default function StoreSearchBar({
       const score = scoreMatch(text, term);
       if (score === -1) return;
       seen.add(key);
-      scored.push({ label: text, kind, score });
+      /* The id rides along so choosing the row can GO somewhere. A product
+         suggestion used to carry nothing but its name, which is why it could
+         only ever set the search box - see `choose`. */
+      scored.push({ label: text, kind, id, score });
     };
 
-    products.forEach((p) => consider(p.name, 'product'));
+    products.forEach((p) => consider(p.name, 'product', p._id || p.id));
     products.forEach((p) => consider(p.category, 'category'));
 
     scored.sort((a, b) => a.score - b.score || a.label.length - b.label.length);
@@ -103,8 +114,32 @@ export default function StoreSearchBar({
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [open]);
 
-  const choose = (label) => {
-    onChange(label);
+  /* What choosing a suggestion DOES.
+   *
+   * A PRODUCT takes the shopper to that product. It used to only drop the name
+   * into the box and let whatever was on screen filter itself, which reads
+   * correctly on Theme 1 - the grid narrows as you type, so the product you
+   * tapped appears under your finger - and does nothing on Theme 2. There the
+   * pane shows ONE node's products, so tapping a suggestion set a term the pane
+   * could not match and answered "nothing here matches": search looked broken in
+   * precisely the theme that has a tree to navigate instead of a grid to scan.
+   *
+   * A CATEGORY still filters, deliberately: a category is not a page, and on
+   * Theme 2 a product's `category` is a plain string rather than a node in the
+   * tree, so there is nothing reliable to navigate to. Filtering is the honest
+   * behaviour - and the tree pane offers a way back out when it finds nothing.
+   */
+  const choose = (suggestion) => {
+    const id = suggestion.id;
+
+    if (suggestion.kind === 'product' && id && slug) {
+      setOpen(false);
+      setActiveIndex(-1);
+      navigate(productPath(slug, id));
+      return;
+    }
+
+    onChange(suggestion.label);
     setOpen(false);
     setActiveIndex(-1);
     inputRef?.current?.focus();
@@ -133,7 +168,9 @@ export default function StoreSearchBar({
       // key must still be able to submit the form this input might sit in.
       if (open && activeIndex >= 0 && suggestions[activeIndex]) {
         event.preventDefault();
-        choose(suggestions[activeIndex].label);
+        /* The whole suggestion, not just its label: the keyboard path has to
+           reach the product exactly as a click does. */
+        choose(suggestions[activeIndex]);
       }
     }
   };
@@ -219,7 +256,7 @@ export default function StoreSearchBar({
                 // list unmounts and the click never lands.
                 onMouseDown={(event) => {
                   event.preventDefault();
-                  choose(s.label);
+                  choose(s);
                 }}
                 onMouseEnter={() => setActiveIndex(i)}
               >

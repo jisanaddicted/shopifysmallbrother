@@ -5128,6 +5128,13 @@ ol {
   font-size: 0.9rem;
 }
 
+/* The "way out" under an emptied branch. The message above it keeps the normal
+   paragraph margin, which is what separates it from this; this one drops its
+   own, so the block does not end with a stray gap. */
+.treeview__empty-actions {
+  margin: 0;
+}
+
 .treeview__products {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

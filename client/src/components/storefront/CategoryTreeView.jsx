@@ -68,7 +68,16 @@ import {
  * per row per keystroke, so typing in the search box does not walk the catalogue
  * for every row.
  */
-export default function CategoryTreeView({ nodes, loading, error, products, searchTerm }) {
+export default function CategoryTreeView({
+  nodes,
+  loading,
+  error,
+  products,
+  searchTerm,
+  /* Lets the pane offer a way out of a search that matched nothing HERE.
+     See the empty state below. */
+  onClearSearch,
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // The node being viewed, or null for the top level. Read from the URL, so it
@@ -342,13 +351,32 @@ export default function CategoryTreeView({ nodes, loading, error, products, sear
       ) : null}
 
       {/* A branch with nothing in it says so, rather than showing a blank page
-          that reads as a failed load. */}
+          that reads as a failed load.
+
+          And when a SEARCH is what emptied it, the message names the search and
+          hands back a way out. Without that, tapping a category suggestion on
+          this theme left the shopper staring at "nothing matches" inside one
+          node while the products they wanted sat somewhere else in the tree -
+          the impression that search does not work here at all. */}
       {children.length === 0 && visibleProducts.length === 0 ? (
-        <p className="treeview__empty">
-          {term
-            ? `Nothing in ${current?.name || 'this store'} matches “${searchTerm.trim()}”.`
-            : `There is nothing in ${current?.name || 'this store'} yet.`}
-        </p>
+        <div className="treeview__empty">
+          <p>
+            {term
+              ? `Nothing in ${current?.name || 'this store'} matches “${searchTerm.trim()}”.`
+              : `There is nothing in ${current?.name || 'this store'} yet.`}
+          </p>
+
+          {/* The way back. A search box that can empty the page with no way to
+              undo it is a dead end, and on this theme the shopper may not know
+              the box above is what did it. */}
+          {term && onClearSearch ? (
+            <p className="treeview__empty-actions">
+              <button type="button" className="link-btn" onClick={onClearSearch}>
+                Clear search
+              </button>
+            </p>
+          ) : null}
+        </div>
       ) : null}
         </div>
       </div>

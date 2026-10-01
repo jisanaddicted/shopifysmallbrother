@@ -208,6 +208,7 @@ export default function CategoryPage() {
           onChange={setSearch}
           resultCount={visible.length}
           placeholder={`Search ${category}…`}
+          slug={slug}
         />
 
         {visible.length === 0 ? (
