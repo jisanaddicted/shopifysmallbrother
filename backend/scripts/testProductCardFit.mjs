@@ -69,18 +69,18 @@ const css = fs.readFileSync(
  * Requiring the header at the start of a line is what stops `.product-card {`
  * matching `.rail__track > .product-card {`.
  */
-const allBlocks = (selector) => {
+const allBlocks = (selector, source = css) => {
   const found = [];
   let from = 0;
   for (;;) {
-    const atStart = css.startsWith(selector, from);
-    const hit = css.indexOf(`\n${selector}`, from);
+    const atStart = source.startsWith(selector, from);
+    const hit = source.indexOf(`\n${selector}`, from);
     if (hit < 0 && !atStart) break;
     const headerAt = hit < 0 ? from : hit + 1;
     // The closing brace of a top-level rule is the next `}` in column 0.
-    const close = css.indexOf('\n}', headerAt);
+    const close = source.indexOf('\n}', headerAt);
     if (close < 0) break;
-    found.push(css.slice(headerAt, close + 2));
+    found.push(source.slice(headerAt, close + 2));
     from = close + 2;
   }
   return found;
@@ -90,11 +90,11 @@ const allBlocks = (selector) => {
  * The FIRST block for `selector` - the top-level definition, which by convention
  * precedes any nested restatement of the same rule.
  */
-const block = (selector) => allBlocks(selector)[0] || '';
+const block = (selector, source = css) => allBlocks(selector, source)[0] || '';
 
 /** The one block for `selector` that also contains `needle`. */
-const blockContaining = (selector, needle) =>
-  allBlocks(selector).find((b) => b.includes(needle)) || '';
+const blockContaining = (selector, needle, source = css) =>
+  allBlocks(selector, source).find((b) => b.includes(needle)) || '';
 
 // --- 1. The card can shrink ------------------------------------------------
 console.log('--- the card can get narrow ---');
@@ -274,5 +274,76 @@ check(
    genuinely differ in size and shape. What must not drift is the RULE, and
    that is what the assertions above pin: every one of them is `contain`, and
    every one of them has its automatic minimum zeroed. */
+// --- 7. The customer sign-up header on a phone is the logo alone ----------
+console.log('\n--- the sign-up page shows only the logo on a phone ---');
+/* On a narrow screen the header row (logo + store name + "Customer account")
+   wraps into ragged lines beside a 44px logo and pushes the form down, while
+   saying nothing the rest of the page does not already say: the name appears in
+   the note ("You're creating your account at <name>"), in the footer's back
+   link, and in the logo's own alt text.
+
+   It is scoped to `cust-auth--register`, which ONLY CustomerRegister carries.
+   The sign-in page next door shares this stylesheet and the same markup, so a
+   rule that leaked out of the sign-up page would strip its header too - which
+   is why the class exists rather than the rule simply targeting `.cust-auth`. */
+const authCss = fs.readFileSync(
+  new URL('../../client/src/pages/auth/customer-auth.css', import.meta.url),
+  'utf8',
+);
+const authBlock = blockContaining(
+  '@media (max-width: 480px) {',
+  'cust-auth--register',
+  authCss,
+);
+check('there is a phone rule for the sign-up page', authBlock.length > 0);
+check(
+  'it hides the store text as one wrapper, not line by line',
+  /\.cust-auth--register \.cust-auth__store-text\s*\{[^}]*display:\s*none/.test(authBlock),
+  'a future third line cannot survive in the header',
+);
+check(
+  'it centres what is left',
+  /\.cust-auth--register \.cust-auth__store\s*\{[^}]*justify-content:\s*center/.test(authBlock),
+);
+
+/* The scoping is the part that can silently rot: drop the modifier and the
+   sign-in page loses its header too, with nothing failing anywhere. */
+check(
+  'every rule in that block is scoped to the sign-up page',
+  authBlock
+    .split('\n')
+    .filter((l) => l.trim().startsWith('.cust-auth'))
+    .every((l) => l.includes('cust-auth--register')),
+  'no bare .cust-auth__store-name / __store-sub in a phone block',
+);
+
+const registerSrc = fs.readFileSync(
+  new URL('../../client/src/pages/auth/CustomerRegister.jsx', import.meta.url),
+  'utf8',
+);
+const loginSrc = fs.readFileSync(
+  new URL('../../client/src/pages/auth/CustomerLogin.jsx', import.meta.url),
+  'utf8',
+);
+check(
+  'CustomerRegister carries the modifier the rule keys on',
+  /className="cust-auth cust-auth--register"/.test(registerSrc),
+);
+check(
+  'CustomerLogin does NOT, so its header is untouched',
+  !/cust-auth--register/.test(loginSrc),
+  'the sign-in page is a different page',
+);
+check(
+  'both pages give the text wrapper the same class, so they cannot drift',
+  /className="cust-auth__store-text"/.test(registerSrc) &&
+    /className="cust-auth__store-text"/.test(loginSrc),
+  'they are deliberate mirrors - see CustomerRegister.jsx',
+);
+check(
+  'the wrapper class is defined in the stylesheet',
+  /\.cust-auth__store-text\s*\{/.test(authCss),
+);
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

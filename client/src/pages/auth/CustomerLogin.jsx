@@ -86,7 +86,7 @@ export default function CustomerLogin() {
               {initials(storeName || slug)}
             </span>
           )}
-          <div>
+          <div className="cust-auth__store-text">
             <p className="cust-auth__store-name">{storeName || 'Store'}</p>
             <p className="cust-auth__store-sub muted small">Customer account</p>
           </div>

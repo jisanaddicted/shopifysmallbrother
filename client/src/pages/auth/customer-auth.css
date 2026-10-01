@@ -66,6 +66,15 @@
   margin: 0.1rem 0 0;
 }
 
+/* The text half of the store identity block: the name and "Customer account".
+
+   A class for what used to be a bare <div>, so the phone rule below can hide the
+   block by name instead of by `> div` - which would silently start hiding the
+   logo too the first time anything else was added to that row. */
+.cust-auth__store-text {
+  min-width: 0;
+}
+
 /* --- Headings ------------------------------------------------------------ */
 .cust-auth__title {
   margin: 0 0 0.35rem;
@@ -161,5 +170,44 @@
     border: none;
     border-radius: 0;
     padding-top: 2rem;
+  }
+}
+
+/* --- Sign-up on a phone: the store logo, and nothing beside it ------------
+
+   The header row is logo + store name + "Customer account". On a narrow screen
+   the text wraps into two or three ragged lines beside a 44px logo and pushes
+   the form down, and the name is repeated immediately afterwards in the note
+   ("You're creating your account at <name>") and again in the footer ("Back to
+   <name>") - so the header copy is the one place the name is said without adding
+   anything. Dropping it leaves the logo as the page's single piece of branding.
+
+   Nothing is lost: the store is still named by the note below the form, by the
+   footer's back link, and to a screen reader by the logo's alt text, which is
+   the store name.
+
+   480px is this stylesheet's existing phone breakpoint (the block above), so
+   "mobile" means the same thing here as it does everywhere else on these pages.
+
+   Scoped by `cust-auth--register`, which only CustomerRegister carries, so the
+   sign-in page next door - same stylesheet, same markup - is untouched. */
+@media (max-width: 480px) {
+  .cust-auth--register .cust-auth__store {
+    justify-content: center;
+  }
+
+  /* The WRAPPER, not the two <p>s: one rule covers both lines, and a third line
+     added later cannot accidentally survive in the header. */
+  .cust-auth--register .cust-auth__store-text {
+    display: none;
+  }
+
+  /* Alone and centred, a 44px logo in a 440px-wide row reads as a leftover from
+     the layout above rather than as a header. A little larger, it reads as the
+     header it now is. */
+  .cust-auth--register .cust-auth__logo,
+  .cust-auth--register .cust-auth__initials {
+    width: 56px;
+    height: 56px;
   }
 }

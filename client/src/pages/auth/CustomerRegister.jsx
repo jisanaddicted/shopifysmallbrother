@@ -97,7 +97,7 @@ export default function CustomerRegister() {
   const storeName = store?.name || '';
 
   return (
-    <div className="cust-auth">
+    <div className="cust-auth cust-auth--register">
       <div className="cust-auth__card">
         <div className="cust-auth__store">
           {store?.logo || store?.image ? (
@@ -111,7 +111,7 @@ export default function CustomerRegister() {
               {initials(storeName || slug)}
             </span>
           )}
-          <div>
+          <div className="cust-auth__store-text">
             <p className="cust-auth__store-name">{storeName || 'Store'}</p>
             <p className="cust-auth__store-sub muted small">Customer account</p>
           </div>
