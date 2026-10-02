@@ -5827,6 +5827,134 @@ ol {
   gap: 0.55rem;
 }
 
+/* --- Customer reviews, below the customers table ----------------------------
+   These sit under the table rather than in it: a review describes a DELIVERY,
+   not a customer, and the table is already six columns wide. */
+.customers__reviews {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.customers__reviews-head {
+  margin-bottom: 0.9rem;
+}
+
+/* The "← Show all customers" escape hatch under a focused panel. */
+.customers__reviews-focus {
+  margin-bottom: 0.85rem;
+}
+
+/* The count inside the row's Reviews button, on its own so the digits read as
+   a count rather than trailing the label. */
+.customers__count {
+  display: inline-block;
+  margin-left: 0.15rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--line);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* The row whose reviews are on show. Colour alone would not be enough, so the
+   button ALSO flips its own label to "Showing" and sets aria-expanded. */
+.btn.is-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.btn.is-active .customers__count {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* The 1-5 spread. The bar is the count, the label is the star, the number on
+   the right is the exact value - so the shape is a quick read and the digits
+   are there for anyone who needs the real number. */
+.customers__histogram {
+  list-style: none;
+  margin: 0 0 1.1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.customers__histogram li {
+  display: grid;
+  grid-template-columns: 2rem 1fr 2rem;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* The track, so an empty bucket still reads as "0 of them" rather than as
+   nothing being there at all. */
+.customers__histogram-bar {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.customers__histogram-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #f59e0b;
+  min-width: 2px;
+}
+
+.customers__review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.customers__review {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+}
+
+.customers__review-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* Pushed to the far right so the stars line up in one column down the list,
+   which is what makes a column of them scannable at a glance. */
+.customers__review-rating {
+  margin-left: auto;
+}
+
+.customers__review-text {
+  margin: 0.55rem 0 0.4rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.customers__review-order {
+  font-size: 0.85rem;
+}
+
+/* Read-only stars. Same glyph and colour as the customer's own rating control,
+   with the affordances taken off: a merchant cannot rate a customer, so these
+   must not show a pointer or react to hover as though a click would do
+   something. */
+.stars--readonly .stars__star {
+  cursor: default;
+  font-size: 1rem;
+}
+
+.stars--readonly .stars__star:hover {
+  transform: none;
+}
+
 @media (max-width: 700px) {
   /* The stat tiles stack instead of shrinking into unreadable slivers, and the
      divider has to move onto the bottom edge or it cuts through a row. */
@@ -5837,6 +5965,17 @@ ol {
   .orders__stat {
     border-right: none;
     border-bottom: 1px solid var(--line);
+  }
+
+  /* A five-star row beside the name has nowhere to go on a phone, so the stars
+     drop below the name rather than shrinking the text to fit. */
+  .customers__review-head {
+    flex-wrap: wrap;
+  }
+
+  .customers__review-rating {
+    margin-left: 0;
+    width: 100%;
   }
 }
 

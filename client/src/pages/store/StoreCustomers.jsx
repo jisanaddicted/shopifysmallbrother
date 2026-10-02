@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
 import storeService from '../../services/storeService';
 import {
+  ROUTES,
   STORE_CUSTOMER_STATUS,
   STORE_CUSTOMER_STATUS_LABELS,
 } from '../../utils/constants';
-import { formatCurrency, initials } from '../../utils/formatters';
+import { formatCurrency, formatDateTime, initials } from '../../utils/formatters';
 
 /**
  * Everyone who shops at this store, as a full page in the side rail.
@@ -36,6 +38,33 @@ const SORTS = [
 const displayName = (customer) =>
   customer?.name || customer?.username || customer?.email || 'Customer';
 
+/** Read-only stars. The same glyph and colour as the customer's own rating
+ *  control, minus the affordances: a merchant cannot rate a customer, so these
+ *  must not look pressable or pretend to respond to a click. */
+function StarRating({ value }) {
+  const stars = [1, 2, 3, 4, 5];
+
+  return (
+    <span className="stars stars--readonly" aria-hidden="true">
+      {stars.map((star) => (
+        <span
+          key={star}
+          className={`stars__star${star <= value ? ' is-on' : ''}`}
+        >
+          ★
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** What a review is about, for the link back to the delivery it describes.
+ *
+ *  The server sends `order` as a bare id, not a populated object, so this has to
+ *  cope with either - and with neither, where the review is still worth reading
+ *  even though it cannot be clicked through to. */
+const orderIdOf = (review) => review?.order?._id || review?.order || '';
+
 export default function StoreCustomers() {
   const { stores: sessionStores } = useAuth();
   const [entries, setEntries] = useState([]);
@@ -45,6 +74,22 @@ export default function StoreCustomers() {
   const [sort, setSort] = useState('recent');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  /* What customers said about this store's deliveries.
+
+     `GET /stores/:id/reviews` already existed and already had a service method,
+     but nothing ever called it - a customer could rate a delivery on their order
+     page and the merchant had nowhere to read it. The ratings were written,
+     stored and served; they were just invisible. This is the screen that reads
+     them.
+
+     Reviews are loaded ALONGSIDE the customer list rather than on demand: they
+     are the reason a merchant opens this tab, so waiting behind a second click
+     would make the page look like it had no reviews at all. */
+  const [reviews, setReviews] = useState([]);
+  const [reviewAverage, setReviewAverage] = useState(null);
+  const [distribution, setDistribution] = useState([]);
+  const [reviewError, setReviewError] = useState('');
 
   // The store switcher, as on the orders board - the list is always one store's.
   useEffect(() => {
@@ -75,11 +120,13 @@ export default function StoreCustomers() {
   const load = useCallback(async () => {
     if (!storeId) {
       setEntries([]);
+      setReviews([]);
       setLoading(false);
       return;
     }
     setLoading(true);
     setError('');
+    setReviewError('');
     try {
       const data = await storeService.listStoreCustomers(storeId);
       setEntries(data?.customers || []);
@@ -88,6 +135,25 @@ export default function StoreCustomers() {
       setEntries([]);
     } finally {
       setLoading(false);
+    }
+
+    /* Reviews are fetched separately and their failure is deliberately NOT
+       allowed to clear `error` or blank the customer table above. A store whose
+       reviews endpoint is unhappy must still get to see their customers; the
+       reviews simply show their own message. One broken panel should not take
+       the working one down with it. */
+    try {
+      const reviewData = await storeService.listStoreReviews(storeId);
+      setReviews(reviewData?.reviews || []);
+      setReviewAverage(
+        Number.isFinite(reviewData?.average) ? reviewData.average : null,
+      );
+      setDistribution(reviewData?.distribution || []);
+    } catch (err) {
+      setReviews([]);
+      setReviewAverage(null);
+      setDistribution([]);
+      setReviewError(err.message || 'Could not load your reviews.');
     }
   }, [storeId]);
 
@@ -129,10 +195,97 @@ export default function StoreCustomers() {
     return sorted;
   }, [entries, term, sort]);
 
+  /* The reviews, matched against the search box.
+
+     The SAME `term` narrows the customers and the reviews, because a merchant
+     looking for one person is looking for both halves of that person at once -
+     "who was the one who complained about the cold bag?" should find the row and
+     the sentence, not just the row. */
+
+    /* Which customer's reviews are on show.
+     null = the whole store's reviews, the default. Clicking a row's button sets
+     this to that customer and the panel below narrows to them.
+
+     Keyed on the customer ID, never on the name. `Review.customerName` is a
+     SNAPSHOT taken when the review was written (see the Review model), so two
+     people can share a name, and a customer who has since renamed would stop
+     matching their own history if we compared strings. The id is the only join
+     that cannot quietly come apart. */
+  const [focusedCustomerId, setFocusedCustomerId] = useState('');
+  const reviewsRef = useRef(null);
+
+  /* Reviews grouped by customer id, for the per-row count and the panel.
+     Built once per `reviews` change rather than filtered inside the map, so
+     typing in the search box does not re-partition the list on every keystroke. */
+  const reviewsByCustomer = useMemo(() => {
+    const grouped = new Map();
+    for (const review of reviews) {
+      const key = String(review.customer?._id || review.customer || '');
+      if (!key) continue;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(review);
+    }
+    return grouped;
+  }, [reviews]);
+
+  const focusedCustomer = useMemo(() => {
+    if (!focusedCustomerId) return null;
+    const entry = entries.find(
+      (item) => String(item.customer?._id || item.id) === focusedCustomerId,
+    );
+    return entry ? displayName(entry.customer) : null;
+  }, [focusedCustomerId, entries]);
+
+  /* Clicking a row scrolls the panel into view. Without it the button appears to
+     do nothing on a long customer list - the reviews it just filtered are below
+     the fold, and the merchant is left clicking the same row again. */
+  const showCustomerReviews = (customerId) => {
+    setFocusedCustomerId((current) => (current === customerId ? '' : customerId));
+    reviewsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const visibleReviews = useMemo(() => {
+    const needle = term.trim().toLowerCase();
+    let list = focusedCustomerId
+      ? reviewsByCustomer.get(focusedCustomerId) || []
+      : reviews;
+
+    if (!needle) return list;
+
+    return list.filter((review) =>
+      [review.customerName, review.comment]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(needle),
+    );
+  }, [reviews, term, focusedCustomerId, reviewsByCustomer]);
+
   const exportCsv = () => {
-    const header = ['Name', 'Email', 'Phone', 'Location', 'Orders', 'Amount spent'];
+    const header = [
+      'Name',
+      'Email',
+      'Phone',
+      'Location',
+      'Orders',
+      'Amount spent',
+      'Reviews',
+      'Average rating',
+      'Review notes',
+    ];
     const rows = visible.map((entry) => {
       const customer = entry.customer || {};
+      const theirReviews =
+        reviewsByCustomer.get(String(customer._id || entry.id || '')) || [];
+      const rated = theirReviews
+        .map((review) => Number(review.rating))
+        .filter((value) => Number.isFinite(value));
+      const average = rated.length
+        ? Math.round(
+            (rated.reduce((sum, value) => sum + value, 0) / rated.length) * 10,
+          ) / 10
+        : '';
+
       return [
         displayName(customer),
         customer.email || '',
@@ -140,6 +293,15 @@ export default function StoreCustomers() {
         entry.location || '',
         entry.orders || 0,
         entry.spent || 0,
+        theirReviews.length,
+        average,
+        // Newlines inside a comment would break the row, and the exporter's
+        // quoting only doubles quotes - it does not escape line breaks.
+        theirReviews
+          .map((review) => review.comment)
+          .filter(Boolean)
+          .join(' | ')
+          .replace(/\s*\r?\n\s*/g, ' '),
       ];
     });
 
@@ -244,12 +406,16 @@ export default function StoreCustomers() {
                   <th>Status</th>
                   <th className="orders__num">Orders</th>
                   <th className="orders__num">Amount spent</th>
+                  <th>Reviews</th>
                 </tr>
               </thead>
               <tbody>
                 {visible.map((entry) => {
                   const customer = entry.customer || {};
                   const blocked = entry.status === STORE_CUSTOMER_STATUS.BLOCKED;
+                  const customerId = String(customer._id || entry.id || '');
+                  const theirReviews = reviewsByCustomer.get(customerId) || [];
+                  const isFocused = focusedCustomerId === customerId;
 
                   return (
                     <tr key={customer._id || entry.id}>
@@ -286,6 +452,31 @@ export default function StoreCustomers() {
                       <td className="price orders__num nowrap">
                         {formatCurrency(entry.spent || 0)}
                       </td>
+
+                      {/* Opens the panel below filtered to this person. A
+                          toggle, not a one-way door: clicking the row you are
+                          already reading returns to the whole store's reviews,
+                          so the button never becomes a dead end. */}
+                      <td>
+                        {theirReviews.length ? (
+                          <button
+                            type="button"
+                            className={`btn btn-outline btn-sm${
+                              isFocused ? ' is-active' : ''
+                            }`}
+                            onClick={() => showCustomerReviews(customerId)}
+                            aria-expanded={isFocused}
+                            aria-controls="customer-reviews"
+                          >
+                            {isFocused ? 'Showing' : 'Reviews'}{' '}
+                            <span className="customers__count">
+                              {theirReviews.length}
+                            </span>
+                          </button>
+                        ) : (
+                          <span className="muted small">None</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -307,6 +498,144 @@ export default function StoreCustomers() {
           </p>
         </div>
       )}
+
+      {/* --- Customer reviews -------------------------------------------------
+          Placed BELOW the customer table on purpose. These are what customers
+          wrote about deliveries, not properties of a person, so they read as a
+          separate stream of their own - and the table above is already six
+          columns wide. */}
+      <section
+        className="customers__reviews"
+        id="customer-reviews"
+        ref={reviewsRef}
+      >
+        <header className="customers__reviews-head">
+          <h2 className="panel__title">
+            {focusedCustomerId
+              ? `Reviews from ${focusedCustomer || 'this customer'}`
+              : 'Customer reviews'}
+          </h2>
+          <p className="panel__subtitle">
+            {focusedCustomerId
+              ? 'Filtered to one customer. Showing every review they have left.'
+              : reviewAverage === null
+                ? 'Ratings customers left on their deliveries.'
+                : `Average ${reviewAverage} out of 5 across ${reviews.length} review${reviews.length === 1 ? '' : 's'}.`}
+          </p>
+        </header>
+
+        {/* The way back out. A filtered list with no way to unfilter is the kind
+            of thing a merchant reports as "the reviews vanished". */}
+        {focusedCustomerId ? (
+          <div className="customers__reviews-focus">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setFocusedCustomerId('')}
+            >
+              ← Show all customers
+            </button>
+          </div>
+        ) : null}
+
+        {reviewError ? (
+          <p className="alert alert--danger">{reviewError}</p>
+        ) : null}
+
+        {/* The 1-5 histogram, straight from the server's `distribution`.
+            Without it a 4.2 average hides the only thing a merchant acts on: that
+            two people were badly let down among a lot of happy ones. */}
+        {distribution.length && reviews.length && !focusedCustomerId ? (
+          <ul className="customers__histogram">
+            {distribution.map((bucket) => (
+              <li key={bucket.rating}>
+                <span className="muted small">{bucket.rating}★</span>
+                <span className="customers__histogram-bar">
+                  <span
+                    style={{
+                      width: `${
+                        reviews.length
+                          ? (bucket.count / reviews.length) * 100
+                          : 0
+                      }%`,
+                    }}
+                  />
+                </span>
+                <span className="muted small">{bucket.count}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {visibleReviews.length ? (
+          <ul className="customers__review-list">
+            {visibleReviews.map((review) => {
+              const orderId = orderIdOf(review);
+              const author =
+                review.customerName || 'A customer of this store';
+
+              return (
+                <li key={review._id || review.id} className="customers__review">
+                  <div className="customers__review-head">
+                    <span className="avatar avatar--sm" aria-hidden="true">
+                      {initials(author)}
+                    </span>
+                    <span>
+                      <strong>{author}</strong>
+                      <span className="muted small block">
+                        {formatDateTime(review.createdAt)}
+                      </span>
+                    </span>
+                    <span className="customers__review-rating">
+                      <StarRating value={review.rating} />
+                      <span className="sr-only">
+                        {review.rating} out of 5 stars
+                      </span>
+                    </span>
+                  </div>
+
+                  {review.comment ? (
+                    <p className="customers__review-text">{review.comment}</p>
+                  ) : (
+                    <p className="muted small">
+                      No note left, just the stars.
+                    </p>
+                  )}
+
+                  {/* The MERCHANT order detail, never /track/:orderId - the
+                      same rule StoreRiderAnalytics follows. /track/:orderId is the
+                      buyer's page, carrying the confirmation and rating controls
+                      that are none of the store's to press. */}
+                  {orderId ? (
+                    <Link
+                      className="customers__review-order"
+                      to={ROUTES.MERCHANT_ORDER_DETAIL.replace(
+                        ':orderId',
+                        orderId,
+                      )}
+                    >
+                      View the delivery #
+                      {String(orderId).slice(-6).toUpperCase()}
+                    </Link>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="card empty">
+            <p className="muted">
+              {reviewError
+                ? ''
+                : focusedCustomerId
+                  ? `${focusedCustomer || 'This customer'} has not left a review.`
+                  : reviews.length
+                    ? 'No reviews match that search.'
+                    : 'No reviews yet. Customers can rate a delivery once they confirm it arrived on their order page.'}
+            </p>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

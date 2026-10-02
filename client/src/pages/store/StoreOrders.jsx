@@ -8,8 +8,6 @@ import {
   ORDER_STATUS_LABELS,
   ORDER_STATUS_TONE,
   PAYMENT_STATUS,
-  PAYMENT_STATUS_LABELS,
-  PAYMENT_STATUS_TONE,
   ROUTES,
 } from '../../utils/constants';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
@@ -24,8 +22,12 @@ import { formatCurrency, formatDateTime } from '../../utils/formatters';
  * numbers a merchant opens the page to see were below the fold.
  *
  * The shape follows the order columns a merchant actually triages on: what it
- * was for, who it is for, what it came to, and whether it is paid, made and
- * delivered. Fulfillment and delivery are shown as separate columns because in
+ * was for, who it is for, what it came to, and whether it is made and
+ * delivered. Payment is NOT a column any more - how an order was paid for is
+ * already on the row under "Delivery method", and a paid/unpaid badge beside it
+ * was noise the merchant reads past. The CSV export still carries payment
+ * status, so reconciling money does not lose it (see exportCsv).
+ * Fulfillment and delivery are shown as separate columns because in
  * this app they genuinely are separate - a rider marks `out_for_delivery` and
  * then the CUSTOMER confirms receipt, so "fulfilled" and "delivered" are two
  * different moments, and collapsing them into one column would hide the
@@ -244,7 +246,14 @@ export default function StoreOrders() {
   const storeName =
     activeStore?.store?.name || activeStore?.name || 'your store';
 
-  /** Export the same rows on screen to CSV, so "Export" cannot quietly disagree. */
+  /**
+   * Export the same rows on screen to CSV, so "Export" cannot quietly disagree.
+   *
+   * Deliberately keeps one column the table no longer shows: payment status.
+   * The table dropped it as noise on a narrow screen, but a merchant
+   * reconciling money wants it in the file - and a column silently vanishing
+   * from a download is a far worse surprise than a wide table.
+   */
   const exportCsv = () => {
     const header = [
       'Order',
@@ -383,9 +392,7 @@ export default function StoreOrders() {
                 <th>Order</th>
                 <th>Date</th>
                 <th>Customer</th>
-                <th>Channel</th>
                 <th>Total</th>
-                <th>Payment status</th>
                 <th>Fulfilment status</th>
                 <th>Items</th>
                 <th>Delivery status</th>
@@ -397,8 +404,6 @@ export default function StoreOrders() {
                 const id = order.id || order._id;
                 const fulfillment = fulfillmentOf(order);
                 const delivery = deliveryOf(order);
-                const paymentStatus =
-                  order.payment?.status || PAYMENT_STATUS.PENDING;
                 const items = countItems(order);
                 const customerName =
                   order.customer?.name ||
@@ -420,17 +425,8 @@ export default function StoreOrders() {
                       {shortDate(order.createdAt)}
                     </td>
                     <td className="nowrap">{customerName}</td>
-                    <td className="muted small nowrap">Online Store</td>
                     <td className="price nowrap">
                       {formatCurrency(order.total)}
-                    </td>
-                    <td>
-                      <span
-                        className={`badge badge--${PAYMENT_STATUS_TONE[paymentStatus] || 'info'}`}
-                      >
-                        {PAYMENT_STATUS_LABELS[paymentStatus] ||
-                          formatStatusFallback(paymentStatus)}
-                      </span>
                     </td>
                     <td>
                       <span className={`badge badge--${fulfillment.tone}`}>
@@ -474,11 +470,3 @@ export default function StoreOrders() {
   );
 }
 
-/** Payment statuses the model allows, spelled out if one is ever added. */
-function formatStatusFallback(value) {
-  return String(value || '')
-    .split(/[_-]/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
-}
