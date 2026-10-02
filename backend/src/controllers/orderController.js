@@ -203,6 +203,30 @@ export function assertOrderOwner(order, user) {
 async function applyStatus(order, status, { note = '', by = null } = {}) {
   order.status = status;
   order.statusHistory.push({ status, note, by, at: new Date() });
+
+  /* Stamp the denormalised terminal timestamps here, and ONLY here, so they can
+   * never disagree with the history entries they mirror. `deliveredAt` is what
+   * the dispatch board's "completed today" card ranges over, and it has to be
+   * an indexed field rather than a search through statusHistory.
+   *
+   * Every write goes through this function, which is what makes it safe: the one
+   * place a status changes is the one place these get set. Re-delivery is
+   * impossible (a rider cannot rewind), but `received` after `delivered` is
+   * normal, so `deliveredAt` is only set on the first arrival and is never
+   * overwritten by the customer's later confirmation. */
+  const at = new Date();
+  if (status === ORDER_STATUS.DELIVERED && !order.deliveredAt) {
+    order.deliveredAt = at;
+  }
+  if (status === ORDER_STATUS.DELIVERY_FAILED) {
+    order.failedAt = at;
+    // Count ATTEMPTS that have failed, so DELIVERY_MAX_RETRIES can gate a
+    // re-dispatch off this number directly. A repeat failure counts up, and
+    // the cap is what eventually stops a rider burning an evening on a gate
+    // nobody will open.
+    order.retryCount = (order.retryCount || 0) + 1;
+  }
+
   await order.save();
 
   emitOrderStatusUpdated(order._id, status, note);

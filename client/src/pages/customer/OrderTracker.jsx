@@ -102,6 +102,25 @@ export default function OrderTracker({
   // instead of looking like a dead end.
   const [hasReview, setHasReview] = useState(false);
 
+  /* Is the map open?
+   *
+   * The map used to render unconditionally, directly ABOVE the pick list, so on
+   * a 360px phone a picker scrolled past a full-width map to reach the racks
+   * they actually came for. It now starts CLOSED on a phone and open on a
+   * desktop, where there is room for both and the map is part of the
+   * conversation.
+   *
+   * The media query is read ONCE on mount instead of being tracked, on
+   * purpose: someone who has deliberately opened the map on a phone should
+   * keep it open when they rotate the device, and an order is a short-lived
+   * screen - reacting to every resize event by fighting the user would be worse
+   * than not reacting at all. */
+  const [mapOpen, setMapOpen] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(min-width: 900px)').matches,
+  );
+
   const loadOrder = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -400,22 +419,14 @@ export default function OrderTracker({
             </Link>
           ) : null}
 
-          {/* Admin-only, and only while the order is actually sitting at a
-              status the admin may move. No button appears for a pending order,
-              one already ready, one on the road, or a finished/cancelled one -
-              so there is no dead control to click and no dropdown to guess at. */}
-          {adminNextStatus ? (
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={advanceAsAdmin}
-              disabled={advancing}
-            >
-              {advancing
-                ? 'Saving…'
-                : `Mark as ${formatStatus(adminNextStatus).toLowerCase()}`}
-            </button>
-          ) : null}
+          {/* The admin's kitchen action used to live here, crammed next to the
+              back link and a Live pill. It is the one control a picker on a
+              phone actually reaches for, and mid-header is the worst place for
+              it - a stretch to the top-right corner with the other hand full of
+              a basket. It now lives in the pick list's own sticky footer
+              (see `.pickbar`), which is in the thumb zone and next to the
+              content it changes. No duplicate button is rendered: CSS decides
+              where the single control sits at each width. */}
 
           <span className={`live-dot ${connected ? 'live-dot--on' : ''}`}>
             {connected ? 'Live' : 'Offline'}
@@ -434,14 +445,51 @@ export default function OrderTracker({
         <p className="alert alert--danger">{advanceError}</p>
       ) : null}
 
-      <DeliveryMap
-        customerLocation={customerLocation}
-        riderLocation={riderLocation}
-        riderLabel={
-          order?.rider?.name ||
-          (isAdmin ? 'Rider' : variant === 'rider' ? 'You' : 'Your rider')
-        }
-      />
+      {/* The live map.
+        *
+        * COLLAPSIBLE FOR STAFF ONLY. For a customer the map IS the tracker, so
+        * it stays exactly as it was. For staff it sits directly above the pick
+        * list, and a full-width map there is a screen of scrolling between
+        * "I opened this order" and "here is the rack I have to walk to" - so it
+        * collapses to a single 48px row, open by default on a desktop. */}
+      {isAdmin ? (
+        <div className="mapcollapse">
+          <button
+            type="button"
+            className="mapcollapse__toggle"
+            onClick={() => setMapOpen((open) => !open)}
+            aria-expanded={mapOpen}
+            aria-controls="order-live-map"
+          >
+            <span className="mapcollapse__caret" aria-hidden="true">
+              {mapOpen ? '▾' : '▸'}
+            </span>
+            <span className="mapcollapse__label">Live map</span>
+            <span className="muted small mapcollapse__hint">
+              {mapOpen ? 'Hide to focus the pick list' : 'Show the rider'}
+            </span>
+          </button>
+
+          {mapOpen ? (
+            <div className="mapcollapse__body" id="order-live-map">
+              <DeliveryMap
+                customerLocation={customerLocation}
+                riderLocation={riderLocation}
+                riderLabel={order?.rider?.name || 'Rider'}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <DeliveryMap
+          customerLocation={customerLocation}
+          riderLocation={riderLocation}
+          riderLabel={
+            order?.rider?.name ||
+            (isAdmin ? 'Rider' : variant === 'rider' ? 'You' : 'Your rider')
+          }
+        />
+      )}
 
       {/* The rating popup. Mounted at the top level (not inside the panel) so it
           is a genuine overlay rather than something the page layout can push
@@ -460,93 +508,164 @@ export default function OrderTracker({
 
       {isAdmin ? (
         <section className="panel picklist">
-          <div className="panel__header">
-            <h2 className="panel__title">Pick list</h2>
-            <span className="muted small">
-              {pickList.length} line{pickList.length === 1 ? '' : 's'} ·{' '}
-              {totalUnits} item{totalUnits === 1 ? '' : 's'} to collect · walk
-              the racks in this order
-            </span>
+          <div className="panel__header picklist__head">
+            <div>
+              <h2 className="panel__title">Pick list</h2>
+              <p className="muted small picklist__sub">
+                Walk the racks in order.
+              </p>
+            </div>
+
+            {/* The counts, as chips rather than a sentence. The old line read
+                "5 lines · 12 items to collect · walk the racks in this order"
+                and wrapped to three lines on a 360px phone, pushing the list
+                itself below the fold. */}
+            <div className="picklist__counts">
+              <span className="chip">
+                {pickList.length} line{pickList.length === 1 ? '' : 's'}
+              </span>
+              <span className="chip">
+                {totalUnits} item{totalUnits === 1 ? '' : 's'}
+              </span>
+              {unlocated.length > 0 ? (
+                <span className="chip chip--warn">
+                  {unlocated.length} need a location
+                </span>
+              ) : null}
+            </div>
           </div>
 
           {pickList.length === 0 ? (
             <p className="muted">This order has no items to collect.</p>
           ) : (
-            <ol className="picklist__rows">
-              {pickList.map((row) => {
+            <ul className="picklist__rows">
+              {pickList.map((row, index) => {
                 const located = Boolean(row.rack || row.shelf);
+
+                /* One fact, one tag.
+                 *
+                 * This replaces three competing signals for the same problem: a
+                 * red row background, a trailing "No location" chip, and a
+                 * closing "N lines without a rack" alert that also gave
+                 * catalogue-admin advice a picker could not act on. A line is
+                 * either walkable (show the rack, and the shelf when there is
+                 * one) or it is not (show exactly one tag saying which). */
+                const tags = [];
+                if (!row.known) {
+                  // The product is gone, so there is no rack to show. One tag
+                  // covers both facts - "Removed" and "No location" together
+                  // was the same news told twice.
+                  tags.push({ key: 'gone', tone: 'danger', text: 'Removed from catalogue' });
+                } else if (located) {
+                  if (row.rack) {
+                    tags.push({ key: 'rack', tone: 'rack', text: `Rack ${row.rack}` });
+                  }
+                  if (row.shelf) {
+                    tags.push({ key: 'shelf', tone: 'shelf', text: `Shelf ${row.shelf}` });
+                  }
+                } else {
+                  tags.push({ key: 'noloc', tone: 'warn', text: 'No location' });
+                }
 
                 return (
                   <li
                     key={`${row.name}-${row.rack}-${row.shelf}`}
-                    className={`picklist__row ${located ? '' : 'picklist__row--unlocated'}`}
+                    className={`pickrow ${located ? '' : 'pickrow--flagged'}`}
                   >
-                    {/* The photo, so the picker recognises the item and not just
-                        its name. Falls back to the same bag glyph the catalogue
-                        card uses when a product has no image. */}
+                    {/* The walking order. A real element rather than a CSS
+                        counter, so it is in the accessibility tree next to the
+                        name instead of being announced by a screen reader as
+                        nothing at all. */}
+                    <span className="pickrow__step" aria-hidden="true">
+                      {index + 1}
+                    </span>
+
                     {row.image ? (
                       <img
-                        className="picklist__img"
+                        className="pickrow__thumb"
                         src={row.image}
                         alt=""
                         loading="lazy"
+                        width="48"
+                        height="48"
                       />
                     ) : (
                       <span
-                        className="picklist__img picklist__img--empty"
+                        className="pickrow__thumb pickrow__thumb--empty"
                         aria-hidden="true"
                       >
                         🛍️
                       </span>
                     )}
 
-                    <span className="picklist__name">
-                      <strong>{row.name}</strong>
-                      {/* Which option to grab. Its own line because "Large / Blue"
-                          is the difference between picking the right thing off the
-                          shelf and putting the wrong one in the bag. */}
-                      {row.variantTitle ? (
-                        <em className="picklist__variant">{row.variantTitle}</em>
-                      ) : null}
-                      {row.category ? (
-                        <em className="muted small"> {row.category}</em>
-                      ) : null}
-                      {!row.known ? (
-                        <em className="muted small"> — removed from the catalogue</em>
-                      ) : null}
-                    </span>
+                    <div className="pickrow__body">
+                      <div className="pickrow__main">
+                        <h3 className="pickrow__name">{row.name}</h3>
 
-                    {/* How many to put in the bag. Stated in words as well as a
-                        number so a glance is never ambiguous. */}
-                    <span
-                      className="picklist__qty"
-                      title={`${row.quantity} ordered`}
-                    >
-                      <strong>{row.quantity}</strong>
-                      <em>ordered</em>
-                    </span>
-
-                    {located ? (
-                      <span className="picklist__where">
-                        {row.rack ? <span className="chip">Rack {row.rack}</span> : null}
-                        {row.shelf ? (
-                          <span className="chip">Shelf {row.shelf}</span>
+                        {/* Variant and category on their OWN line, joined with a
+                            middot. They were loose <em> elements in the name's
+                            inline flow, which is what made "removed from the
+                            catalogue" read as a trailing fragment of the product
+                            name rather than as its own status. */}
+                        {row.variantTitle || row.category ? (
+                          <p className="pickrow__sub">
+                            {[row.variantTitle, row.category]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
                         ) : null}
-                      </span>
-                    ) : (
-                      <span className="chip chip--danger">No location</span>
-                    )}
+                      </div>
+
+                      <div className="pickrow__side">
+                        {/* Quantity in words as well as digits: the count is the
+                            one number a picker must never misread. Solid ink
+                            rather than the old pale brand tint, which had almost
+                            no contrast against white. */}
+                        <span
+                          className="pickrow__qty"
+                          title={`${row.quantity} ordered`}
+                        >
+                          <strong>{row.quantity}</strong>
+                          <span>ordered</span>
+                        </span>
+
+                        <div className="pickrow__tags">
+                          {tags.map((tag) => (
+                            <span key={tag.key} className={`tag tag--${tag.tone}`}>
+                              {tag.text}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </li>
                 );
               })}
-            </ol>
+            </ul>
           )}
 
-          {unlocated.length > 0 ? (
-            <p className="alert alert--warn">
-              {unlocated.length} line{unlocated.length === 1 ? '' : 's'} without a
-              rack — set one in the product catalogue to speed up picking.
-            </p>
+          {/* The one action this screen exists for, pinned to the bottom of the
+              viewport while the list scrolls on a phone and sitting inline at
+              the end of the panel on a desktop. One button, not two - CSS picks
+              the position, so there is no second copy to fall out of sync.
+              Renders ONLY while the order sits at a status the admin may
+              actually move, so there is still no dead control to tap. */}
+          {adminNextStatus ? (
+            <div className="pickbar">
+              <span className="pickbar__label">
+                Next: {formatStatus(adminNextStatus)}
+              </span>
+              <button
+                type="button"
+                className="btn pickbar__btn"
+                onClick={advanceAsAdmin}
+                disabled={advancing}
+              >
+                {advancing
+                  ? 'Saving…'
+                  : `Mark as ${formatStatus(adminNextStatus).toLowerCase()}`}
+              </button>
+            </div>
           ) : null}
         </section>
       ) : null}

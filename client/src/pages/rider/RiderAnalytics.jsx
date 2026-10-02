@@ -91,6 +91,13 @@ export default function RiderAnalytics() {
           <h1>Delivery analytics</h1>
           <p className="muted">
             {finished} delivered · {data?.open || 0} in progress
+            {/* Only when the two differ. Every order confirmed is not news, but
+                "12 of 40 never confirmed" is - it is the store's cue to chase
+                them, and it is also why the average above has no cycle figure
+                for those orders at all. */}
+            {data?.awaitingConfirm > 0
+              ? ` · ${data.awaitingConfirm} not yet confirmed`
+              : ''}
             {finished ? ' · last 100 orders' : ''}
           </p>
         </div>
@@ -123,6 +130,33 @@ export default function RiderAnalytics() {
               <strong>{formatDurationMs(totalForBreakdown)}</strong>
               <span className="muted small">order → doorstep</span>
             </div>
+
+            {/* The whole order, ending when the CUSTOMER confirms. This is the
+              number that answers "how long did my order take?", and it is
+              deliberately a separate card rather than a replacement for the one
+              above: the gap between the two is the customer's confirmation lag,
+              which is not the rider's to answer for. Folding it into the
+              headline would quietly punish slow tap-tapping.
+              Rendered only once something has actually been confirmed - with
+              every order unconfirmed the card would be a permanent "—", which
+              reads as a broken widget rather than an honest "not yet". */}
+            {Number.isFinite(summary.cycleSample) && summary.cycleSample > 0 ? (
+              <div className="stat">
+                <span className="stat__label">Avg order to confirm</span>
+                <strong>{formatDurationMs(summary.avgCycleMs)}</strong>
+                <span className="muted small">
+                  incl. customer · {summary.cycleSample} of {finished} confirmed
+                </span>
+              </div>
+            ) : null}
+
+            {Number.isFinite(summary.avgConfirmMs) ? (
+              <div className="stat">
+                <span className="stat__label">Customer took</span>
+                <strong>{formatDurationMs(summary.avgConfirmMs)}</strong>
+                <span className="muted small">doorstep → confirmed</span>
+              </div>
+            ) : null}
 
             <div className="stat">
               <span className="stat__label">Avg ride time</span>
@@ -280,6 +314,17 @@ export default function RiderAnalytics() {
                         </strong>
                         {row.isOpen ? (
                           <span className="muted small block">in progress</span>
+                        ) : null}
+                        {/* A confirmed order shows the customer's own lag
+                            underneath, so a rider can see at a glance which
+                            deliveries are "fast delivery, slow tap-tapping" and
+                            which are genuinely theirs. Unconfirmed rows get
+                            nothing rather than a dash - the parent cell already
+                            says the number is the handover. */}
+                        {Number.isFinite(row.confirmMs) ? (
+                          <span className="muted small block">
+                            +{formatDurationMs(row.confirmMs)} to confirm
+                          </span>
                         ) : null}
                       </td>
 

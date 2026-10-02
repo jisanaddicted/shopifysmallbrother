@@ -51,10 +51,17 @@ export function statusSteps(order) {
 }
 
 /**
- * The three legs of one delivery, in the order they happen:
+ * The legs of one delivery, in the order they happen:
  *
- *   placed -------- ready_for_pickup == picked_up -------- delivered
- *     prep (store)     |   wait (rider)   |   ride (rider)  |
+ *   placed --- ready_for_pickup == picked_up --- delivered --- received
+ *   |  prep (store)  |  wait (rider)  | ride (rider)  | confirm (customer) |
+ *
+ * TWO TOTALS, on purpose. `totalMs` is the rider's job (placed -> delivered)
+ * and is what the SLA is measured against; `cycleMs` is the whole order
+ * (placed -> received), ending when the customer confirms. The gap between them
+ * is `confirmMs`, the customer's own lag - which is NOT the rider's to answer
+ * for, so it is reported separately instead of being folded into a performance
+ * number. Both are null until the relevant tap happens.
  */
 export function deliveryLegs(order) {
   const history = order?.statusHistory || [];
@@ -64,6 +71,7 @@ export function deliveryLegs(order) {
     reachedAt(history, 'ready_for_pickup') || reachedAt(history, 'picked_up');
   const outAt = reachedAt(history, 'out_for_delivery');
   const deliveredAt = reachedAt(history, 'delivered');
+  const receivedAt = reachedAt(history, 'received');
   const cancelledAt = reachedAt(history, 'cancelled');
 
   return {
@@ -72,12 +80,17 @@ export function deliveryLegs(order) {
     pickedUpAt,
     outAt,
     deliveredAt,
+    receivedAt,
     cancelledAt,
     prepMs: span(placedAt, readyAt),
     waitMs: span(readyAt, pickedUpAt),
     rideMs: span(pickedUpAt, deliveredAt),
     totalMs: span(placedAt, deliveredAt),
+    // Null, not 0, until the customer actually confirms.
+    confirmMs: span(deliveredAt, receivedAt),
+    cycleMs: span(placedAt, receivedAt),
     isDelivered: Boolean(deliveredAt),
+    isReceived: Boolean(receivedAt),
     isCancelled: Boolean(cancelledAt),
     isOpen: !deliveredAt && !cancelledAt,
   };

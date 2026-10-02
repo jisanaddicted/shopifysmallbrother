@@ -193,6 +193,11 @@ export const ORDER_STATUS = {
   // "the rider dropped it" and "the customer got it" are two different claims.
   RECEIVED: 'received',
   CANCELLED: 'cancelled',
+  // A delivery attempt that did not land: gate refused, nobody home, COD
+  // rejected. Deliberately NOT `cancelled` - the shopper still wants the
+  // basket and the rider still holds the cash, so this is a queue someone has
+  // to work, not a closed sale.
+  DELIVERY_FAILED: 'delivery_failed',
 };
 
 export const ORDER_STATUS_VALUES = Object.values(ORDER_STATUS);
@@ -234,6 +239,7 @@ export const CLOSED_STATUSES = [
   ORDER_STATUS.DELIVERED,
   ORDER_STATUS.RECEIVED,
   ORDER_STATUS.CANCELLED,
+  ORDER_STATUS.DELIVERY_FAILED,
 ];
 
 // The statuses a customer may confirm receipt FROM. Only once the rider has
@@ -265,6 +271,25 @@ export const ADMIN_STATUS_STEPS = {
   [ORDER_STATUS.CONFIRMED]: ORDER_STATUS.PREPARING,
   [ORDER_STATUS.PREPARING]: ORDER_STATUS.READY_FOR_PICKUP,
 };
+
+// Why a delivery attempt failed. Hyper-local delivery fails in ways a courier
+// app in a bigger city does not model: a gated community is the single most
+// common one, because the gate is the only place a rider physically cannot pass
+// without being buzzed in. Named rather than a free-text note so the dispatch
+// board can group them and a store can see which one is eating its evening.
+export const DELIVERY_FAILED_REASONS = {
+  GATE_ACCESS_DENIED: 'gate_access_denied',
+  CUSTOMER_UNREACHABLE: 'customer_unreachable',
+  COD_REFUSED: 'cod_refused',
+  ADDRESS_ISSUE: 'address_issue',
+};
+
+export const DELIVERY_FAILED_REASONS_VALUES = Object.values(DELIVERY_FAILED_REASONS);
+
+// How many failed attempts a parcel may have before it has to be escalated.
+// Bounded on purpose: an unlimited retry on a gate nobody will open just burns
+// a rider's evening.
+export const DELIVERY_MAX_RETRIES = 2;
 
 // How the buyer intends to pay. `cod` needs no gateway; the rest are online
 // channels, chosen from the custom radio list on the checkout form.
@@ -367,6 +392,9 @@ export default {
   CLOSED_STATUSES,
   RECEIVABLE_STATUSES,
   ADMIN_STATUS_STEPS,
+  DELIVERY_FAILED_REASONS,
+  DELIVERY_FAILED_REASONS_VALUES,
+  DELIVERY_MAX_RETRIES,
   CANCELLABLE_STATUSES,
   PAYMENT_METHODS,
   PAYMENT_CHANNEL_MULTI_CARD,

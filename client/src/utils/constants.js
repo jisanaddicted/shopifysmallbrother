@@ -414,6 +414,13 @@ export const ORDER_STATUS = {
   // cosmetic rename of `delivered`.
   RECEIVED: 'received',
   CANCELLED: 'cancelled',
+  // A delivery attempt that did not land. NOT the same as `cancelled`: the
+  // shopper still wants the basket and the rider still holds any cash, so it
+  // is a queue somebody has to work. It has to be defined HERE as well as in
+  // the backend - ORDER_STATUS_LABELS and ORDER_STATUS_TONE below key off
+  // `ORDER_STATUS.DELIVERY_FAILED`, and referencing a key that does not exist
+  // silently files them under the string "undefined" instead of failing loudly.
+  DELIVERY_FAILED: 'delivery_failed',
 };
 
 // The happy path in order - used by the rider console's "next step" button and
@@ -445,6 +452,7 @@ export const CLOSED_STATUSES = [
   ORDER_STATUS.DELIVERED,
   ORDER_STATUS.RECEIVED,
   ORDER_STATUS.CANCELLED,
+  ORDER_STATUS.DELIVERY_FAILED,
 ];
 
 // The ONLY status moves the admin panel may make from an order page: a confirmed
@@ -472,6 +480,7 @@ export const ORDER_STATUS_LABELS = {
   // different facts instead of the same one stated twice.
   [ORDER_STATUS.RECEIVED]: 'Delivery received',
   [ORDER_STATUS.CANCELLED]: 'Cancelled',
+  [ORDER_STATUS.DELIVERY_FAILED]: 'Delivery failed',
 };
 
 // Maps a status to a badge colour class defined in index.css
@@ -485,6 +494,16 @@ export const ORDER_STATUS_TONE = {
   [ORDER_STATUS.DELIVERED]: 'success',
   [ORDER_STATUS.RECEIVED]: 'success',
   [ORDER_STATUS.CANCELLED]: 'danger',
+  [ORDER_STATUS.DELIVERY_FAILED]: 'danger',
+};
+
+// Why a delivery failed, in words a rider would say out loud rather than the
+// machine value. Mirror of DELIVERY_FAILED_REASONS in the backend.
+export const DELIVERY_FAILED_REASON_LABELS = {
+  gate_access_denied: 'Gate access denied',
+  customer_unreachable: 'Customer unreachable',
+  cod_refused: 'COD refused by customer',
+  address_issue: 'Address problem',
 };
 
 // --- Pricing ---------------------------------------------------------------

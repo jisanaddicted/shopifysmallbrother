@@ -2038,14 +2038,11 @@ ol {
   color: var(--ink-soft);
 }
 
-.picklist__variant {
-  display: block;
-  font-style: normal;
-  font-weight: 700;
-  color: var(--brand);
-  font-size: 0.85rem;
-}
-
+/* (`.picklist__variant` used to live here and is gone: the pick list's variant
+   line is now `.pickrow__sub`, rendered as a block <p> rather than an inline
+   <em>, because an inline element inside the product name was what made
+   "removed from the catalogue" read as a trailing fragment of the name. See
+   the pick-list block further down.) */
 
 .summary__lines {
   display: flex;
@@ -2420,107 +2417,346 @@ ol {
   align-items: start;
 }
 
-/* Pick list on the back-office order page: a walkable, numbered list of what
-   to collect, in aisle order. */
+/* --- Pick list: the back-office picking view ------------------------------
+ *
+ * Built mobile-first for someone standing in an aisle with one hand on a
+ * basket, so the order of importance is deliberate and top to bottom:
+ *
+ *   1. the RACK      - the only thing that answers "where do I walk?"
+ *   2. the QUANTITY  - the number that must never be misread
+ *   3. the NAME      - what the item is called
+ *   4. the warnings  - never in the name's text flow, always their own tag
+ *
+ * The old row was one flex line holding five children: a 1.6rem counter, a
+ * 42px thumbnail, the name, a 3.2rem quantity and the location chips. That is
+ * ~155px of fixed chrome before a single word, and `.panel` already eats
+ * 1.1rem a side - so a 360px phone left roughly 170px for the product name,
+ * which is where the wrapping came from. The chips also wrapped INSIDE a
+ * right-aligned, centre-aligned row, so two chips on two lines dragged the
+ * thumbnail and the name out of alignment with each other.
+ *
+ * The row is now a three-column grid (step, thumbnail, body) and everything
+ * responsive happens inside the body, so the columns can never be squeezed
+ * out of shape by their contents. */
 .picklist {
   margin-bottom: 1.25rem;
+}
+
+.picklist__head {
+  align-items: flex-start;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.picklist__head .panel__title {
+  margin-bottom: 0.2rem;
+}
+
+.picklist__sub {
+  margin: 0;
+}
+
+.picklist__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
 .picklist__rows {
   list-style: none;
   margin: 0.9rem 0 0;
   padding: 0;
-  counter-reset: pick;
 }
 
-.picklist__row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.25rem;
+.pickrow {
+  display: grid;
+  grid-template-columns: 1.75rem 3rem minmax(0, 1fr);
+  column-gap: 0.7rem;
+  align-items: start;
+  padding: 0.85rem 0;
   border-top: 1px solid var(--line);
 }
 
-/* The number is the walking order: it is the only part a picker must trust. */
-.picklist__row::before {
-  counter-increment: pick;
-  content: counter(pick);
-  flex: 0 0 1.6rem;
-  height: 1.6rem;
+.pickrow:first-child {
+  border-top: 0;
+}
+
+/* The walking order. A fixed 1.75rem circle, so every row's number lands in
+ * the same column and the eye can track down the list rather than re-finding
+ * it. */
+.pickrow__step {
   display: grid;
   place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: 0.4rem;
   border-radius: 50%;
   background: var(--brand-soft);
   color: var(--brand-dark);
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 800;
 }
 
-.picklist__img {
-  flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
-  border-radius: 9px;
+/* 48px: the minimum comfortable target for a thumbnail a picker is matching
+ * against the shelf in front of them. */
+.pickrow__thumb {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 10px;
   background: var(--surface-alt);
   object-fit: cover;
   display: grid;
   place-items: center;
 }
 
-.picklist__img--empty {
-  font-size: 1.1rem;
+.pickrow__thumb--empty {
+  font-size: 1.25rem;
 }
 
-/* How many of this item the customer ordered - the count a picker must not
-   misread, so the number leads and the word sits under it. */
-.picklist__qty {
-  flex: 0 0 auto;
+.pickrow__body {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 3.2rem;
-  padding: 0.2rem 0.4rem;
-  border-radius: var(--radius-sm, 6px);
-  background: var(--brand-soft);
-  color: var(--brand-dark);
-  line-height: 1.1;
-  text-align: center;
+  gap: 0.5rem;
 }
 
-.picklist__qty strong {
+.pickrow__main {
+  min-width: 0;
+}
+
+/* `anywhere` rather than `break-word`: a long unbroken product name must be
+ * able to break, but the rest of the name should still wrap at spaces. */
+.pickrow__name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.pickrow__sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.pickrow__side {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Solid ink, not the old pale brand tint - the quantity is the second most
+ * important thing on the line and `--brand-soft` on white is barely legible at
+ * arm's length in a warehouse. */
+.pickrow__qty {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  flex: 0 0 auto;
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--radius-sm, 9px);
+  background: var(--ink);
+  color: #fff;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.pickrow__qty strong {
   font-size: 1.05rem;
   font-weight: 800;
 }
 
-.picklist__qty em {
-  font-style: normal;
-  font-size: 0.65rem;
+.pickrow__qty span {
+  font-size: 0.62rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.8;
+  letter-spacing: 0.05em;
+  opacity: 0.72;
 }
 
-.picklist__name {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.picklist__name em {
-  font-style: normal;
-}
-
-.picklist__where {
+.pickrow__tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
-  justify-content: flex-end;
+  gap: 0.3rem;
 }
 
-.picklist__row--unlocated {
-  background: var(--danger-soft);
-  border-radius: var(--radius-sm, 6px);
+/* One tag vocabulary for the whole pick list. The rack is the loud one,
+ * because "where do I walk" is the question this screen exists to answer. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.6rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
+
+.tag--rack {
+  background: var(--brand);
+  border-color: transparent;
+  color: #fff;
+  font-size: 0.78rem;
+}
+
+.tag--shelf {
+  background: var(--brand-soft);
+  border-color: transparent;
+  color: var(--brand-dark);
+}
+
+.tag--warn {
+  background: var(--warn-soft);
+  border-color: transparent;
+  color: var(--warn);
+}
+
+.tag--danger {
+  background: var(--danger-soft);
+  border-color: transparent;
+  color: var(--danger);
+}
+
+/* A line the picker cannot walk to, marked with a rail.
+ *
+ * The old `background: var(--danger-soft)` painted the whole row edge-to-edge
+ * with no matching padding, so the tint bled under the rounded panel corners
+ * while the divider still ran full width. A left border is the same signal
+ * without the bleed, and it survives being read at a glance. */
+.pickrow--flagged {
+  border-left: 3px solid var(--warn);
+  padding-left: 0.7rem;
+  margin-left: -0.7rem;
+}
+
+/* The kitchen action. Static at the end of the panel on a desktop; pinned to
+ * the bottom of the viewport on a phone, where it sits in the thumb zone with
+ * the list scrolling behind it.
+ *
+ * ONE button, positioned by CSS at each breakpoint - never two rendered
+ * copies, which is how a header version and a footer version drift apart. The
+ * negative margins cancel the panel's own 1.1rem padding so the bar meets the
+ * screen edge instead of floating inside it, and `safe-area-inset-bottom`
+ * keeps it clear of the home indicator on an iPhone. */
+.pickbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+.pickbar__label {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pickbar__btn {
+  flex: 1 1 auto;
+  min-height: 3rem;
+}
+
+@media (max-width: 899px) {
+  .pickbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin: 0.9rem -1.1rem -1.1rem;
+    padding: 0.7rem 1.1rem calc(0.7rem + env(safe-area-inset-bottom, 0px));
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.08);
+  }
+}
+
+/* From 720px there is room to put everything on one line again, so the row
+ * goes back to reading across: name, then quantity, then where to go. */
+@media (min-width: 720px) {
+  .pickrow {
+    align-items: center;
+    column-gap: 0.85rem;
+    padding: 0.7rem 0;
+  }
+
+  .pickrow__step {
+    margin-top: 0;
+  }
+
+  .pickrow__body {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.85rem;
+  }
+
+  .pickrow__main {
+    flex: 1 1 auto;
+  }
+
+  .pickrow__side {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+  }
+}
+
+/* The collapsible map wrapper, for the staff view only. */
+.mapcollapse {
+  margin-bottom: 1.25rem;
+}
+
+.mapcollapse__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 9px);
+  box-shadow: var(--shadow-sm);
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mapcollapse__toggle:hover {
+  border-color: var(--brand);
+}
+
+.mapcollapse__toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.mapcollapse__caret {
+  flex: 0 0 auto;
+  width: 1rem;
+  color: var(--brand);
+  font-size: 0.8rem;
+}
+
+.mapcollapse__label {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mapcollapse__hint {
+  margin-left: auto;
+  text-align: right;
+}
+
+.mapcollapse__body {
+  margin-top: 0.6rem;
+}
+
 
 .tracker-grid {
   display: grid;

@@ -1,0 +1,280 @@
+<!doctype html>
+<!--
+  Pick-list mobile concept - STANDALONE TAILWIND PROTOTYPE.
+
+  The redesign written in Tailwind, as a self-contained file you can open
+  straight in a browser (Tailwind comes from the CDN, so there is no build step).
+
+  WHY THIS IS A SEPARATE FILE
+  The app does NOT use Tailwind. client/ is plain CSS - one hand-written
+  index.css built on custom properties (--brand, --line, --surface, --radius...).
+  Dropping Tailwind classes into client/src would be dead code that no bundler
+  processes and no stylesheet honours, so the version actually shipped in the
+  app is written in the project's own CSS dialect. This file is the same design
+  expressed in Tailwind: a spec, a hand-off for a team that does use Tailwind,
+  or something to eyeball at three widths.
+
+  Open it, then resize the window:  < 640px stacks,  >= 640px is a single row,
+  >= 1024px the map is worth having.
+-->
+<html lang="en" class="h-full">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pick list - mobile concept</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Mirrors the custom properties in client/src/index.css so the two versions
+  // read as one design system rather than two products.
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand:  { DEFAULT: '#2563eb', dark: '#1d4ed8', soft: '#dbeafe' },
+          ink:    { DEFAULT: '#0f172a', soft: '#475569' },
+          muted:  '#64748b',
+          line:   '#e2e8f0',
+          surface:'#ffffff',
+          alt:    '#f8fafc',
+          bg:     '#f1f5f9',
+          ok:     { DEFAULT: '#15803d', soft: '#dcfce7' },
+          warn:   { DEFAULT: '#b45309', soft: '#fef3c7' },
+          danger: { DEFAULT: '#b91c1c', soft: '#fee2e2' },
+        },
+        borderRadius: { DEFAULT: '14px', sm: '9px' },
+        minHeight:    { touch: '48px' },   // the ergonomic floor
+      },
+    },
+  };
+</script>
+</head>
+
+<body class="h-full bg-bg text-ink antialiased">
+
+<!-- Phone frame. Drop `max-w-md mx-auto border-x` to use it full-bleed. -->
+<div class="mx-auto min-h-full max-w-md border-x border-line bg-bg">
+
+    <!-- ── Collapsible map ─────────────────────────────────────────────────
+         Closed by default on a phone. The point is that a picker should not
+         have to scroll past a full-width map to reach the racks. It re-opens
+         for anyone who wants it, and on a wide screen there is room for both. -->
+    <details class="group overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+      <summary class="flex min-h-touch cursor-pointer list-none items-center gap-2 px-3 py-2">
+        <span class="w-4 text-brand transition-transform group-open:rotate-90">▸</span>
+        <span class="text-sm font-bold">Live map</span>
+        <span class="ml-auto text-xs text-muted group-open:hidden">Show the rider</span>
+        <span class="ml-auto hidden text-xs text-muted group-open:inline">Hide to focus the pick list</span>
+      </summary>
+      <!-- Stand-in for the Leaflet map, which is 180px tall. -->
+      <div class="grid h-44 place-items-center border-t border-line bg-alt text-xs text-muted">
+        [ map - 180px tall, only when asked for ]
+      </div>
+    </details>
+
+    <!-- ── Pick list ──────────────────────────────────────────────────────
+         THE THREE LAYOUT FIXES, all in one block:
+
+         1. THREE-COLUMN GRID (step / thumb / body). The old row was one flex
+            line holding ~155px of fixed chrome before a single word - a 1.6rem
+            counter, a 42px thumbnail, a 3.2rem quantity and the location chips.
+            With the panel's own 1.1rem padding, a 360px phone left roughly
+            170px for the product name, which is where the wrapping came from.
+            All responsiveness now happens INSIDE the body, so the outer
+            columns can never be crushed by their contents.
+
+         2. WARNINGS ARE THEIR OWN PILLS, under the title. "No location" and
+            "removed from the catalogue" were loose inline <em> fragments
+            jammed into the name's text flow, so they read as trailing words of
+            the product name instead of as status.
+
+         3. ONE FACT, ONE TAG. The old UI said the same thing three times: a
+            red row background, a trailing "No location" chip, AND a closing
+            "N lines without a rack" alert. A line is either walkable (show the
+            rack, and the shelf when there is one) or it is not (show exactly
+            one tag saying why). -->
+    <section class="rounded-[14px] border border-line bg-surface p-3 shadow-sm">
+
+      <div class="mb-2 flex flex-wrap items-start gap-2">
+        <div class="min-w-0 flex-1">
+          <h2 class="text-base font-bold">Pick list</h2>
+          <p class="m-0 text-xs text-muted">Walk the racks in order.</p>
+
+        <!-- 1. LOCATED. The rack is the loudest thing on the line, because
+             "where do I walk" is the question this screen exists to answer. It
+             used to be a small pale chip on the far right: the last thing the
+             eye reached, and the first squeezed off a narrow screen. -->
+        <li class="grid grid-cols-[1.75rem_3rem_minmax(0,1fr)] items-start gap-x-2.5 py-3.5">
+          <span class="mt-1.5 grid h-7 w-7 place-items-center rounded-full bg-brand-soft text-xs font-extrabold text-brand-dark">1</span>
+          <span class="grid h-12 w-12 place-items-center rounded-[10px] bg-alt text-xl" aria-hidden="true">🍗</span>
+          <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3.5">
+            <div class="min-w-0 flex-1">
+              <h3 class="m-0 break-words text-base font-bold leading-snug">Chicken Tikka Masala</h3>
+              <p class="mt-0.5 text-xs text-muted">Large · Main Course</p>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-white">
+                <b class="text-base font-extrabold">2</b>
+                <span class="ml-1 text-[0.62rem] font-bold uppercase tracking-wider opacity-70">ordered</span>
+              </span>
+              <div class="flex flex-wrap gap-1">
+                <span class="whitespace-nowrap rounded-full bg-brand px-2 py-1 text-xs font-bold text-white">Rack A1</span>
+                <span class="whitespace-nowrap rounded-full bg-brand-soft px-2 py-1 text-xs font-bold text-brand-dark">Shelf 3</span>
+              </div>
+            </div>
+          </div>
+        </li>
+
+        <!-- 2. DELETED FROM THE CATALOGUE. One tag, plus a left rail.
+             The old full-row danger tint bled under the panel's rounded corners
+             while the divider still ran edge to edge; a 3px rail gives the same
+             signal with no bleed and survives being read at a glance. -->
+        <li class="-ml-2.5 grid grid-cols-[1.75rem_3rem_minmax(0,1fr)] items-start gap-x-2.5 border-l-[3px] border-l-warn py-3.5 pl-2.5">
+          <span class="mt-1.5 grid h-7 w-7 place-items-center rounded-full bg-brand-soft text-xs font-extrabold text-brand-dark">2</span>
+          <span class="grid h-12 w-12 place-items-center rounded-[10px] bg-alt text-xl" aria-hidden="true">🛍️</span>
+          <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3.5">
+            <div class="min-w-0 flex-1">
+              <h3 class="m-0 break-words text-base font-bold leading-snug">Veggie Burger</h3>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-white">
+                <b class="text-base font-extrabold">1</b>
+                <span class="ml-1 text-[0.62rem] font-bold uppercase tracking-wider opacity-70">ordered</span>
+              </span>
+
+        <!-- 4. A long unbroken name: the case that used to wrap worst, because
+             the name was the only thing in the row allowed to shrink. -->
+        <li class="grid grid-cols-[1.75rem_3rem_minmax(0,1fr)] items-start gap-x-2.5 py-3.5">
+          <span class="mt-1.5 grid h-7 w-7 place-items-center rounded-full bg-brand-soft text-xs font-extrabold text-brand-dark">4</span>
+          <span class="grid h-12 w-12 place-items-center rounded-[10px] bg-alt text-xl" aria-hidden="true">🫒</span>
+          <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3.5">
+            <div class="min-w-0 flex-1">
+              <h3 class="m-0 break-words text-base font-bold leading-snug">Extra Virgin Cold Pressed Olive Oil 500ml</h3>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-white">
+                <b class="text-base font-extrabold">1</b>
+                <span class="ml-1 text-[0.62rem] font-bold uppercase tracking-wider opacity-70">ordered</span>
+              </span>
+              <div class="flex flex-wrap gap-1">
+                <span class="whitespace-nowrap rounded-full bg-brand px-2 py-1 text-xs font-bold text-white">Rack B10</span>
+              </div>
+            </div>
+          </div>
+        </li>
+
+        <!-- 5. LOCATED, NO SHELF. Only the rack shows. An absent shelf is not a
+             warning, it is just not a thing - the old code rendered a lone
+             chip, or nothing at all, depending on which branch ran. -->
+        <li class="grid grid-cols-[1.75rem_3rem_minmax(0,1fr)] items-start gap-x-2.5 py-3.5">
+          <span class="mt-1.5 grid h-7 w-7 place-items-center rounded-full bg-brand-soft text-xs font-extrabold text-brand-dark">5</span>
+          <span class="grid h-12 w-12 place-items-center rounded-[10px] bg-alt text-xl" aria-hidden="true">🧈</span>
+          <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3.5">
+            <div class="min-w-0 flex-1">
+              <h3 class="m-0 break-words text-base font-bold leading-snug">Salted Butter 500g</h3>
+              <p class="mt-0.5 text-xs text-muted">Dairy</p>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-white">
+                <b class="text-base font-extrabold">2</b>
+                <span class="ml-1 text-[0.62rem] font-bold uppercase tracking-wider opacity-70">ordered</span>
+              </span>
+              <div class="flex flex-wrap gap-1">
+                <span class="whitespace-nowrap rounded-full bg-brand px-2 py-1 text-xs font-bold text-white">Rack C4</span>
+              </div>
+            </div>
+          </div>
+        </li>
+
+      </ul>
+
+      <!-- ── Thumb-zone action bar ────────────────────────────────────────
+           Sticky to the bottom of the viewport on a phone, static at the end
+           of the panel on a desktop. ONE button, positioned by CSS at each
+           breakpoint - never two rendered copies, which is exactly how a
+           header copy and a footer copy drift apart.
+
+           It lives inside the list's own panel on purpose: the action and the
+           rows it changes share a scroll container, so the button cannot drift
+           away from the content it refers to.
+
+           pb uses env(safe-area-inset-bottom) to clear the iPhone home
+           indicator, and the negative margin makes the bar meet the screen
+           edge instead of floating inside the panel padding. -->
+      <div class="sticky bottom-0 z-10 -mx-3 -mb-3 mt-3 flex items-center gap-3 border-t border-line
+                  bg-surface px-3 pb-[calc(0.7rem+env(safe-area-inset-bottom,0px))] pt-2.5
+                  shadow-[0_-6px_18px_rgba(15,23,42,0.08)]">
+        <span class="whitespace-nowrap text-sm font-bold">Next: Preparing</span>
+        <button class="min-h-touch flex-1 rounded-lg bg-brand px-4 font-semibold text-white">
+          Mark as preparing
+        </button>
+      </div>
+
+    </section>
+
+    <!-- The rest of the page continues under the bar; `pb-28` on <main> keeps
+         the last row scrollable clear of the sticky bar. -->
+    <section class="rounded-[14px] border border-line bg-surface p-3 shadow-sm">
+      <h2 class="mb-2 text-base font-bold">Progress</h2>
+      <p class="m-0 text-sm text-muted">…</p>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>
+
+              <div class="flex flex-wrap gap-1">
+                <!-- No "No location" tag here on purpose: the product being
+                     gone is WHY there is no location, so saying both was the
+                     same news told twice on one line. -->
+                <span class="whitespace-nowrap rounded-full bg-danger-soft px-2 py-1 text-xs font-bold text-danger">Removed from catalogue</span>
+              </div>
+            </div>
+          </div>
+        </li>
+
+        <!-- 3. KNOWN PRODUCT, NO RACK. The warn rail and exactly one tag. -->
+        <li class="-ml-2.5 grid grid-cols-[1.75rem_3rem_minmax(0,1fr)] items-start gap-x-2.5 border-l-[3px] border-l-warn py-3.5 pl-2.5">
+          <span class="mt-1.5 grid h-7 w-7 place-items-center rounded-full bg-brand-soft text-xs font-extrabold text-brand-dark">3</span>
+          <span class="grid h-12 w-12 place-items-center rounded-[10px] bg-alt text-xl" aria-hidden="true">🥩</span>
+          <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3.5">
+            <div class="min-w-0 flex-1">
+              <h3 class="m-0 break-words text-base font-bold leading-snug">Freshly Ground Beef Mince 1kg</h3>
+              <p class="mt-0.5 text-xs text-muted">Meat · Chilled</p>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+              <span class="whitespace-nowrap rounded-sm bg-ink px-2 py-1 text-white">
+                <b class="text-base font-extrabold">3</b>
+                <span class="ml-1 text-[0.62rem] font-bold uppercase tracking-wider opacity-70">ordered</span>
+              </span>
+              <div class="flex flex-wrap gap-1">
+                <span class="whitespace-nowrap rounded-full bg-warn-soft px-2 py-1 text-xs font-bold text-warn">No location</span>
+              </div>
+            </div>
+          </div>
+        </li>
+
+        </div>
+        <!-- Counts as chips, not a sentence. The old line read "5 lines ·
+             12 items to collect · walk the racks in this order" and wrapped to
+             three lines on a 360px screen, pushing the list below the fold. -->
+        <div class="flex flex-wrap gap-1">
+          <span class="rounded-full border border-line bg-alt px-2 py-0.5 text-xs font-semibold text-ink-soft">5 lines</span>
+          <span class="rounded-full border border-line bg-alt px-2 py-0.5 text-xs font-semibold text-ink-soft">12 items</span>
+          <span class="rounded-full bg-warn-soft px-2 py-0.5 text-xs font-semibold text-warn">2 need a location</span>
+        </div>
+      </div>
+
+      <ul class="list-none divide-y divide-line p-0">
+
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header class="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-surface px-3 py-2">
+    <a href="#" class="flex min-h-touch w-11 items-center justify-center text-ink-soft" aria-label="Back to orders">‹</a>
+    <h1 class="flex-1 truncate text-sm font-semibold">Order #4F2A91 · Joes Pizza</h1>
+    <span class="flex items-center gap-1 text-xs text-muted"><i class="h-1.5 w-1.5 rounded-full bg-ok"></i>Live</span>
+    <button class="min-h-touch rounded-lg border border-line px-3 text-xs font-semibold">Refresh</button>
+  </header>
+
+  <main class="space-y-3 p-3 pb-28">

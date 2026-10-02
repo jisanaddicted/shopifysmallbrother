@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import {
   CLOSED_STATUSES,
+  DELIVERY_FAILED_REASONS_VALUES,
   ORDER_STATUS,
   ORDER_STATUS_VALUES,
   PAYMENT_METHODS,
@@ -193,6 +194,29 @@ const orderSchema = new mongoose.Schema(
       index: true,
     },
     statusHistory: { type: [statusEntrySchema], default: [] },
+
+    /* ---- Dispatch-board fields -------------------------------------------
+     *
+     * `deliveredAt` is DELIBERATELY denormalised rather than read back out of
+     * `statusHistory`. "Completed today" is a range query, and a range query
+     * over an array of sub-documents cannot use an index - so the dispatch
+     * board would degrade into a collection scan exactly when a store is
+     * busiest. One indexed Date is the whole fix. Stamped once, in
+     * applyStatus(), it can never disagree with the history it mirrors.
+     */
+    deliveredAt: { type: Date, default: null, index: true },
+
+    // A failed attempt, and why. Null on every order that has not failed.
+    // `null` MUST be inside the enum: Mongoose skips enum validation for
+    // `undefined` but NOT for `null`, so a default-null field whose enum
+    // omitted null would refuse to save at all.
+    failedReason: {
+      type: String,
+      enum: [...DELIVERY_FAILED_REASONS_VALUES, null],
+      default: null,
+    },
+    failedAt: { type: Date, default: null },
+    retryCount: { type: Number, min: 0, default: 0 },
 
     // Last GPS ping from the assigned rider.
     riderLocation: { type: pointSchema, default: undefined },

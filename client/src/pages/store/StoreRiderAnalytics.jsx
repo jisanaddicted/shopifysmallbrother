@@ -180,6 +180,15 @@ export default function StoreRiderAnalytics() {
               <span className="chip chip--warn">
                 {data?.open || 0} In Progress
               </span>
+              {/* Actionable, so it earns a pill. "12 delivered, none confirmed"
+                  is the single most common reason a store's end-to-end numbers
+                  look better than its customers' experience - and the only
+                  thing the store can actually do about it is chase them. */}
+              {data?.awaitingConfirm > 0 ? (
+                <span className="chip chip--warn">
+                  {data.awaitingConfirm} Awaiting Confirm
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -224,6 +233,28 @@ export default function StoreRiderAnalytics() {
               <span className="stat__label">Avg. Delivery Time</span>
               <strong>{formatDurationMs(totalForBreakdown)}</strong>
             </div>
+
+            {/* The whole order, ending at the CUSTOMER's confirmation.
+              Kept beside - never instead of - "Avg. Delivery Time": the first
+              is the rider's job and is what the 45-minute on-time rate is judged
+              on, the second is what a shopper actually experienced. The
+              difference is the customer's tap, and a store that only ever sees
+              the first will quietly under-report how long orders are taking
+              end to end. Hidden until something is confirmed, so a store with
+              no confirmations does not stare at a permanent em dash. */}
+            {summary.cycleSample > 0 ? (
+              <div className="stat">
+                <span className="stat__label">Avg. Order to Confirm</span>
+                <strong>{formatDurationMs(summary.avgCycleMs)}</strong>
+              </div>
+            ) : null}
+
+            {Number.isFinite(summary.avgConfirmMs) ? (
+              <div className="stat">
+                <span className="stat__label">Avg. Customer Confirm</span>
+                <strong>{formatDurationMs(summary.avgConfirmMs)}</strong>
+              </div>
+            ) : null}
 
             <div className="stat">
               <span className="stat__label">Avg. Store Prep</span>

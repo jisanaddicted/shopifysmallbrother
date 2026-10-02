@@ -8,13 +8,30 @@ import { ORDER_STATUS } from './constants.js';
  * numbers can never drift, and a delivery finished last week still reports the
  * same figures it did on the day.
  *
- * The happy path is split into three legs so it is obvious *who* was slow:
+ * The happy path is split into legs so it is obvious *who* was slow:
  *
- *   placed -------- ready_for_pickup == picked_up -------- delivered
- *   |     prep (store)     |   wait (rider)   |  ride (rider)  |
+ *   placed --- ready_for_pickup == picked_up --- delivered --- received
+ *   |  prep (store)  |  wait (rider)  | ride (rider)  | confirm (customer) |
  *
- * `total` is what the customer actually waits for: the moment they pressed
- * order to the moment the parcel arrived.
+ * TWO TOTALS, AND THE DIFFERENCE IS THE WHOLE POINT
+ *
+ *   totalMs  placed -> delivered   the RIDER's job, end to end. This is what
+ *                                 the 45-minute SLA and the on-time rate are
+ *                                 measured against, because every minute in it
+ *                                 is one the rider actually controls.
+ *
+ *   cycleMs  placed -> received    the WHOLE order, ending when the customer
+ *                                 says it arrived. This is the truest answer to
+ *                                 "how long did this order take?", and it is
+ *                                 the number a store should quote.
+ *
+ * They are NOT interchangeable, and the gap between them is `confirmMs` - the
+ * customer's own delay between the parcel hitting the doorstep and them
+ * tapping the button. Charging that to a rider would be wrong in a way that
+ * quietly ruins a performance number: a customer who opens the parcel an hour
+ * later makes an exemplary rider look 4x slower, and an order nobody ever
+ * confirms has no end at all. So both are reported, the SLA stays on the leg
+ * the rider owns, and the confirmation lag is shown as its own figure.
  */
 
 const asDate = (value) => {
@@ -48,6 +65,10 @@ export function orderTimings(order) {
   const pickedUpAt = reachedAt(history, ORDER_STATUS.PICKED_UP);
   const outForDeliveryAt = reachedAt(history, ORDER_STATUS.OUT_FOR_DELIVERY);
   const deliveredAt = reachedAt(history, ORDER_STATUS.DELIVERED);
+  // The customer's own "it arrived" tap. Only ever set on an order that was
+  // already delivered - RECEIVABLE_STATUSES is [delivered] - so this can be
+  // newer than deliveredAt but never earlier.
+  const receivedAt = reachedAt(history, ORDER_STATUS.RECEIVED);
   const cancelledAt = reachedAt(history, ORDER_STATUS.CANCELLED);
 
   return {
@@ -56,6 +77,7 @@ export function orderTimings(order) {
     pickedUpAt,
     outForDeliveryAt,
     deliveredAt,
+    receivedAt,
     cancelledAt,
     // The store's side: how long the basket sat being prepared.
     prepMs: span(placedAt, readyAt),
@@ -63,10 +85,21 @@ export function orderTimings(order) {
     waitMs: span(readyAt, pickedUpAt),
     // The delivery itself, pickup to doorstep.
     rideMs: span(pickedUpAt, deliveredAt),
-    // What the customer waited for, end to end.
+    // What the customer waited for, end to end, up to the RIDER's handover.
     totalMs: span(placedAt, deliveredAt),
+    /* The customer's confirmation lag, and the whole order including it.
+     *
+     * Null until they confirm - not zero, and not "now". An unconfirmed delivery
+     * has an unknown end, and reporting it as 0 or as the elapsed time so far
+     * would both invent a number. `average()` drops these, so a store where most
+     * customers never tap gets a blank card rather than a flattering lie. */
+    confirmMs: span(deliveredAt, receivedAt),
+    cycleMs: span(placedAt, receivedAt),
     isDelivered: Boolean(deliveredAt),
+    isReceived: Boolean(receivedAt),
     isCancelled: Boolean(cancelledAt),
+    // `received` is in CLOSED_STATUSES, so an order nobody has confirmed is
+    // still finished work - it just has no cycle time to quote.
     isOpen: !deliveredAt && !cancelledAt,
   };
 }
@@ -139,6 +172,32 @@ export function summariseTimings(orders) {
 
   const onTime = delivered.filter((row) => row.totalMs !== null && row.totalMs <= DELIVERY_TARGET_MS);
 
+  /* The confirmation cohort, and everything derived from it.
+   *
+   * Deliberately a DIFFERENT cohort from `delivered`. `delivered` is every
+   * parcel that reached a doorstep; the cycle figures are only the ones whose
+   * customer went on to confirm. Mixing them would be the classic average-of-
+   * two-things trap this file already got burned by once (see the cohort note
+   * below): the headline "Avg delivery" and the "Avg order" would quietly be
+   * describing different sets of orders, and the difference between them would
+   * look like a bug rather than the customer's confirmation lag.
+   *
+   * `awaitingConfirm` is published so the gap is never mysterious - it is the
+   * number of delivered orders that have no cycle time yet because the customer
+   * has not tapped. */
+  const received = rows.filter((row) => row.isReceived);
+  const cycles = received.map((row) => row.cycleMs);
+  const confirms = received.map((row) => row.confirmMs);
+  const awaitingConfirm = delivered.filter((row) => !row.isReceived);
+  const bestCycle = received.reduce(
+    (min, row) => (row.cycleMs !== null && (min === null || row.cycleMs < min) ? row.cycleMs : min),
+    null,
+  );
+  const worstCycle = received.reduce(
+    (max, row) => (row.cycleMs !== null && (max === null || row.cycleMs > max) ? row.cycleMs : max),
+    null,
+  );
+
   /*
    * The three legs and the end-to-end total are averaged over ONE cohort.
    *
@@ -170,6 +229,11 @@ export function summariseTimings(orders) {
     delivered: delivered.length,
     open: inFlight.length,
     cancelled: rows.filter((row) => row.isCancelled).length,
+    // Delivered, but the customer has not confirmed arrival. Published as a
+    // top-level count (not just a summary field) because a store chasing
+    // confirmations is the only thing that can move it.
+    received: received.length,
+    awaitingConfirm: awaitingConfirm.length,
     summary: {
       avgPrepMs: average(cohort.map((row) => row.prepMs)),
       avgWaitMs: average(cohort.map((row) => row.waitMs)),
@@ -188,6 +252,24 @@ export function summariseTimings(orders) {
       onTime: onTime.length,
       // A percentage rather than a ratio, rounded for the card readout.
       onTimePct: delivered.length ? Math.round((onTime.length / delivered.length) * 100) : null,
+
+      /* The whole order, ending at the customer's confirmation.
+       *
+       * Averages over the CONFIRMED cohort only (`cycleSample` of them), which
+       * is why `avgCycleMs` and `avgTotalMs` can differ by more than you would
+       * expect: they are two different sets of orders, and `avgConfirmMs` is
+       * exactly the gap. All three are null rather than zero when nobody has
+       * confirmed - an em dash is honest, a zero is not. */
+      avgCycleMs: average(cycles),
+      // The customer's own lag, on the same cohort. This is the number that
+      // explains every disagreement between "how fast is this rider" and "how
+      // long did my order take".
+      avgConfirmMs: average(confirms),
+      bestCycleMs: bestCycle,
+      worstCycleMs: worstCycle,
+      // How many deliveries the cycle figures describe - so the UI can say so
+      // instead of letting 3 confirmed orders masquerade as a store average.
+      cycleSample: received.length,
     },
     // Newest first, finished deliveries before still-open ones.
     orders: [...delivered, ...inFlight].sort(
@@ -266,6 +348,10 @@ export function summariseByRider(orders) {
         delivered: roll.delivered,
         open: roll.open,
         cancelled: roll.cancelled,
+        // Carried through so the per-rider table can say "2 of 5 never
+        // confirmed" instead of showing an unexplained gap in the averages.
+        received: roll.received,
+        awaitingConfirm: roll.awaitingConfirm,
         summary: roll.summary,
       };
     })
