@@ -57,6 +57,10 @@ const trackerSrc = read('../client/src/pages/customer/OrderTracker.jsx');
 const mainSrc = read('../client/src/main.jsx');
 const ctxSrc = read('../client/src/context/PageStoreContext.jsx');
 const orderCtrlSrc = read('src/controllers/orderController.js');
+// The navbar stylesheet, for the layout checks. The backend tests already read
+// client files (this contract is split across both packages), so one more does
+// not make it any worse.
+const cssSrc = read('../client/src/index.css');
 
 // --- 1. The provider actually wraps the navbar AND the page ---------------
 console.log('--- the provider is mounted above both ends of the contract ---');
@@ -181,6 +185,51 @@ check(
 check(
   'and logoOnly is in the effect deps, so flipping variant cannot leave a stale flag',
   /\[order\?\.store, isStaffView, setPageStore\]/.test(trackerSrc),
+);
+
+// --- 3c. ... and the account control stays pinned to the right ---------------
+console.log('\n--- the cart + account controls stay on the right edge ---');
+
+/* A REAL regression this codebase had, and one that is invisible rather than
+ * loud: `.navbar__links` used to carry `margin-right: auto`, and that was the
+ * only thing holding the right-hand controls to the edge of the bar. The phone
+ * media query sets `.navbar__links { display: none }` - and a display:none box
+ * contributes no margin at all, not even an automatic one - so on every phone
+ * the anchor disappeared and brand / cart / account simply left-packed together.
+ *
+ * It went unnoticed while the brand was a fixed 30px square. The tracker header
+ * shows the store's logo ALONE and that logo's width is the merchant's choice,
+ * so the account icon began sliding left and right depending on which shop the
+ * order belonged to. The anchor now lives on `.navbar__actions`, which is
+ * rendered at every width. */
+const navActionsRule =
+  cssSrc.match(/^\.navbar__actions \{([\s\S]*?)\n\}/m)?.[1] || '';
+const navLinksRule = cssSrc.match(/^\.navbar__links \{([\s\S]*?)\n\}/m)?.[1] || '';
+
+check(
+  'the auto margin lives on .navbar__actions, which is rendered at every width',
+  /margin-left:\s*auto;/.test(navActionsRule),
+);
+check(
+  'and NOT on .navbar__links, which is display:none on a phone',
+  !/margin-right:\s*auto;/.test(navLinksRule),
+  'two auto margins would also split the free space on a desktop',
+);
+check(
+  'the phone still hides the nav links (that is what removed the old anchor)',
+  /@media \(max-width: 720px\) \{[\s\S]{0,200}?\.navbar__links,[\s\S]{0,120}?display: none;/.test(
+    cssSrc,
+  ),
+);
+
+/* The mark may be wide, but not so wide it reaches the controls: the cap is what
+ * stops the two colliding now that they always share one row. */
+const navMarkCap =
+  cssSrc.match(/\.navbar__brand--mark \.navbar__store-logo \{([\s\S]*?)\n\}/)?.[1] ||
+  '';
+check(
+  'the mark-alone logo is still capped, so a wide wordmark cannot reach the buttons',
+  /max-width:\s*min\(38vw, 140px\)/.test(navMarkCap),
 );
 
 // --- 4. The tracker publishes, and cleans up after itself -------------------

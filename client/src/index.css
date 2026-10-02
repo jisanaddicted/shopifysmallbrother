@@ -290,10 +290,12 @@ ol {
   font-weight: 900;
 }
 
+/* No auto margin here any more - it moved to `.navbar__actions`. See the note
+   there; this rule used to be what held the right-hand controls to the edge,
+   which silently stopped working on a phone. */
 .navbar__links {
   display: flex;
   gap: 0.25rem;
-  margin-right: auto;
 }
 
 .navbar__links a {
@@ -361,10 +363,33 @@ ol {
   gap: 0.6rem;
 }
 
+/* `margin-left: auto` is what pins these to the RIGHT edge of the bar, and it
+ * has to live HERE rather than on `.navbar__links`.
+ *
+ * It used to be `margin-right: auto` on the links, which reads correctly on a
+ * desktop: brand, links, then a gap, then the controls on the right. But the
+ * phone media query sets `.navbar__links { display: none }`, and a
+ * `display: none` box contributes NO margin - not even an automatic one. So on
+ * every phone the one thing holding the Cart and account controls to the right
+ * edge vanished with it, and the three groups simply left-packed after the
+ * brand.
+ *
+ * That was invisible while the brand was a fixed 30px square, and obvious the
+ * moment it was not: the customer order tracker's bar shows the store's logo
+ * ALONE, and that logo's width is the merchant's choice - a square icon is 30px,
+ * a wordmark runs to 140px. The account icon therefore slid left and right
+ * depending on which shop the order belonged to, and on the widest logos it was
+ * pushed far enough to crowd the Cart button.
+ *
+ * Anchoring the auto margin to the actions fixes it in both layouts at once: the
+ * bar is brand | links | ...free space... | cart + account on a desktop, and
+ * brand | ...free space... | cart + account on a phone. The account control is
+ * now in the same place on every screen, whatever the logo measures. */
 .navbar__actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  margin-left: auto;
 }
 
 /*
