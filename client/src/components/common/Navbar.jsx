@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
+import { usePageStore } from '../../context/PageStoreContext';
 import { HOME_ROUTE_BY_ROLE, ROLES, ROUTES, checkoutPath, lastStoreVisit, shopPath } from '../../utils/constants';
 import { initials } from '../../utils/formatters';
 import { getPublicStore } from '../../services/storeService';
@@ -50,8 +51,32 @@ export default function Navbar() {
     };
   }, [homeStore, isCustomer, user?.email]);
 
-  // The store whose logo + URL the brand shows for a customer.
-  const brandStore = homeStore || visitedStore || null;
+  /* The store whose logo + URL the brand shows.
+
+     THE PAGE WINS. `pageStore` is whatever store the current screen published
+     (see context/PageStoreContext) - on /track/:orderId that is the shop the
+     rider is delivering FROM, read straight off the order.
+
+     It has to be first, and the session-derived stores have to stay as the
+     fallback, because the session only describes a SIGNED-IN CUSTOMER. A guest
+     watching a delivery has no `shoppingStores`, no `customerStores`, and
+     nothing in `lastStoreVisit` - so before this, the one page whose entire
+     subject is a particular shop was the one page branded as the generic app.
+     The tracker is also usually reached from a shared link on a phone, which is
+     exactly where "DeliveryApp" told the reader nothing about whose parcel was
+     on the map. */
+  const { store: pageStore, logoOnly } = usePageStore();
+  const brandStore = pageStore || homeStore || visitedStore || null;
+
+  /* Drop the store's NAME, keep its mark - only ever for a store the page
+     published, never for one inferred from the session.
+
+     The `pageStore &&` is load-bearing rather than belt-and-braces: `logoOnly`
+     describes how the PAGE wants to be branded, so if the page published nothing
+     there is no page to have an opinion, and a session store must keep its
+     name. Without it a stale flag would silently nameless the storefront of
+     every customer who navigated here and back. */
+  const brandLogoOnly = Boolean(pageStore && logoOnly);
 
   const handleLogout = () => {
     // Auth-door rule: customers NEVER land on the staff portal (/login).
@@ -76,10 +101,14 @@ export default function Navbar() {
 
   const brandTarget = HOME_ROUTE_BY_ROLE[user?.role] || ROUTES.HOME;
 
-  // A signed-in customer sees THEIR store in the brand slot: the store's
-  // logo image (logo, else image) from the database, linking to that
-  // store's own URL (/s/<slug>). Everyone else keeps the default brand.
-  const brandLogo = brandStore?.logo || brandStore?.image || '';
+  /* Whichever store we ended up with, the brand draws ITS logo, linking to that
+     store's own URL (/s/<slug>) so the bar doubles as the way back to the shop.
+     `logo` then `logoUrl` then `image` is the same order StoreHeader uses, so
+     the navbar and the storefront header can never disagree about which picture
+     is the store's face. Anyone else - staff, or a page that published nothing -
+     keeps the default wordmark. */
+  const brandLogo =
+    brandStore?.logo || brandStore?.logoUrl || brandStore?.image || '';
   const brandStorePath = brandStore?.slug ? shopPath(brandStore.slug) : '';
   // Checkout belongs to a store too: /s/<slug>/checkout when we know which
   // one (the brand store, else the last storefront visited), bare /checkout
@@ -154,10 +183,19 @@ export default function Navbar() {
   return (
     <header className="navbar">
       <div className="navbar__inner">
-        {isCustomer && brandStore ? (
+        {/* Keyed on `brandStore` ALONE.
+
+            This used to be `isCustomer && brandStore`, and that conjunct was the
+            bug: a guest has no customer session, so the store the tracker page
+            publishes was ignored and the bar fell through to the generic
+            wordmark below. A store being known is now sufficient - the store
+            itself is the evidence, not who is looking. */}
+        {brandStore ? (
           <Link
             to={brandStorePath || brandTarget}
-            className="navbar__brand navbar__brand--store"
+            className={`navbar__brand navbar__brand--store${
+              brandLogoOnly ? ' navbar__brand--mark' : ''
+            }`}
             title={`${brandStore.name || 'Store'} — open storefront`}
           >
             {brandLogo ? (
@@ -171,9 +209,22 @@ export default function Navbar() {
                 {initials(brandStore.name || 'S')}
               </span>
             )}
-            <span className="navbar__brand-name">
-              {brandStore.name || 'Store'}
-            </span>
+            {/* The name, unless this page asked for the mark alone.
+
+                The visible name is dropped rather than removed, so it is kept
+                for screen readers in `sr-only` - the logo carries the whole
+                identity here, exactly as it does in StoreHeader, and a store
+                with no logo at all is left with its initials and nothing to
+                say what they stand for. The link's `title` and the img's `alt`
+                still carry it too, but neither is a reliable substitute for
+                real text in the accessibility tree. */}
+            {brandLogoOnly ? (
+              <span className="sr-only">{brandStore.name || 'Store'}</span>
+            ) : (
+              <span className="navbar__brand-name">
+                {brandStore.name || 'Store'}
+              </span>
+            )}
           </Link>
         ) : (
           <Link to={brandTarget} className="navbar__brand">

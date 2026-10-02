@@ -1,7 +1,12 @@
 import { useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
-import { checkoutPath, lastStoreVisit } from '../../utils/constants';
+import {
+  ROUTES,
+  checkoutPath,
+  lastStoreVisit,
+  shopPath,
+} from '../../utils/constants';
 import { formatCurrency } from '../../utils/formatters';
 
 export default function CartDrawer() {
@@ -27,6 +32,10 @@ export default function CartDrawer() {
     ? location.pathname.split('/')[2] || ''
     : '';
   const storeSlug = pathSlug || lastStoreVisit() || '';
+  // Where "add something first" sends an empty cart. Same slug the checkout
+  // link would have used, so the two can never disagree about which store the
+  // shopper is shopping at; with no store known at all it is the store picker.
+  const shopTarget = storeSlug ? shopPath(storeSlug) : ROUTES.STORE;
 
   // Lock the page behind the drawer, close it with Escape.
   useEffect(() => {
@@ -151,14 +160,46 @@ export default function CartDrawer() {
             <strong>{formatCurrency(total)}</strong>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-primary btn-block"
-            onClick={goToCheckout}
-            disabled={items.length === 0}
-          >
-            Go to checkout
-          </button>
+          {/* THE FOOTER CTA IS NEVER DEAD.
+
+              It used to be one button with `disabled={items.length === 0}`. An
+              empty cart therefore rendered a full-width primary button that was
+              permanently inert, and - this is the part that made it a real
+              defect rather than a cosmetic one - `goToCheckout` has NO guard of
+              its own, so a tap on it did literally nothing: no navigation, no
+              message, no error. The only explanation anywhere in the drawer was
+              a line of body text ("Nothing here yet - add a product from the
+              store") sitting well above the fold of attention, several scrolls
+              away from the button being tapped. On a phone, where the drawer
+              body scrolls and the footer is pinned, the shopper's thumb is on
+              the footer and their eyes are on the footer, and the one thing the
+              footer said was a dimmed button that did not respond.
+
+              So the empty state now carries its own instruction and a real
+              destination, in the same place and the same size as the control it
+              replaces. Nothing is disabled any more. */}
+          {items.length > 0 ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-block"
+              onClick={goToCheckout}
+            >
+              Go to checkout
+            </button>
+          ) : (
+            <>
+              <p className="muted small drawer__empty-cta">
+                Nothing to check out yet — add a product to continue.
+              </p>
+              <Link
+                className="btn btn-primary btn-block"
+                to={shopTarget}
+                onClick={closeCart}
+              >
+                Browse the store
+              </Link>
+            </>
+          )}
         </footer>
       </aside>
     </div>

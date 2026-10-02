@@ -233,6 +233,45 @@ ol {
   flex: 0 0 auto;
 }
 
+/* The mark on its own (the customer order tracker) - shown WHOLE.
+ *
+ * The rule above is an avatar: a 30px SQUARE with `object-fit: cover`, which is
+ * right when the store's name is printed next to it and the square is only ever
+ * a thumbnail. `cover` fills that square by cropping whatever does not fit, so a
+ * merchant whose logo is a wordmark - "RONEX MART", four times wider than it is
+ * tall - lost its outer letters. The tracker made it obvious because that header
+ * shows the logo ALONE: with the name gone, the crop is all that is left, and
+ * the bar read as a broken image rather than as somebody's shop.
+ *
+ * So the mark-alone variant is sized the way `.store-header__logo` already is
+ * (see the long note there): by its HEIGHT, with `width: auto` so the box takes
+ * the logo's own shape, and `object-fit: contain` so nothing is ever cropped.
+ * `max-width` then shrinks a very wide wordmark rather than squashing it - and
+ * that cap is viewport-relative, because a phone has far less room here than a
+ * desktop and the cart and account controls must keep theirs.
+ *
+ * The border, the tinted background and the rounding are dropped: they framed
+ * the old square thumbnail, and around a wordmark's own artwork they only box in
+ * the store's picture. The initials fallback below is enlarged to match, so the
+ * bar does not change size when a merchant finally uploads a real logo - the
+ * same reason `.store-header__logo` and `.store-header__mark` share one box. */
+.navbar__brand--mark .navbar__store-logo {
+  display: block;
+  height: 34px;
+  width: auto;
+  max-width: min(38vw, 140px);
+  object-fit: contain;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.navbar__brand--mark .navbar__logo {
+  width: 34px;
+  height: 34px;
+  font-size: 0.95rem;
+}
+
 .navbar__brand-name {
   max-width: 12rem;
   overflow: hidden;
@@ -1699,6 +1738,14 @@ ol {
 .drawer__footer {
   border-bottom: 0;
   border-top: 1px solid var(--line);
+}
+
+/* Why there is no "Go to checkout" button yet.
+   Sits in the pinned footer beside the control that replaces it, because that
+   is where the shopper is looking when they tap a button that did nothing. */
+.drawer__empty-cta {
+  margin: 0 0 0.6rem;
+  text-align: center;
 }
 
 .drawer__row {

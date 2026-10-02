@@ -5,6 +5,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ReviewDialog from '../../components/store/ReviewDialog';
 import { useSocket } from '../../context/SocketContext';
 import { useAuth } from '../../context/AuthContext';
+import { usePageStore } from '../../context/PageStoreContext';
 import orderService from '../../services/orderService';
 import {
   ADMIN_STATUS_STEPS,
@@ -138,6 +139,50 @@ export default function OrderTracker({
   useEffect(() => {
     loadOrder();
   }, [loadOrder]);
+
+  /* Hand the navbar the store this delivery is coming from.
+
+     The navbar is drawn above this page, so the only way a page can say "the
+     bar belongs to THIS shop" is to publish it (see context/PageStoreContext).
+     Without this, the top bar on a phone read "DeliveryApp" while the map below
+     tracked one particular rider from one particular store - and the people who
+     hit that hardest were exactly the ones with no session to fall back on: a
+     guest who checked out without an account, and a customer opening a shared
+     tracking link on a phone that had never visited the storefront (so
+     `lastStoreVisit` was empty too, and the Navbar's own fallback fetch had no
+     slug to run).
+
+     `order.store` is the authoritative answer, not a guess from the URL: it
+     comes from the order document, so it is right even for a legacy order whose
+     slug has since been renamed.
+
+     Published for EVERY variant, not just the customer's - the screen is about
+     that store whoever opened it, and the rider tracker (which keeps the
+     navbar) is the better example: a rider picking up somebody's order should
+     see which shop it came from. The merchant and admin variants mount inside
+     <DashboardLayout>, which hides this navbar entirely, so for them publishing
+     is simply inert.
+
+     Cleanup clears it on unmount, so navigating away cannot leave a stale shop
+     branded above whatever comes next.
+
+     `logoOnly` - the customer's tracker asks for the store's MARK WITHOUT ITS
+     NAME. That bar is a 30px slot at the very top of a phone screen whose whole
+     job is watching one delivery, and the store is named in the page itself
+     ("Back to store", the review prompt, the receipt) - so the name beside the
+     logo was the same word twice, squeezed into a 12rem strip that ellipsised
+     long store names into uselessness. StoreHeader already made exactly this
+     call on the storefront header.
+
+     Staff keep the name. The rider variant keeps this navbar, and "Joe's Pizza"
+     beside the logo is genuinely load-bearing for somebody deciding which
+     pickup to take next; the merchant and admin variants hide the navbar
+     entirely, so the flag is inert for them either way. */
+  const { setStore: setPageStore } = usePageStore();
+  useEffect(() => {
+    setPageStore(order?.store || null, { logoOnly: !isStaffView });
+    return () => setPageStore(null);
+  }, [order?.store, isStaffView, setPageStore]);
 
   // Subscribe to live updates for exactly this order, then clean up.
   useEffect(() => {

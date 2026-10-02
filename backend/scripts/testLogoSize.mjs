@@ -356,6 +356,78 @@ check(
   /\.store-header__mark \{[\s\S]*?width:\s*var\(--logo-box\);[\s\S]*?height:\s*var\(--logo-box\)/.test(css),
 );
 
+/* The navbar's own source, for the one check that is about markup rather than
+   CSS. Read with the same relative-path helper the rest of this script uses
+   (it resolves from backend/scripts/, hence the two `..`). */
+const navbarSrc = read('../../client/src/components/common/Navbar.jsx');
+
+/* --- The same crop, in the NAVBAR's mark-alone variant ---------------------
+ *
+ * The storefront header learned all of the above the hard way. The navbar never
+ * did: its brand slot was a 30px SQUARE with `object-fit: cover`, which is fine
+ * as a thumbnail beside a printed store name and destructive as the only thing
+ * in the bar. `cover` fills the square by cropping whatever does not fit, so a
+ * wordmark logo lost its outer letters - and the customer order tracker, which
+ * shows the mark ALONE (no name to fall back on), is where that became obvious.
+ *
+ * These assert the navbar's mark-only rule follows the same rule the storefront
+ * header already follows: sized by height, width auto, never cropped, and capped
+ * so it cannot eat the cart and account controls on a phone.
+ */
+const navMarkRule =
+  css.match(/\.navbar__brand--mark \.navbar__store-logo \{([\s\S]*?)\n\}/)?.[1] || '';
+check(
+  'the navbar mark-alone logo exists as its own rule',
+  navMarkRule.length > 0,
+  'the tracker header is the only place the navbar shows a logo with no name',
+);
+check(
+  'it is sized by its HEIGHT, like the storefront header',
+  /height:\s*34px;/.test(navMarkRule) && /width:\s*auto;/.test(navMarkRule),
+);
+check(
+  'it is never cropped - `contain`, not `cover` (this is the bug)',
+  /object-fit:\s*contain;/.test(navMarkRule) &&
+    !/object-fit:\s*cover;/.test(navMarkRule),
+);
+check(
+  'the square 30px box does not leak into the mark variant',
+  !/^\s*width:\s*30px;/m.test(navMarkRule) && !/^\s*height:\s*30px;/m.test(navMarkRule),
+);
+check(
+  'a wide wordmark is capped against the viewport, so the cart and account buttons survive',
+  /max-width:\s*min\(38vw, 140px\)/.test(navMarkRule),
+);
+check(
+  "it is not framed: no border, no tint, no rounding around the store's own artwork",
+  /border:\s*0;/.test(navMarkRule) &&
+    /border-radius:\s*0;/.test(navMarkRule) &&
+    /background:\s*transparent;/.test(navMarkRule),
+);
+check(
+  'the initials fallback is enlarged to match, so the bar does not jump when a logo is uploaded',
+  /\.navbar__brand--mark \.navbar__logo \{[\s\S]*?width:\s*34px;[\s\S]*?height:\s*34px;/.test(
+    css,
+  ),
+);
+check(
+  'and the Navbar actually applies that modifier when the name is hidden',
+  /navbar__brand--mark/.test(navbarSrc) &&
+    /brandLogoOnly \? ' navbar__brand--mark' : ''/.test(navbarSrc),
+);
+/* The name+logo variant keeps its square thumbnail - that is a deliberate
+ * second look, not an oversight, so pin it so nobody "fixes" it by deleting the
+ * rule the tracker depends on. */
+const navAvatarRule =
+  css.match(/^\.navbar__store-logo \{([\s\S]*?)\n\}/m)?.[1] || '';
+check(
+  'the name+logo variant is still a square thumbnail (cover is correct there)',
+  /width:\s*30px;/.test(navAvatarRule) &&
+    /height:\s*30px;/.test(navAvatarRule) &&
+    /object-fit:\s*cover;/.test(navAvatarRule),
+);
+
+
 const imageFile = read('../../client/src/utils/imageFile.js');
 check(
   'the upload pipeline trims the empty border',

@@ -66,6 +66,33 @@ const ORDER_POPULATE = [
 ];
 
 /**
+ * ORDER_POPULATE, plus the store's `logo` - for reading ONE order at a time.
+ *
+ * The order tracker brands its navbar with the shop the delivery is coming
+ * from, and this single-order read is the one place that has to carry the logo.
+ * (The list populate cannot: see below.)
+ *
+ * DERIVED from ORDER_POPULATE rather than written out again, so the two cannot
+ * drift. Everything except the store's select is shared by reference, so a
+ * field added to (or dropped from) the order detail follows automatically and
+ * only the logo has to be added here.
+ *
+ * WHY NOT JUST ADD `logo` TO ORDER_POPULATE
+ *
+ * ORDER_POPULATE is also what every order LIST uses - getMyOrders, the rider's
+ * orders, the claim pool, and both analytics windows. `Store.logo` is a plain
+ * String that is a Cloudinary URL for a migrated store but still a ~90KB base64
+ * data URL for any store predating that migration, and a list would ship it
+ * once per row. That is precisely the payload this file already refuses to send
+ * anywhere else (see ORDER_LIST_POPULATE, and the same reasoning in
+ * utils/storeAccess.js for the session). One logo on one order is bounded; the
+ * same logo on fifty rows is the 942KB storefront problem again.
+ */
+const ORDER_DETAIL_POPULATE = ORDER_POPULATE.map((spec) =>
+  spec.path === 'store' ? { ...spec, select: 'name slug image logo' } : spec,
+);
+
+/**
  * The same shape as ORDER_POPULATE, minus the live catalogue lookup.
  *
  * For a LIST of orders the receipt already carries everything the table shows:
@@ -133,7 +160,7 @@ export async function loadOrderFor(orderId, user, guestTokenRaw = null) {
 
   const order = await Order.findById(orderId)
     .select('+guestTokenHash')
-    .populate(ORDER_POPULATE);
+    .populate(ORDER_DETAIL_POPULATE);
   if (!order) throw new HttpError(404, 'That order does not exist.');
 
   // Guest access: whoever holds the raw token from checkout may view/cancel
