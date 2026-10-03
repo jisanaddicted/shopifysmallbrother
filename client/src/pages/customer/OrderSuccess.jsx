@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import orderService from '../../services/orderService';
@@ -7,12 +7,92 @@ import {
   saveStores,
   saveCustomerStores,
 } from '../../services/authService';
-import { formatCurrency, formatDateTime } from '../../utils/formatters';
+import {
+  formatCurrency,
+  formatDateTime,
+  formatObjectId,
+  formatStatus,
+} from '../../utils/formatters';
 import {
   clearGuestToken,
   getGuestToken,
   orderTrackerPath,
+  ORDER_STATUS_TONE,
+  PAYMENT_METHOD_LABELS,
 } from '../../utils/constants';
+
+/**
+ * Write text to the clipboard, reporting whether it worked.
+ *
+ * `navigator.clipboard` is unavailable on an insecure origin, which includes
+ * this app reached over plain HTTP on a LAN address - the phone-testing path
+ * `vite.config.js` explicitly allows. Rather than throw inside the click
+ * handler, the promise is caught and reported as `false` so the button can say
+ * something honest. Returns a promise because the caller flips state on the
+ * result.
+ */
+function copyToClipboard(text) {
+  if (!navigator.clipboard?.writeText) return Promise.resolve(false);
+  return navigator.clipboard.writeText(text).then(
+    () => true,
+    () => false,
+  );
+}
+
+/**
+ * A small inline SVG, matching how the rest of the client draws icons (there is
+ * no icon library installed - see Navbar.jsx, CategoryRail.jsx). Inherits
+ * `currentColor` so the button's own colour drives it.
+ */
+function CopyIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="12" height="12" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+/**
+ * The tick, drawn rather than typed.
+ *
+ * `size` is a prop because this glyph appears at two very different scales: the
+ * 28px confirmation badge and the 12px "Copied" state inside the copy button. A
+ * single hardcoded size would mean one of the two is wrong - and a 28px check
+ * inside a 24px-tall button pushes the row taller than everything beside it,
+ * which is exactly the ragged-height problem the badge base rule warns about.
+ *
+ * Inherits `currentColor`, so the button's own colour drives it, and it is
+ * `aria-hidden` because the surrounding text ("Order placed", "Copied") already
+ * carries the meaning.
+ */
+function CheckIcon({ size = 28 }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
 
 /**
  * The "order placed" screen.
@@ -51,6 +131,29 @@ export default function OrderSuccess() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [claimed, setClaimed] = useState(false);
+  /* Copy feedback. `copied` is a short-lived flag rather than a message: the
+     button relabels itself, so there is nothing to read and nothing to
+     dismiss. The timer is held in a ref so a second click restarts the window
+     instead of leaving two timeouts racing to clear a state that has since been
+     set again - and so the cleanup below can cancel the one that is live. */
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef(null);
+
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
+
+  const handleCopy = async () => {
+    // Copy the FULL id, never the truncated form. The truncation exists to be
+    // read; pasting "6ac0…bfc5" into a search box finds nothing.
+    const ok = await copyToClipboard(order?._id || order?.code || '');
+    setCopied(ok);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 1800);
+  };
   /* The order may only be in router state (a hard refresh loses that), so fall
      back to fetching it. A guest needs their token; getOrderById reads it from
      storage on its own, which is the same token checkout saved. */
@@ -161,7 +264,7 @@ export default function OrderSuccess() {
       <div className="order-success">
         <header className="order-success__head">
           <span className="order-success__tick" aria-hidden="true">
-            ✓
+            <CheckIcon />
           </span>
           <h1 className="page__title">Order placed</h1>
           <p className="muted">
@@ -180,14 +283,52 @@ export default function OrderSuccess() {
               <div>
                 <dt>Order</dt>
                 <dd>
-                  <code>{order.code || order._id || order.id}</code>
+                  {/* `code` is the short human reference the store quotes to
+                      a shopper ("DR-4821") and is preferred when present; the
+                      ObjectId is the fallback, truncated because it is the
+                      longest thing on the page. Either way the copy button
+                      yields the value that will actually match a lookup. */}
+                  <span className="order-success__id">
+                    {formatObjectId(order.code || order._id || order.id)}
+                  </span>
+                  <button
+                    type="button"
+                    className={`order-success__copy${
+                      copied ? ' order-success__copy--done' : ''
+                    }`}
+                    onClick={handleCopy}
+                  >
+                    {copied ? (
+                      <>
+                        <CheckIcon size={12} /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <CopyIcon /> Copy ID
+                      </>
+                    )}
+                  </button>
                 </dd>
               </div>
               {order.status ? (
                 <div>
                   <dt>Status</dt>
                   <dd>
-                    <span className="pill">{order.status}</span>
+                    {/* The tone comes from the shared ORDER_STATUS_TONE map, so
+                        this pill is the same colour as the one on the orders
+                        board and the tracker. It falls back to `muted` because
+                        that class exists specifically to stop a live order
+                        being flagged - `.badge`'s own default is solid brand
+                        blue, which would shout about the least interesting
+                        fact on the receipt. `formatStatus` capitalises it and
+                        maps the machine value ("ready_for_pickup") to words. */}
+                    <span
+                      className={`badge badge--${
+                        ORDER_STATUS_TONE[order.status] || 'muted'
+                      }`}
+                    >
+                      {formatStatus(order.status)}
+                    </span>
                   </dd>
                 </div>
               ) : null}
@@ -200,24 +341,34 @@ export default function OrderSuccess() {
               {total != null ? (
                 <div>
                   <dt>Total</dt>
-                  <dd>
-                    <strong>{formatCurrency(total)}</strong>
-                  </dd>
+                  {/* No <strong> wrapper: `.detail-list dd` is already
+                      font-weight 600, so nesting a bold inside it produced a
+                      double-weighted total that sat heavier than every other
+                      value on the receipt. */}
+                  <dd>{formatCurrency(total)}</dd>
                 </div>
               ) : null}
               {order.paymentMethod ? (
                 <div>
                   <dt>Payment</dt>
+                  {/* Named from the shared PAYMENT_METHOD_LABELS rather than
+                      re-decided here. The old ternary collapsed bKash, Nagad,
+                      Rocket and Card into one "Paid online" string, which threw
+                      away the channel the order actually recorded - and the one
+                      thing a shopper checking a receipt is looking for when
+                      they want to know whether they already paid. */}
                   <dd>
-                    {order.paymentMethod === 'cod'
-                      ? 'Cash on delivery'
-                      : 'Paid online'}
+                    {PAYMENT_METHOD_LABELS[order.paymentMethod] ||
+                      formatStatus(order.paymentMethod)}
                   </dd>
                 </div>
               ) : null}
             </dl>
 
-            <Link className="btn btn-primary" to={orderTrackerPath(orderId)}>
+            <Link
+              className="btn btn-primary btn-block"
+              to={orderTrackerPath(orderId)}
+            >
               Track this order
             </Link>
           </section>

@@ -148,6 +148,31 @@ export function formatLocation(product) {
   return parts.length ? parts.join(' · ') : '—';
 }
 
+/**
+ * "0123…4567" from a 24-character Mongo ObjectId.
+ *
+ * A raw id is 24 hex characters of no meaning to a human, and on the order
+ * confirmation it is the single longest string on the page - printed in full it
+ * either wraps the value column onto a second line or forces the receipt wider
+ * than it is allowed to be. Four characters off each end is enough to tell two
+ * ids apart and to match one against a database row or a support ticket, which
+ * is the only reason a shopper is ever shown it.
+ *
+ * The ellipsis is the single character U+2026, not three dots: in a monospace
+ * run three periods occupy three cells and leave a visible gap before the last
+ * four characters, so the two halves stop lining up between ids.
+ *
+ * Anything that is NOT a 24-character hex string is returned untouched rather
+ * than mangled. Orders also carry a short human `code` ("DR-4821"), and
+ * truncating that to "DR-…21" would be noise with nothing gained - so the guard
+ * is on the SHAPE, not on the length.
+ */
+export function formatObjectId(id) {
+  const value = String(id ?? '');
+  if (!/^[a-f0-9]{24}$/i.test(value)) return value;
+  return `${value.slice(0, 4)}…${value.slice(-4)}`;
+}
+
 /** Cut long text and add an ellipsis. */
 export function truncate(text, max = 80) {
   const value = String(text ?? '');

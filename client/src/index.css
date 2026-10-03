@@ -344,6 +344,32 @@ ol {
   color: var(--brand-dark);
   font-size: 1.5rem;
   font-weight: 700;
+  /* One short pop, then it settles. The confirmation is the moment the shopper
+     is told the order went through, so the tick earns one flourish - but it is
+     the only moving thing on the page, and `forwards` is what holds the resting
+     scale so it does not snap back to 0 on the last frame. */
+  animation: order-success-tick 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* The mask used by prefers-reduced-motion. A checkmark that has already
+   appeared is the information; the scaling is decoration, so dropping the
+   animation entirely loses nothing. */
+@keyframes order-success-tick {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .order-success__tick {
+    animation: none;
+  }
 }
 
 .order-success__summary .detail-list {
@@ -361,6 +387,156 @@ ol {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+}
+
+/* --- The key/value rows on the confirmation -------------------------------
+   A `<dl>` of order facts, label left and value right on one line each.
+
+   This class was REFERENCED by OrderSuccess.jsx for as long as the page has
+   existed and never defined, so the `<dl>` fell back to a plain block: every
+   `<div>` row stacked, the label sat on its own line above its value, and the
+   two columns the markup already described never appeared. The definition is
+   therefore the fix, not a restyle - the JSX structure was always right.
+
+   `> div + div` rather than a border on every row, so the first row has no rule
+   hanging above it under the panel title.
+
+   The divider is inset to clear the panel padding: without the padding on the
+   rows themselves the line would run the full width of the card, edge to edge,
+   while the text either side of it was inset - a rule that visibly overhangs
+   the content it is supposed to be separating. */
+.detail-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0;
+}
+
+.detail-list > div + div {
+  border-top: 1px solid var(--line);
+}
+
+/* `flex: 0 0 auto` stops the label being squeezed to zero by a long value on
+   a narrow phone - the value is the part that is allowed to shrink. */
+.detail-list dt {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.detail-list dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: right;
+  /* Break a long value rather than let it push the row off the card. */
+  overflow-wrap: anywhere;
+}
+
+/* On a phone the two columns stop being two columns: "Out for delivery" beside
+   "Ready for pickup" leaves neither enough room to read. Stacking them back is
+   the honest answer - the label is still muted and still first, so the
+   hierarchy survives, it just stops claiming to be a row. */
+@media (max-width: 420px) {
+  .detail-list > div {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+
+  .detail-list dd {
+    text-align: left;
+  }
+}
+
+/* --- The order id, as a copyable chip ---------------------------------------
+   `code` inside the value column was previously unstyled body text, so the id
+   rendered in the same proportional font as everything else and read as a word
+   rather than an identifier. Monospace is what makes two ids comparable at a
+   glance, and `user-select: all` means one drag selects the whole thing. */
+.order-success__id {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 600;
+  user-select: all;
+}
+
+/* Copy feedback lives on the BUTTON, not in a toast.
+
+   This codebase deliberately avoids toasts on confirmation: see the note on
+   ProductCard's "just added" swap - a toast covers the thing the shopper was
+   looking at, and on a confirmation page the thing they were looking at is the
+   order they just placed. A label swap inside the button they pressed is
+   self-contained, cannot cover the receipt, and needs no provider, timer and
+   portal that this project does not otherwise have. */
+.order-success__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.35rem;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.order-success__copy:hover {
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-color: transparent;
+}
+
+.order-success__copy--done {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: transparent;
+}
+
+.order-success__copy:focus-visible,
+.order-success__summary a:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* --- The account offer ------------------------------------------------------
+   Its own bordered card rather than another block of prose under the receipt.
+
+   It asks a question the receipt does not, and a guest has to decide what to do
+   about it while the order they just placed is still the most recent thing on
+   screen. Giving it a surface of its own separates "this is your order" from
+   "this is an offer about your account", so declining reads as skipping an
+   upsell rather than missing part of the confirmation. */
+.order-success__claim {
+  border-style: dashed;
+  background: var(--surface-alt);
+  box-shadow: none;
+}
+
+.order-success__claim .panel__title {
+  font-size: 1.05rem;
 }
 
 /* `margin-left: auto` is what pins these to the RIGHT edge of the bar, and it
