@@ -3,6 +3,7 @@ import { useLocation, Link } from 'react-router-dom';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import CategoryTreeEditor from '../../components/storefront/CategoryTreeEditor';
 import LogoSizePicker from '../../components/storefront/LogoSizePicker';
+import PaymentLogoPicker from '../../components/storefront/PaymentLogoPicker';
 import ThemePicker from '../../components/storefront/ThemePicker';
 import storeService from '../../services/storeService';
 import menuService from '../../services/menuService';
@@ -1117,6 +1118,35 @@ export default function ThemeBuilder() {
                 setStore((prev) => ({ ...prev, ...updated }))
               }
               onPreview={setLogoSizePreview}
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {/* The payment brands, as their own panel rather than more of the logo
+          panel above. Two different subjects with two different consequences:
+          the store logo is how the shop presents ITSELF, and a wrong one costs
+          nothing but taste, while these four are how a shopper recognises the
+          way they are about to hand over money. Stacking them under one heading
+          would blur that, and would bury a payment control under store branding. */}
+      {store ? (
+        <section className="panel theme-pay-logos">
+          <div className="theme-logo__body">
+            <h2 className="panel__title">Payment logos</h2>
+            <p className="muted small">
+              The logos shoppers see on each payment option at checkout. All of
+              them are optional: a channel you leave empty keeps the coloured
+              initial it already has, so your checkout never shows a blank
+              button. A square picture with a transparent background looks best
+              — it is drawn small, on white. Empty space around the picture is
+              trimmed automatically. Under 5 MB.
+            </p>
+
+            <PaymentLogoPicker
+              store={store}
+              onChanged={(updated) =>
+                setStore((prev) => ({ ...prev, ...updated }))
+              }
             />
           </div>
         </section>

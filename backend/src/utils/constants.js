@@ -307,6 +307,25 @@ export const PAYMENT_METHODS = [
 ];
 
 /**
+ * The channels a store may upload a BRAND MARK for: every online channel, and
+ * deliberately not `cod`.
+ *
+ * DERIVED rather than written out, so it cannot drift from `PAYMENT_METHODS`.
+ * This list is the contract for three things that must agree - the model's
+ * `paymentLogos` key set, the API's validation, and the Theme tab's upload
+ * slots - and a second hand-written copy of "which channels exist" is exactly
+ * how a new channel ends up with no logo slot, or a logo slot for a channel the
+ * checkout never offers.
+ *
+ * `cod` is excluded because cash is not a brand: there is no bKash-style mark to
+ * upload, and the checkout draws it as a banknote glyph instead. Excluding it
+ * also means the map can never grow a meaningless `cod` entry.
+ */
+export const PAYMENT_LOGO_CHANNELS = PAYMENT_METHODS.filter(
+  (method) => method !== 'cod',
+);
+
+/**
  * Which `multi_card_name` to send for each channel.
  *
  * `multi_card_name` is SSLCommerz's CARD-BRAND filter, and its documented

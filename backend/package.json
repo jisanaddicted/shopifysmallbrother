@@ -35,6 +35,7 @@
     "test:reviews": "node scripts/testStoreCustomerReviews.mjs",
     "test:roles": "node scripts/testOrderTrackerRoles.mjs",
     "test:brand": "node scripts/testTrackerBrand.mjs",
+    "test:paylogos": "node scripts/testPaymentLogos.mjs",
     "test:cart": "node scripts/testCartCta.mjs",
     "test:bulk": "node scripts/testBulkEdit.mjs"
   },

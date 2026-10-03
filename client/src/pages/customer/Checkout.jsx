@@ -254,10 +254,30 @@ export default function Checkout() {
   return (
     <div className="page page--customer">
       <header className="page__header">
-        {/* The visiting store's own mark: its logo image, else its
-            initials - never the generic platform brand. At the size the merchant
-            chose in their Theme tab, since it is the same mark and the same
-            store. */}
+        {/* The visiting store's own mark, and NOTHING else.
+
+            This header used to print the logo, the heading "Checkout" and the
+            store's name in one row. The heading and the name are both gone.
+
+            "Checkout" said nothing this page did not already say: the panel
+            titles below are "Delivery details", "Payment" and the order
+            summary, and a shopper only reaches here from their own cart.
+
+            The store name said even LESS, because it is now printed TWICE on
+            the screen: the Navbar directly above already brands this bar with
+            this store's logo and name (see `rememberStoreVisit` below, and
+            PageStoreContext for pages that publish their own), so the copy
+            here was the same words twice within one viewport.
+
+            The mark STAYS - it is the store's face, not a label, and it is the
+            one thing that identifies the shop at a glance. What is gone is only
+            the TEXT beside it.
+
+            The name is not LOST, only unprinted: the logo's alt text carries
+            it, and the initials fallback now repeats it in `sr-only` rather
+            than leaving the store anonymous to a screen reader. That is the
+            same pair StoreHeader keeps when it shows the mark alone, and the
+            reason `.sr-only` exists in the first place (see index.css). */}
         <div
           className="store-header__brand"
           style={logoSizeStyle(store?.logoSize)}
@@ -271,15 +291,14 @@ export default function Checkout() {
                 onError={() => setLogoBroken(true)}
               />
             ) : (
-              <span className="store-header__mark" aria-hidden="true">
-                {initials(storeName)}
-              </span>
+              <>
+                <span className="store-header__mark" aria-hidden="true">
+                  {initials(storeName)}
+                </span>
+                <span className="sr-only">{storeName}</span>
+              </>
             )
           ) : null}
-          <div>
-            <h1>Checkout</h1>
-            {storeName ? <p className="muted small">{storeName}</p> : null}
-          </div>
         </div>
         <Link className="link-btn" to={shopTarget}>
           ← Keep shopping
@@ -424,17 +443,36 @@ export default function Checkout() {
                   onChange={() => setPaymentMethod(method)}
                 />
 
-                <span
-                  className="pay-method__logo"
-                  style={{
-                    background: PAYMENT_METHOD_COLORS[method],
-                  }}
-                  aria-hidden="true"
-                >
-                  {method === PAYMENT_METHODS.COD
-                    ? '💵'
-                    : (PAYMENT_METHOD_LABELS[method][0] || '').toUpperCase()}
-                </span>
+                {/* The channel's own mark, when the store has uploaded one -
+                    and otherwise the coloured initial chip it has always used.
+
+                    Both are drawn by the SAME `.pay-method__logo` box, so a
+                    shopper cannot tell which stores have bothered to upload and
+                    which have not: the row never changes size or position, only
+                    what is inside it.
+
+                    `alt=""` on the uploaded image is deliberate and not an
+                    oversight. The channel is already named in the `<strong>`
+                    beside it, so announcing the logo would repeat the same word
+                    twice in one row; the picture here is decoration carrying
+                    recognition the text does not. */}
+                {store?.paymentLogos?.[method] ? (
+                  <span className="pay-method__logo pay-method__logo--image">
+                    <img src={store.paymentLogos[method]} alt="" />
+                  </span>
+                ) : (
+                  <span
+                    className="pay-method__logo"
+                    style={{
+                      background: PAYMENT_METHOD_COLORS[method],
+                    }}
+                    aria-hidden="true"
+                  >
+                    {method === PAYMENT_METHODS.COD
+                      ? '💵'
+                      : (PAYMENT_METHOD_LABELS[method][0] || '').toUpperCase()}
+                  </span>
+                )}
 
                 <span className="pay-method__text">
                   <strong>{PAYMENT_METHOD_LABELS[method]}</strong>

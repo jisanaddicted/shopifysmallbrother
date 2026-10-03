@@ -4,6 +4,7 @@ import {
   LOGO_SIZE_DEFAULT,
   LOGO_SIZE_MAX,
   LOGO_SIZE_MIN,
+  PAYMENT_LOGO_CHANNELS,
 } from '../utils/constants.js';
 
 const addressSchema = new mongoose.Schema(
@@ -224,6 +225,67 @@ const storeSchema = new mongoose.Schema(
           const key = String(rawKey || '').trim().toLowerCase();
           const image = String(rawValue ?? '').trim();
           if (!key || !image) continue;
+          out[key] = image;
+        }
+
+        return out;
+      },
+    },
+
+    // -------------------------------------------------------------------------
+    // A store's own picture of each payment brand: { bkash, nagad, rocket, card }.
+    //
+    // Shown on the checkout method picker, where the default is a coloured chip
+    // carrying the channel's initial (see PAYMENT_METHOD_COLORS). A real mark is
+    // better - a shopper recognises "bKash" by its pink wordmark far faster than
+    // by the letter B - but a merchant cannot be assumed to have the artwork, so
+    // every channel is optional and a missing one simply keeps its chip.
+    //
+    // A plain Object rather than a Mongoose Map, for the same reason
+    // `categoryImages` above is: a Map serialises to `{}` unless `flattenMaps`
+    // is enabled, so the pictures would reach the storefront as nothing, with
+    // no error anywhere.
+    //
+    // THE KEY SET IS CLOSED, which is the real difference from `categoryImages`.
+    // That map is keyed by category name, so it has to accept keys the app
+    // cannot predict. This one is keyed by a channel the app already enumerates,
+    // so anything outside PAYMENT_LOGO_CHANNELS is dropped rather than stored -
+    // otherwise a typo or a stray client would leave an orphan base64/URL on the
+    // document forever, growing every public storefront payload and never being
+    // read by anything. The controller also refuses an unknown key with a 400
+    // that names the channels, so the merchant finds out at the point of the
+    // mistake; this setter is the backstop for writes that skip the controller.
+    //
+    // Values are Cloudinary URLs, not data URLs: the same hosting every other
+    // image here uses (see services/cloudinary.js), which is what keeps a stored
+    // logo around 120 bytes instead of the ~90KB of base64 the client sends.
+    //
+    // AN EMPTY MAP IS ABSENT FROM THE JSON, and that is expected. The default is
+    // applied on hydration (`doc.paymentLogos` really is `{}` for a store that
+    // has never had a logo), but Mongoose's default `minimize: true` drops EMPTY
+    // objects when a document is serialised - so `/api/stores/:slug` and
+    // `/api/menu/edit/:id` simply have no `paymentLogos` key at all until a
+    // merchant uploads something. Measured, not assumed: see the note in
+    // README's payment-logos section.
+    //
+    // Worth writing down because the symptom reads exactly like a broken
+    // feature - "I saved a logo and the API does not return it" - while the real
+    // cause is that there is nothing to return yet. Every reader on the client
+    // treats the map as optional (`store?.paymentLogos || {}`), which is the
+    // same defensive shape `listCategories` uses for `categoryImages`.
+    // -------------------------------------------------------------------------
+    paymentLogos: {
+      type: Object,
+      default: () => ({}),
+      set: (value) => {
+        const out = {};
+
+        for (const [rawKey, rawValue] of Object.entries(value || {})) {
+          const key = String(rawKey || '').trim().toLowerCase();
+          if (!PAYMENT_LOGO_CHANNELS.includes(key)) continue;
+
+          const image = String(rawValue ?? '').trim();
+          if (!image) continue;
           out[key] = image;
         }
 

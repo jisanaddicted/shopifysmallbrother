@@ -117,6 +117,25 @@ export const uploadStoreLogo = async (file, storeId) => {
   return updateMyStore({ logo: dataUrl }, storeId);
 };
 
+/**
+ * PATCH /stores/mine (?storeId=) - set OR clear ONE payment brand's mark.
+ *
+ * `file` may be a picked File or `''` to remove it. `imageToDataUrl` returns ''
+ * for a blank input, so the clear and the upload are the same call and the
+ * component does not need a second code path for "Remove".
+ *
+ * ONE CHANNEL PER REQUEST, and the server MERGES what it receives (see
+ * updateMyStore). That is what stops saving bKash from deleting the other three:
+ * the payload is a single-key object, and only that key is touched.
+ *
+ * 256px, the same edge the store logo uses. A payment chip is drawn at 34px, so
+ * anything larger is base64 the API has to accept for no visible gain.
+ */
+export const setPaymentLogo = async (channel, file, storeId) => {
+  const dataUrl = await imageToDataUrl(file, 256);
+  return updateMyStore({ paymentLogos: { [channel]: dataUrl } }, storeId);
+};
+
 // ---------------------------------------------------------------------------
 // Rider roster
 // ---------------------------------------------------------------------------
@@ -224,6 +243,7 @@ export default {
   listMyMerchantStores,
   updateMyStore,
   uploadStoreLogo,
+  setPaymentLogo,
   listStoreOrders,
   searchRiders,
   lookupUser,

@@ -344,6 +344,24 @@ export const ONLINE_PAYMENT_CHANNELS = [
   PAYMENT_METHODS.CARD,
 ];
 
+/**
+ * The channels a merchant may upload a brand mark for - every online channel.
+ *
+ * DERIVED from ONLINE_PAYMENT_CHANNELS rather than written out, and that is the
+ * whole point: this list decides which upload slots the Theme tab draws AND
+ * which chips on the checkout can ever show a logo. A hand-written copy is how
+ * you get a "Rocket" slot on a checkout that has no Rocket option, or a channel
+ * that silently never gets a logo because nobody added it to this array.
+ *
+ * Mirrors PAYMENT_LOGO_CHANNELS in backend/src/utils/constants.js, which is the
+ * same idea derived from the same `PAYMENT_METHODS`. `testPaymentLogos.mjs`
+ * asserts the two ends agree.
+ *
+ * Cash is absent for the same reason it is absent there: it is not a brand with
+ * artwork, and checkout draws it as a banknote glyph.
+ */
+export const PAYMENT_LOGO_CHANNELS = ONLINE_PAYMENT_CHANNELS;
+
 export const PAYMENT_METHOD_LABELS = {
   [PAYMENT_METHODS.COD]: 'Cash on delivery',
   [PAYMENT_METHODS.CARD]: 'Card',

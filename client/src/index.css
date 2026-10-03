@@ -875,10 +875,15 @@ ol {
   display: flex;
   align-items: center;
   justify-self: start;
-  /* The gap the storefront header no longer needs (its brand cell holds only
-     the menu button) but Checkout's does - it puts the logo and its heading in
-     one row, and they must not touch. */
-  gap: 0.65rem;
+  /* No gap here any more. It existed for ONE caller - Checkout, which used to
+     put the store's logo and its "Checkout" heading in a single row and needed
+     them not to touch. That heading is gone, and the storefront header's brand
+     cell has held nothing but the menu button ever since its own name was
+     dropped, so both callers now have exactly one in-flow child and a gap has
+     nothing to separate.
+     (The initials fallback's `sr-only` twin does not count: it is
+     `position: absolute`, so an absolutely positioned child takes no part in
+     flex layout.) */
   min-width: 0;
 }
 
@@ -5070,6 +5075,127 @@ ol {
   font-weight: 700;
   line-height: 1;
   flex: none;
+}
+
+/* A store's uploaded brand mark, in the SAME box as the chip above.
+ *
+ * Same box on purpose: a shopper must not be able to tell which stores have
+ * uploaded artwork and which have not. Identical size, identical position, only
+ * the contents differ - so the row does not reflow when a merchant adds a logo,
+ * and no payment option ever appears without something recognisable in it.
+ *
+ * WHITE rather than the channel's brand colour. These marks are artwork meant to
+ * sit on white - bKash pink, Rocket purple - and laying one over a saturated chip
+ * of the same hue hides the very thing being shown. The padding keeps a logo
+ * that fills its square off the rounded corner.
+ *
+ * The inline `background` the fallback sets is simply not applied in this
+ * variant, so there is nothing to override here. */
+.pay-method__logo--image {
+  background: #fff;
+  padding: 3px;
+}
+
+/* `contain`, never `cover`. A wordmark is much wider than it is tall, and
+ * `cover` fills the square by cropping whatever does not fit - which is exactly
+ * how "bKash" loses its last letter. Same reasoning, and the same bug, as
+ * `.navbar__brand--mark .navbar__store-logo`. */
+.pay-method__logo--image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 5px;
+}
+
+/* --- Theme tab: the payment brand slots ------------------------------------
+ *
+ * One row per channel. The mark on the left is deliberately the same 34px tile
+ * the checkout draws, and it shows the FALLBACK chip when nothing is uploaded -
+ * so the merchant is choosing between the two things shoppers will actually
+ * see, at the size they will actually see them, rather than judging artwork in
+ * an empty box.
+ *
+ * The tile's properties are repeated from `.pay-method__logo` instead of being
+ * merged into one rule. They are far apart in this file and belong to different
+ * pages, and a combined selector would force the two to be edited together for
+ * no benefit - so `testPaymentLogos.mjs` asserts they still match instead.
+ */
+.pay-logos {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+.pay-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.pay-logo__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  flex: none;
+  overflow: hidden;
+}
+
+/* An uploaded mark inside the preview tile: same white tile and `contain` as
+ * `.pay-method__logo--image`, so the preview is a true picture of the result. */
+.pay-logo__mark.has-image {
+  background: #fff;
+  padding: 3px;
+}
+
+.pay-logo__mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 5px;
+}
+
+.pay-logo__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.pay-logo__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: none;
+}
+
+/* On a narrow screen the buttons need their own line: at 34px of mark plus the
+ * label plus three controls there is no width left, and a wrapped row of
+ * half-squeezed buttons is worse than a stacked one. */
+@media (max-width: 520px) {
+  .pay-logo {
+    flex-wrap: wrap;
+  }
+
+  .pay-logo__actions {
+    width: 100%;
+    padding-left: calc(34px + 0.7rem);
+  }
+}
+
+.pay-logos__error {
+  margin-top: 0.6rem;
 }
 
 /* --- Result pages --------------------------------------------------------- */

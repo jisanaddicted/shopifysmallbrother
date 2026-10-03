@@ -536,6 +536,46 @@ Details worth knowing:
 
 Set them in `backend/.env` (git-ignored); `.env.example` documents the names.
 
+### Payment logos (the Theme tab)
+
+A store can upload its own picture of each payment brand — **bKash, Nagad, Rocket
+and Card** — under **Theme → Payment logos**, and it appears on the checkout
+method picker in place of the coloured initial chip that channel already had.
+
+- **The chip is the fallback, and it stays.** Every channel is optional, and a
+  channel with no upload keeps the `PAYMENT_METHOD_COLORS` square it has always
+  drawn, so your checkout can never end up showing a blank payment button. The
+  Theme tab's preview deliberately shows that chip too — so what you approve is
+  what shoppers get.
+- **`paymentLogos` is merged, never replaced.** The client sends one channel per
+  request and the server merges it, so saving bKash cannot silently delete the
+  other three.
+- **The key set is closed.** Only channels in `PAYMENT_LOGO_CHANNELS` (derived
+  from `PAYMENT_METHODS`, minus `cod`) are accepted; anything else is a 400 that
+  names the valid ones. Cash is excluded on purpose — it has no brand artwork.
+- **Images are hosted, not embedded**, exactly like every other image here: the
+  data URL the client sends goes to Cloudinary and only the URL is stored.
+- **An empty map is absent from the JSON — this is expected, not a bug.** The
+  schema default *is* applied on hydration (`doc.paymentLogos` really is `{}`),
+  but Mongoose's default `minimize: true` drops **empty objects** when
+  serialising, so `GET /api/stores/:slug` and `GET /api/menu/edit/:id` have no
+  `paymentLogos` key at all until you upload something. Measured against the
+  live database:
+
+  ```
+  doc.paymentLogos (in memory) : {}
+  key present in toJSON()      : false
+  new doc, paymentLogos {}      -> key in JSON: false
+  new doc, paymentLogos {bkash} -> key in JSON: true
+  ```
+
+  Clients treat the map as optional (`store?.paymentLogos || {}`).
+
+Two scripts cover it: `npm run test:paylogos` in `backend/` checks the six-file
+contract statically, and `backend/scripts/livePaymentLogos.mjs` exercises the
+whole thing against a running server (it uploads, asserts the merge, checks the
+closed key set, then cleans up after itself).
+
 ### Moving images that are already inline
 
 Code only affects new uploads - rows written before it still hold their

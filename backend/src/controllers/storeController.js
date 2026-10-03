@@ -6,7 +6,7 @@ import StoreRider from '../models/StoreRider.js';
 import User from '../models/User.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import { buildPublicTree } from './categoryTreeController.js';
-import { CANCELLED_STATUSES, LOGO_SIZE_MAX, LOGO_SIZE_MIN, isLogoSize, ROLES, STORE_RIDER_STATUS, THEME2, THEME_VALUES } from '../utils/constants.js';
+import { CANCELLED_STATUSES, LOGO_SIZE_MAX, LOGO_SIZE_MIN, isLogoSize, PAYMENT_LOGO_CHANNELS, ROLES, STORE_RIDER_STATUS, THEME2, THEME_VALUES } from '../utils/constants.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { hostImage, publicIdFor, removeImage, storeFolder } from '../services/cloudinary.js';
 import { normaliseUsername, slugify, uniqueSlug } from '../utils/slug.js';
@@ -454,6 +454,64 @@ export const updateMyStore = asyncHandler(async (req, res) => {
     store.logo = hosted;
   }
   if (isActive !== undefined) store.isActive = Boolean(isActive);
+
+  /* A store's own picture of each payment brand, shown on the checkout method
+     picker. See Store.paymentLogos for the shape and why the key set is closed.
+
+     MERGED, not replaced. The client uploads ONE channel at a time (see
+     storeService.setPaymentLogo), so a plain assignment would mean saving the
+     bKash mark silently deleted the Nagad, Rocket and Card ones - the store would
+     lose three logos to add a fourth, and nothing would say so. Spread the
+     existing map and change only the keys that were actually sent.
+
+     Validated before anything is hosted, so a typo costs a 400 that names the
+     valid channels rather than an upload that succeeds and is then thrown away
+     by the model's setter. The model would drop it either way, but the merchant
+     would be left watching an upload report success over a blank box. */
+  if (req.body?.paymentLogos !== undefined) {
+    const incoming = req.body.paymentLogos;
+
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) {
+      throw new HttpError(
+        400,
+        'Payment logos must be an object, e.g. { bkash: "..." }.',
+      );
+    }
+
+    for (const rawKey of Object.keys(incoming)) {
+      const key = String(rawKey || '').trim().toLowerCase();
+      if (!PAYMENT_LOGO_CHANNELS.includes(key)) {
+        throw new HttpError(
+          400,
+          `“${rawKey}” is not a payment channel. Use one of ${PAYMENT_LOGO_CHANNELS.join(', ')}.`,
+        );
+      }
+    }
+
+    const logos = { ...(store.paymentLogos || {}) };
+
+    // Sequential rather than Promise.all on purpose: hostImage uploads to
+    // Cloudinary, and a parallel burst of four uploads from one browser tab is a
+    // rate-limit argument waiting to happen. Four small images is not worth it.
+    for (const [rawKey, rawValue] of Object.entries(incoming)) {
+      const key = String(rawKey).trim().toLowerCase();
+
+      // An empty string CLEARS that one channel, and must leave the rest alone -
+      // "Remove" on bKash is not "remove every logo".
+      const hosted = await hostImage(String(rawValue ?? '').trim(), {
+        folder: storeFolder(store._id, 'payment-logo'),
+        publicId: publicIdFor(store._id, 'payment-logo', key),
+      });
+
+      if (hosted === logos[key]) continue;
+      if (logos[key]) await removeImage(logos[key]);
+
+      if (hosted) logos[key] = hosted;
+      else delete logos[key];
+    }
+
+    store.paymentLogos = logos;
+  }
 
   /* Which storefront layout this store shows. See Store.theme.
 
