@@ -27,6 +27,10 @@ const toList = (value, fallback) => {
   return entries.length > 0 ? entries : fallback;
 };
 
+// Render sets this automatically for web services. The app serves its client
+// from the same host, so use that URL for CORS and external payment redirects.
+const renderExternalUrl = String(process.env.RENDER_EXTERNAL_URL || '').trim();
+
 export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   port: toInt(process.env.PORT, 5000),
@@ -37,10 +41,13 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'dev-only-insecure-secret',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   // The Vite dev server is a different origin, so CORS has to allow it.
-  clientOrigins: toList(process.env.CLIENT_ORIGIN, [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-  ]),
+  clientOrigins: [
+    ...toList(process.env.CLIENT_ORIGIN, [
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+    ]),
+    ...(renderExternalUrl ? [renderExternalUrl] : []),
+  ],
   autoSeed: String(process.env.AUTO_SEED ?? 'true').toLowerCase() !== 'false',
 
   // --- Public storefront cache (utils/storefrontCache.js) --------------------
@@ -92,10 +99,13 @@ export const config = {
     isSandbox:
       String(process.env.SSLCOMMERZ_IS_SANDBOX ?? 'true').toLowerCase() !==
       'false',
-    backendUrl: toBaseUrl(process.env.BACKEND_URL, 'http://localhost:5000'),
+    backendUrl: toBaseUrl(
+      process.env.BACKEND_URL,
+      renderExternalUrl || 'http://localhost:5000',
+    ),
     clientUrl: toBaseUrl(
       process.env.CLIENT_URL,
-      process.env.BACKEND_URL || 'http://localhost:5000',
+      process.env.BACKEND_URL || renderExternalUrl || 'http://localhost:5000',
     ),
     currency: String(process.env.PAYMENT_CURRENCY || 'BDT').trim() || 'BDT',
   },

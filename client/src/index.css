@@ -3532,6 +3532,19 @@ ol {
   color: var(--muted);
 }
 
+/* Signature at the bottom of the login card, under the "New here?" line.
+   Smaller and lighter than the 0.9rem footer above it so it reads as a
+   credit rather than another action, and centred to sit as a closing line.
+   Same treatment as .dash__credit in the dashboard rail. */
+.auth-card__credit {
+  margin: 0.7rem 0 0;
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .demo-accounts {
   display: flex;
   flex-wrap: wrap;
@@ -3769,6 +3782,21 @@ ol {
 
 .dash__footer {
   margin-top: auto;
+}
+
+/* Credit line pinned at the bottom of the rail, under the logout button.
+   Muted and centred so it reads as a signature rather than another nav row -
+   `var(--muted)` is the same de-emphasised ink the spinner label uses, and
+   `0.72rem` keeps it below the 0.95rem link size so it never competes with
+   the menu. */
+.dash__credit {
+  margin: 0.8rem 0 0;
+  text-align: center;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--muted);
+  /* Long names must wrap inside the 248px rail instead of widening it. */
+  overflow-wrap: anywhere;
 }
 
 .dash__scrim {

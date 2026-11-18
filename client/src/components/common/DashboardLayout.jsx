@@ -200,6 +200,14 @@ export default function DashboardLayout({ variant = 'merchant' }) {
           >
             Log out
           </button>
+
+          {/*
+            Signature at the very bottom of the rail, below the logout button.
+            `.dash__footer` is already pushed down by `margin-top: auto`, so
+            this sits last on every screen size (it rides along in the fixed
+            drawer on mobile too). Plain text, not a link - it goes nowhere.
+          */}
+          <p className="dash__credit">This is made by Jisan Rahman</p>
         </div>
       </aside>
 

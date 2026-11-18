@@ -104,6 +104,30 @@ Open <http://localhost:5173> — `/` sends you to the portal `/login`. Click a
 **Demo accounts** chip and sign in. The API creates those accounts
 automatically on boot (`AUTO_SEED=true`).
 
+## Deploy to Render
+
+This repository includes a `render.yaml` Blueprint for one Render web service.
+The build installs both packages and builds the Vite app; Express then serves
+the frontend and `/api` from the same public URL. The Blueprint uses Node.js
+22, disables demo-account seeding, generates a JWT secret, and asks you for
+the database connection string.
+
+1. Push this repository to GitHub and create a new Blueprint in Render, then
+   select the repository. Render reads `render.yaml` and prompts for `MONGO_URI`.
+2. Paste a MongoDB Atlas connection string that includes the database name
+   (for example, `...mongodb.net/delivery_app?retryWrites=true&w=majority`).
+   Add Render's outbound IP access as appropriate in Atlas Network Access.
+3. Deploy. The health check is `/api/health`; the site is served at the service
+   URL Render assigns. Render's URL is also used for CORS and payment redirects.
+
+Optional environment variables can be added in the Render service settings:
+`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` for
+hosted uploads; `SSLCOMMERZ_STORE_ID` and `SSLCOMMERZ_STORE_PASSWORD` for online
+payments. Payments remain in sandbox mode unless `SSLCOMMERZ_IS_SANDBOX=false`
+is explicitly set. To load demo data after deploying, run the backend seed
+script against the configured database; automatic seeding is disabled in
+production.
+
 Useful scripts:
 
 | Command | What it does |

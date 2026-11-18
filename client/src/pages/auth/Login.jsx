@@ -12,10 +12,11 @@ import './portal-auth.css';
 
 // Handy shortcuts while your backend users don't exist yet.
 // Press a chip to fill the form, then edit the values if needed.
+// (No "Store admin" chip: a store admin is an ordinary account an owner
+//  appoints - see sara.admin - so there is nothing to sign in *as* here.)
 const DEMO_ACCOUNTS = [
   { role: ROLES.RIDER, label: 'Rider', email: 'rider@example.com', password: 'password123' },
   { role: ROLES.STORE, label: 'Store owner', email: 'store@example.com', password: 'password123' },
-  { role: ROLES.STORE_ADMIN, label: 'Store admin', email: 'storeadmin@example.com', password: 'password123' },
   { role: ROLES.ADMIN, label: 'Admin', email: 'admin@example.com', password: 'password123' },
 ];
 
@@ -175,6 +176,13 @@ export default function Login() {
               Create a staff account
             </Link>
           </p>
+
+          {/*
+            Signature at the bottom of the login card, under the "New here?"
+            line. Plain text, not a link - it goes nowhere. Kept outside the
+            <p> above so it stays its own line even when that one wraps.
+          */}
+          <p className="auth-card__credit">This is made by Jisan Rahman</p>
         </form>
       </div>
     </PortalAuth>
